@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Curve RV — 크레딧 스프레드 상대가치</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --forecast: #f0883e;
+    --ok: #3fb950; --ext: #f85149;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+
+  .series-bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; padding: 12px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin-bottom: 18px; font-size: 12px; }
+  .series-bar .sname { font-size: 14px; font-weight: 600; }
+  .series-bar .meta { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .series-bar .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--border-2); color: var(--muted); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 16px; align-items: center; }
+  .ctrl-group { display: flex; align-items: center; gap: 8px; }
+  .ctrl-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--border-2); border-radius: 7px; overflow: hidden; }
+  .seg button { background: transparent; border: none; color: var(--muted); font-family: var(--mono); font-size: 12px; padding: 6px 12px; cursor: pointer; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+  .seg button:hover:not(.active) { background: var(--panel-2); color: var(--text); }
+
+  .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0 10px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; }
+  .chart-box { width: 100%; height: 300px; }
+  .chart-box.tall { height: 460px; }
+  .chart-box.short { height: 240px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-side { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+
+  /* 테이블 */
+  table.rv { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11.5px; }
+  table.rv th { color: var(--muted); font-weight: 500; text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--border-2); font-size: 10.5px; white-space: nowrap; }
+  table.rv th:first-child, table.rv td:first-child { text-align: left; }
+  table.rv td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+  table.rv td.n { color: var(--text); }
+  table.rv td.mat, table.rv td.n.hl { font-weight: 600; }
+  table.rv td.n.hl { color: var(--forecast); }
+  table.rv td.ile i { color: var(--muted); font-style: normal; margin: 0 2px; }
+  table.rv td.bt { color: var(--muted); text-align: right; }
+  table.rv .ext { color: var(--ext); font-weight: 700; }
+  #rv-scorecard-body tr { cursor: pointer; }
+  #rv-scorecard-body tr:hover { background: var(--panel-2); }
+  #rv-scorecard-body tr.sel { background: rgba(88,166,255,0.10); }
+  #rv-detail-bt tr.sel { background: rgba(240,136,62,0.12); }
+  #rv-detail-bt th { text-align: right; } #rv-detail-bt td:first-child { color: var(--text); }
+
+  .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+  .note { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
+  .legend-inline { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
+  .swatch { display: inline-block; width: 22px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
+
+  @media (max-width: 820px) { .grid-2, .grid-side { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap" id="rv-app">
+  <div class="eyebrow">
+    <span class="step">CURVE RV</span>
+    <span class="ctx">크레딧 스프레드 상대가치 · 섹터 × 만기</span>
+  </div>
+  <h1>Curve RV</h1>
+  <p class="tagline">캐리+롤(산수) · percentile(문맥) · 백테스트(증거)를 나란히 — 원인 판단은 사람 몫. 종합점수 없음.</p>
+
+  <div class="series-bar">
+    <span class="sname">크레딧 스프레드 (composite)</span>
+    <span class="tag">composite-xlsx</span>
+    <span class="meta">기간 <span id="rv-range">—</span></span>
+    <span class="meta"><span id="rv-count">—</span></span>
+    <span class="meta">최신 <span id="rv-updated">—</span></span>
+  </div>
+
+  <!-- [0] 히트맵 -->
+  <div class="controls">
+    <div class="ctrl-group">
+      <span class="ctrl-label">히트맵 윈도우</span>
+      <div class="seg">
+        <button data-heatwin="1y">1Y</button>
+        <button data-heatwin="3y">3Y</button>
+        <button data-heatwin="full" class="active">FULL</button>
+      </div>
+    </div>
+  </div>
+  <div class="card"><div class="chart-box tall" id="rv-heatmap"></div>
+    <div class="legend-inline">
+      <span><span class="swatch" style="background:#8b1a1a"></span>낮은 %ile · 타이트 = 위험(고평가)</span>
+      <span><span class="swatch" style="background:#6e7681"></span>중간</span>
+      <span><span class="swatch" style="background:#1f6feb"></span>높은 %ile · 와이드 = 저평가 후보</span>
+    </div>
+  </div>
+
+  <!-- [1] 스코어카드 -->
+  <div class="section-title">스코어카드 — <span id="rv-sector-name">공사채AAA</span> (행 클릭 → 상세)</div>
+  <div class="card">
+    <table class="rv">
+      <thead><tr>
+        <th>만기</th><th>스프레드bp</th><th>%ile 1y/3y/full</th><th>스프레드캐리</th>
+        <th>스프레드롤</th><th>KTB롤</th><th>초과캐리+롤</th><th>초과/dur</th><th>현재구간 백테스트</th>
+      </tr></thead>
+      <tbody id="rv-scorecard-body"></tbody>
+    </table>
+    <div class="note">캐리·롤·초과캐리롤·KTB롤 단위 bp / 초과/dur = 초과캐리롤 ÷ 듀레이션. 백테스트 = 현재 full %ile 버킷의 6개월 forward 평균Δ·축소확률.</div>
+  </div>
+
+  <!-- [1-상세] -->
+  <div class="section-title">상세 — <span id="rv-detail-title">—</span></div>
+  <div class="grid-side">
+    <div class="card"><div class="chart-box" id="rv-detail-chart"></div></div>
+    <div class="card"><table class="rv" id="rv-detail-bt"></table>
+      <div class="note">버킷: 저(&lt;50%) / 중(50~85%) / 고(&gt;85%). 성과 = 6개월 뒤 스프레드 변화(bp). 축소확률 = 변화&lt;0 비율.</div>
+    </div>
+  </div>
+
+  <!-- [2] 텀스트럭처 -->
+  <div class="section-title">텀스트럭처 & 기울기</div>
+  <div class="grid-side">
+    <div class="card"><div class="chart-box" id="rv-term"></div></div>
+    <div class="card">
+      <div class="note" style="margin:0 0 6px">기울기 (극단 %ile ≤5 또는 ≥95 강조)</div>
+      <table class="rv"><tbody id="rv-slope-body"></tbody></table>
+    </div>
+  </div>
+
+  <!-- [4] 페어 -->
+  <div class="section-title">페어 — <span id="rv-pair-name">—</span></div>
+  <div class="grid-side">
+    <div class="card"><div class="chart-box short" id="rv-pair-chart"></div></div>
+    <div class="card"><table class="rv"><tbody id="rv-pair-body"></tbody></table>
+      <div class="note">페어 = spread(X) − spread(Y). 확장은 rv-calc.js의 PAIRS 배열.</div>
+    </div>
+  </div>
+</div>
+
+<!-- vendor -->
+<script src="vendor/plotly.min.js"></script>
+<!-- data (window.FENRIR_SERIES['credit-spread']) -->
+<script src="data/credit-spread.js"></script>
+<!-- app (ES module) -->
+<script type="module">
+  import { initCurveRV } from './js/rv-ui.js';
+  initCurveRV();
+</script>
+</body>
+</html>
