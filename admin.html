@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin — 데이터 공장</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --forecast: #f0883e; --ok: #3fb950; --bad: #f85149;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--forecast); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 22px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; margin: 0 0 4px; }
+  .card .hint { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+  select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border-2); color: var(--text);
+    border-radius: 7px; padding: 9px 11px; font-family: var(--sans); font-size: 13px;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+
+  .dropzone {
+    border: 1.5px dashed var(--border-2); border-radius: 9px; padding: 26px; text-align: center;
+    color: var(--muted); font-size: 13px; cursor: pointer; transition: all 0.15s;
+  }
+  .dropzone.over { border-color: var(--accent); background: var(--panel-2); color: var(--text); }
+  .dropzone b { color: var(--accent); }
+  input[type=file] { display: none; }
+
+  .rows { display: flex; flex-direction: column; gap: 8px; }
+  .row-opt {
+    display: grid; grid-template-columns: 20px 1fr auto auto; align-items: center; gap: 12px;
+    padding: 10px 13px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px;
+    cursor: pointer; font-size: 13px;
+  }
+  .row-opt.selected { border-color: var(--accent); }
+  .row-opt .ro-account { font-weight: 600; }
+  .row-opt .ro-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .row-opt .ro-count { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  .pv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .pv-stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; }
+  .pv-stat .l { font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+  .pv-stat .m { font-size: 19px; font-weight: 600; font-family: var(--mono); }
+  .pv-stat .m span { font-size: 10px; color: var(--muted); margin-left: 5px; font-weight: 400; }
+  .pv-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .pv-chart { height: 260px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 6px; }
+
+  .btn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--text); font-size: 13px; padding: 9px 16px; border-radius: 7px; cursor: pointer; font-family: var(--sans); font-weight: 600; }
+  .btn.accent { background: var(--forecast); color: #08111f; border-color: var(--forecast); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status { margin-top: 12px; font-size: 12px; font-family: var(--mono); color: var(--muted); min-height: 18px; }
+  .status.ok { color: var(--ok); }
+  .status.bad { color: var(--bad); }
+  .empty { color: var(--muted); font-size: 13px; padding: 16px; text-align: center; }
+
+  .flow { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
+  .flow b { color: var(--text); }
+  @media (max-width: 680px) { .pv-charts { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">
+    <span class="badge">ADMIN · LOCAL</span>
+    <span class="ctx">데이터 공장 — 나만 사용, 커밋도 나만</span>
+  </div>
+  <h1>데이터 업로드</h1>
+  <p class="tagline">KOSIS CSV → 파싱 → 전망 미리보기 → <span style="font-family:var(--mono)">data/*.js</span> 생성. 다운로드한 파일을 레포에 커밋하면 조회 페이지에 반영됩니다.</p>
+
+  <!-- 1. 시리즈 선택 -->
+  <div class="card">
+    <h2>1. 시리즈 선택</h2>
+    <p class="hint">이 CSV로 갱신할 시리즈. 선택하면 CSV에서 해당 행을 자동 매칭합니다.</p>
+    <div class="field">
+      <label>시리즈</label>
+      <select id="series-select"></select>
+    </div>
+  </div>
+
+  <!-- 2. CSV 업로드 -->
+  <div class="card">
+    <h2>2. CSV 업로드</h2>
+    <p class="hint">KOSIS 소비자물가지수 원본 CSV (wide 형식, 총지수 행 포함).</p>
+    <label class="dropzone" id="dropzone" for="file-input">
+      여기로 <b>CSV 파일을 드래그</b>하거나 클릭해서 선택
+    </label>
+    <input type="file" id="file-input" accept=".csv,text/csv" />
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- 3. 데이터 행 선택 -->
+  <div class="card">
+    <h2>3. 데이터 행 확인</h2>
+    <p class="hint">CSV에서 감지된 행. 원하는 시리즈에 맞는 행을 선택하세요 (자동 매칭됨).</p>
+    <div class="rows" id="rows"></div>
+  </div>
+
+  <!-- 4. 미리보기 -->
+  <div class="card">
+    <h2>4. 전망 미리보기</h2>
+    <p class="hint">선택한 데이터로 calc 엔진이 계산한 결과. 이상 없으면 export.</p>
+    <div id="preview"></div>
+  </div>
+
+  <!-- 5. export -->
+  <div class="card">
+    <h2>5. 발행</h2>
+    <p class="hint">data/*.js 파일을 생성해 다운로드합니다.</p>
+    <button class="btn accent" id="export-btn" disabled>data 파일 다운로드</button>
+    <div class="flow">흐름: <b>다운로드</b> → data/ 폴더에 넣기 → <b>GitHub 커밋</b> → 조회 페이지 자동 반영</div>
+  </div>
+</div>
+
+<script src="vendor/plotly.min.js"></script>
+<script type="module">
+  import { initAdmin } from './js/admin-ui.js';
+  initAdmin();
+</script>
+</body>
+</html>
