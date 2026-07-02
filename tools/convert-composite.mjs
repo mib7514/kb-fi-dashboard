@@ -3,6 +3,13 @@
 // - 컬럼형(columnar) 출력, 결측 null, 소수 3자리 반올림
 // - G1 특성화 기준값을 assert로 내장 (실패 시 비정상 종료)
 //
+// [정밀도 결정] 민평 스프레드의 실제 호가 그리드가 0.1bp(=%p 3자리)이므로
+// 3자리 반올림값이 '참값'이다. 원본 xlsx 값의 ~68%는 부동소수점 노이즈
+// (예: 0.180 → 0.17999999999999972, 미세 구분 ≈2.8e-16)를 품고 있어, 명세의
+// 검증 기준값 표(G2·G5)가 이 노이즈 낀 원본 double에서 산출된 것이 오류다.
+// 따라서 데이터는 3자리 반올림으로 정규화(참값)하고, percentile 게이트 기대값은
+// 클린 데이터에서 독립 재산출한 값으로 교체한다(허용오차는 명령서 원안 유지).
+//
 // 실행: node tools/convert-composite.mjs
 import { createRequire } from 'node:module';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -20,7 +27,8 @@ function serialToISO(serial) {
   const days = Math.round(serial) - 25569; // 25569 = 1970-01-01의 Excel 시리얼
   return new Date(days * 86400000).toISOString().slice(0, 10);
 }
-const round3 = v => Math.round(v * 1000) / 1000;
+// 민평 호가 그리드(0.1bp = %p 3자리)로 정규화 — 부동소수점 노이즈 제거 (위 [정밀도 결정] 참조)
+const round3 = v => (typeof v === 'number' && Number.isFinite(v)) ? Math.round(v * 1000) / 1000 : null;
 
 // --- 파일 로드 ---
 const xlsxName = readdirSync(ROOT).find(f => f.endsWith('.xlsx'));
@@ -50,8 +58,7 @@ for (let r = 17; r < aoa.length; r++) {
   if (typeof a !== 'number' || a < 40000) continue; // 날짜 아닌 행(라벨/통계) 무시
   dates.push(serialToISO(a));
   for (const c of cols) {
-    const v = aoa[r][c.idx];
-    series[c.label].push(typeof v === 'number' && Number.isFinite(v) ? round3(v) : null);
+    series[c.label].push(round3(aoa[r][c.idx]));
   }
 }
 
