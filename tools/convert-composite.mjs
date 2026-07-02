@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { parseAoa, serialize, validateG1 } from '../js/credit-parse.js';
+import { parseAoa, serialize, validateStructure } from '../js/credit-parse.js';
 
 const require = createRequire(import.meta.url);
 const XLSX = require('../vendor/xlsx.min.js'); // UMD 번들 재사용 (node에서 require 가능)
@@ -27,7 +27,7 @@ const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
 const parsed = parseAoa(aoa);
 let stats;
 try {
-  stats = validateG1(parsed);
+  stats = validateStructure(parsed);
 } catch (err) {
   console.error('❌ ' + err.message);
   process.exit(1);
@@ -38,10 +38,8 @@ const outPath = join(ROOT, 'data', 'credit-spread.js');
 writeFileSync(outPath, out);
 
 const sizeKB = (Buffer.byteLength(out) / 1024).toFixed(0);
-const { aa3 } = stats;
-console.log('✅ G1 통과 — 모든 기준값 재현');
+console.log('✅ 구조 검증 통과');
 console.log(`   데이터 행: ${stats.rows} | 기간: ${stats.first} ~ ${stats.last}`);
 console.log(`   섹터: ${stats.sectors} | 시리즈: ${stats.cols}`);
 console.log(`   국고채권_3년 최신: ${stats.ktb3}% | 공사채AAA_3년 최신: ${(stats.gsAAA3 * 100).toFixed(1)}bp`);
-console.log(`   회사채AA-_3년: 최신 ${(aa3.last * 100).toFixed(1)}bp / 최대 ${(aa3.max * 100).toFixed(1)}bp(${aa3.maxDate}) / 최소 ${(aa3.min * 100).toFixed(1)}bp(${aa3.minDate})`);
 console.log(`   → ${outPath} (${sizeKB} KB)`);

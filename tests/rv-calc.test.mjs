@@ -1,5 +1,5 @@
-// G2~G5 특성화 테스트 — node --test tests/
-// data/credit-spread.js를 window 목킹으로 로드해 rv-calc 함수 산출값을 기준값과 대조.
+// G2~G5 특성화 테스트 — node --test (자동탐색)
+// 동결 픽스처(tests/fixtures/credit-spread-frozen.js)를 로드해 rv-calc 산출값을 기준값과 대조.
 //
 // [기준값 출처] 명령서 원안 표는 노이즈 낀 원본 xlsx double에서 산출돼 있었다.
 // 민평 호가 그리드가 0.1bp(=%p 3자리)이므로 3자리 반올림값이 참값이며,
@@ -8,17 +8,12 @@
 // 허용오차는 명령서 원안 유지.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import {
   toBp, latest, seriesPercentile, slopeStats, pairStats, carryRoll, backtest,
 } from '../js/rv-calc.js';
-
-// --- 데이터 로드 (브라우저 스크립트 → window 목킹) ---
-globalThis.window = {};
-const code = readFileSync(new URL('../data/credit-spread.js', import.meta.url), 'utf8');
-new Function(code)(); // 전역 스코프에서 window.FENRIR_SERIES 세팅
-const DATA = globalThis.window.FENRIR_SERIES['credit-spread'];
-const S = DATA.series;
+// --- 데이터: 동결 픽스처 로드 (라이브 data/credit-spread.js 는 매일 갱신되므로 참조 금지) ---
+// 픽스처는 커밋 시점 데이터에서 G2~G5 참조 시리즈만 추출·동결한 것 → 테스트 영구 유효.
+import { series as S } from './fixtures/credit-spread-frozen.js';
 
 const bp = label => toBp(S[label]); // 스프레드 %p → bp
 const near = (a, b, tol) => Math.abs(a - b) <= tol;

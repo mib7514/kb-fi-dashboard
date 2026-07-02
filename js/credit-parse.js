@@ -64,41 +64,73 @@ export function serialize({ cols, sectors, dates, series }) {
   );
 }
 
-// --- G1 특성화 검증 ---
-// 실패 시 Error throw. 성공 시 파생 통계 반환(리포트/미리보기 공용).
-export function validateG1(parsed) {
-  const { dates, series, sectors, cols } = parsed;
-  const nonNull = arr => arr.filter(v => v != null);
-  const last = arr => arr[arr.length - 1];
-  const assert = (cond, msg) => { if (!cond) throw new Error('G1 FAIL: ' + msg); };
+// --- 업로드 구조 검증 ---
+// 고정 기준값(2832행 등 특성화 게이트)이 아니라 '갱신돼도 참인' 구조 불변식만 검사한다.
+// 새 영업일 추가(2833행 등)는 정상 통과, 파싱 붕괴·컬럼 변형·이상치만 실패.
+// 실패 시 Error throw(위치 포함). 성공 시 파생 통계 반환(미리보기/리포트 공용).
 
-  assert(dates.length === 2832, `데이터 행 ${dates.length} ≠ 2832`);
-  assert(dates[0] === '2015-01-02', `첫 날짜 ${dates[0]} ≠ 2015-01-02`);
-  assert(last(dates) === '2026-07-01', `마지막 날짜 ${last(dates)} ≠ 2026-07-01`);
-  assert(sectors.length === 15, `섹터 ${sectors.length} ≠ 15`);
-  assert(cols.length === 75, `라벨 ${cols.length} ≠ 75`);
-  assert(nonNull(series['공사채AAA_3년']).length === 2831,
-    `공사채AAA_3년 비null ${nonNull(series['공사채AAA_3년']).length} ≠ 2831`);
+export const EXPECTED_SECTORS = [
+  '국고채권', '공사채AAA', '은행채AAA', '회사채AAA', '회사채AA+', '카드채AA+', '회사채AA0', '카드채AA0',
+  '회사채AA-', '여전채AA-', '회사채A+', '여전채A+', '회사채A0', '여전채A0', '회사채BBB+',
+];
+export const EXPECTED_LABELS = EXPECTED_SECTORS.flatMap(s => MATURITIES.map(m => `${s}_${m}`));
 
-  const ktb3 = last(series['국고채권_3년']);
-  assert(Math.abs(ktb3 - 3.790) < 0.0015, `국고채권_3년 최신 ${ktb3} ≠ 3.790`);
-  const gsAAA3 = last(series['공사채AAA_3년']);
-  assert(Math.abs(gsAAA3 - 0.371) < 0.0015, `공사채AAA_3년 최신 ${gsAAA3} ≠ 0.371`);
+const MIN_ROWS = 2832;       // 최초 구현 시점 행수 — 이보다 줄면 파싱 이상
+const MIN_LAST_DATE = '2026-07-01';
+const KTB_RANGE = [0, 20];   // 국고 금리 %
+const CREDIT_RANGE = [-1, 15]; // 크레딧 스프레드 %p (역전 대비 하한 여유)
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-  const aa3 = series['회사채AA-_3년'];
-  const aa3nn = nonNull(aa3);
-  assert(Math.abs(last(aa3) - 0.680) < 0.0015, `회사채AA-_3년 최신 ${last(aa3)} ≠ 0.680`);
-  const aa3max = Math.max(...aa3nn), aa3min = Math.min(...aa3nn);
-  assert(Math.abs(aa3max - 1.775) < 0.0015, `회사채AA-_3년 최대 ${aa3max} ≠ 1.775`);
-  assert(Math.abs(aa3min - 0.251) < 0.0015, `회사채AA-_3년 최소 ${aa3min} ≠ 0.251`);
-  const maxDate = dates[aa3.indexOf(aa3max)], minDate = dates[aa3.indexOf(aa3min)];
-  assert(maxDate === '2022-11-30', `회사채AA-_3년 최대 날짜 ${maxDate} ≠ 2022-11-30`);
-  assert(minDate === '2015-03-24', `회사채AA-_3년 최소 날짜 ${minDate} ≠ 2015-03-24`);
+export function validateStructure(parsed) {
+  const { cols, dates, series } = parsed;
+  const fail = m => { throw new Error('구조 검증 실패: ' + m); };
 
+  // 1) 헤더 라벨 = 기대 75개(섹터15×만기5)와 정확히 일치
+  const labels = cols.map(c => c.label);
+  if (labels.length !== EXPECTED_LABELS.length)
+    fail(`라벨 수 ${labels.length} ≠ ${EXPECTED_LABELS.length} (섹터15×만기5)`);
+  const have = new Set(labels), want = new Set(EXPECTED_LABELS);
+  const missing = EXPECTED_LABELS.filter(l => !have.has(l));
+  const extra = labels.filter(l => !want.has(l));
+  if (missing.length) fail(`누락 라벨: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ' …' : ''}`);
+  if (extra.length) fail(`예상 밖 라벨: ${extra.slice(0, 5).join(', ')}${extra.length > 5 ? ' …' : ''}`);
+
+  // 2) 날짜: 행수·파싱·중복·오름차순·최신
+  if (dates.length < MIN_ROWS) fail(`행수 ${dates.length} < ${MIN_ROWS} (기존 대비 감소)`);
+  for (let i = 0; i < dates.length; i++) {
+    const d = dates[i];
+    if (!DATE_RE.test(d) || Number.isNaN(Date.parse(d))) fail(`날짜 파싱 불가: 행 ${i} '${d}'`);
+    if (i > 0) {
+      if (d === dates[i - 1]) fail(`중복 날짜: ${d} (행 ${i})`);
+      if (d < dates[i - 1]) fail(`날짜 역순: ${dates[i - 1]} → ${d} (행 ${i})`);
+    }
+  }
+  const last = dates[dates.length - 1];
+  if (last < MIN_LAST_DATE) fail(`최신 날짜 ${last} < ${MIN_LAST_DATE}`);
+
+  // 3) 값 범위(위반 셀 위치 포함) + 비null 비율 ≥ 50%(파싱 붕괴 감지)
+  const n = dates.length;
+  for (const c of cols) {
+    const arr = series[c.label];
+    const isKtb = c.label.startsWith('국고채권_');
+    const [lo, hi] = isKtb ? KTB_RANGE : CREDIT_RANGE;
+    let nn = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (v == null) continue;
+      nn++;
+      if (v < lo || v > hi)
+        fail(`값 범위 위반: ${c.label} @ ${dates[i]} = ${v} (허용 ${lo}~${hi}${isKtb ? '%' : '%p'})`);
+    }
+    if (nn / n < 0.5) fail(`비null 비율 ${(nn / n * 100).toFixed(0)}% < 50%: ${c.label} (파싱 붕괴 의심)`);
+  }
+
+  // 파생 통계
+  const lastVal = arr => { for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return arr[i]; return null; };
   return {
-    rows: dates.length, first: dates[0], last: last(dates),
-    sectors: sectors.length, cols: cols.length,
-    ktb3, gsAAA3,
-    aa3: { last: last(aa3), max: aa3max, min: aa3min, maxDate, minDate },
+    rows: n, first: dates[0], last,
+    sectors: EXPECTED_SECTORS.length, cols: labels.length,
+    ktb3: lastVal(series['국고채권_3년']),
+    gsAAA3: lastVal(series['공사채AAA_3년']),
   };
 }

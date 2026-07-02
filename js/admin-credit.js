@@ -4,7 +4,7 @@
 // 미리보기 %ile 은 조회 페이지와 동일한 rv-calc.js 를 재사용한다.
 // SheetJS(XLSX)는 admin.html 이 로드한 vendor/xlsx.min.js 의 전역을 사용.
 
-import { parseAoa, serialize, validateG1 } from './credit-parse.js';
+import { parseAoa, serialize, validateStructure } from './credit-parse.js';
 import { toBp, seriesPercentile } from './rv-calc.js';
 
 const state = { out: null, fname: null };
@@ -35,7 +35,7 @@ function handleFile(file) {
       if (!ws) throw new Error("시트 'spread' 없음");
       const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true });
       const parsed = parseAoa(aoa);
-      const stats = validateG1(parsed);           // 실패 시 throw → G1 게이트
+      const stats = validateStructure(parsed);    // 실패 시 throw → 구조 게이트(위치 포함)
       state.out = serialize(parsed);              // node 스크립트와 바이트 동일
 
       // 미리보기 %ile: 조회 페이지와 동일한 rv-calc 로 산출
@@ -43,7 +43,7 @@ function handleFile(file) {
 
       renderPreview(parsed, stats, gsAAA3full);
       document.getElementById('cs-export-btn').disabled = false;
-      setStatus(`G1 통과 — ${stats.rows}행, ${stats.first} ~ ${stats.last}. export 가능.`, 'ok');
+      setStatus(`구조 검증 통과 — ${stats.rows}행, ${stats.first} ~ ${stats.last}. export 가능.`, 'ok');
     } catch (err) {
       state.out = null;
       document.getElementById('cs-export-btn').disabled = true;
@@ -72,8 +72,7 @@ function renderPreview(parsed, stats, gsAAA3full) {
       <div class="pv-stat"><div class="l">섹터 · 시리즈</div><div class="m" style="font-size:15px">${stats.sectors} · ${stats.cols}</div></div>
       <div class="pv-stat"><div class="l">출력 크기</div><div class="m">${sizeKB}<span>KB</span></div></div>
     </div>
-    <div class="flow" style="margin-top:0">기간 <b>${stats.first} ~ ${stats.last}</b> · 국고3년 <b>${stats.ktb3}%</b> ·
-      회사AA-3년 최대 <b>${(stats.aa3.max * 100).toFixed(1)}bp</b>(${stats.aa3.maxDate}) / 최소 <b>${(stats.aa3.min * 100).toFixed(1)}bp</b>(${stats.aa3.minDate})</div>`;
+    <div class="flow" style="margin-top:0">기간 <b>${stats.first} ~ ${stats.last}</b> · 국고3년 <b>${stats.ktb3}%</b> · 구조 검증 통과(라벨 75·날짜 오름차순·값 범위·비null≥50%)</div>`;
 }
 
 // ── export: data/credit-spread.js 다운로드 ──
