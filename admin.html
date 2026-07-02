@@ -126,12 +126,43 @@
     <button class="btn accent" id="export-btn" disabled>data 파일 다운로드</button>
     <div class="flow">흐름: <b>다운로드</b> → data/ 폴더에 넣기 → <b>GitHub 커밋</b> → 조회 페이지 자동 반영</div>
   </div>
+
+  <!-- ─── 크레딧 스프레드 (composite xlsx) — 위 CSV 흐름과 독립 ─── -->
+  <h1 style="margin-top:36px">크레딧 스프레드 (composite xlsx)</h1>
+  <p class="tagline">composite xlsx 업로드 → 파싱·G1 검증 → <span style="font-family:var(--mono)">data/credit-spread.js</span> 생성.
+    파서는 <span style="font-family:var(--mono)">tools/convert-composite.mjs</span> 와 동일 모듈을 써 산출물이 바이트 동일합니다.</p>
+
+  <div class="card">
+    <h2>xlsx 업로드</h2>
+    <p class="hint"><span style="font-family:var(--mono)">credit_spread_composite_영업일만.xlsx</span> — 시트 <b>spread</b>, 헤더 17행. 국고=금리%, 크레딧=스프레드%p.</p>
+    <label class="dropzone" id="cs-dropzone" for="cs-file-input">
+      여기로 <b>xlsx 파일을 드래그</b>하거나 클릭해서 선택
+    </label>
+    <input type="file" id="cs-file-input" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+    <div class="status" id="cs-status"></div>
+  </div>
+
+  <div class="card">
+    <h2>검증 미리보기</h2>
+    <p class="hint">G1 특성화 게이트 통과 시 최신일자·행수·공사AAA 3년 현재 %ile 을 표시합니다.</p>
+    <div id="cs-preview"></div>
+  </div>
+
+  <div class="card">
+    <h2>발행</h2>
+    <p class="hint">data/credit-spread.js 를 생성해 다운로드합니다 (node 스크립트 산출물과 바이트 동일).</p>
+    <button class="btn accent" id="cs-export-btn" disabled>credit-spread.js 다운로드</button>
+    <div class="flow">흐름: <b>다운로드</b> → data/ 폴더에 넣기 → <b>GitHub 커밋</b> → Curve RV 페이지 자동 반영</div>
+  </div>
 </div>
 
 <script src="vendor/plotly.min.js"></script>
+<script src="vendor/xlsx.min.js"></script>
 <script type="module">
   import { initAdmin } from './js/admin-ui.js';
+  import { initCreditAdmin } from './js/admin-credit.js';
   initAdmin();
+  initCreditAdmin();
 </script>
 </body>
 </html>
