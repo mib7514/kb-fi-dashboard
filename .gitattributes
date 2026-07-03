@@ -1,0 +1,2 @@
+# .bat 는 반드시 CRLF 로 체크아웃 (더블클릭 실행 안전 — cmd.exe 는 LF 배치를 오파싱)
+*.bat text eol=crlf
