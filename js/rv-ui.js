@@ -11,7 +11,7 @@ const MLAB = MATURITY_LABELS;            // ['1년',...]
 const BUCKET_KO = { low: '저', mid: '중', high: '고' };
 
 let DATA, SERIES, SECTORS, CREDIT_SECTORS;
-const state = { sector: '공사채AAA', heatWindow: 'full', detailMi: 2 };
+const state = { sector: '공사채AAA', compare: '', heatWindow: 'full', detailMi: 2 };
 
 // --- 포맷 가드 ---
 const num = (v, d = 1) => (typeof v === 'number' && Number.isFinite(v)) ? v.toFixed(d) : '—';
@@ -126,7 +126,17 @@ function drawTermStructure() {
     const mm = minMaxRecent(arr, 750);
     lo.push(mm.lo); hi.push(mm.hi);
   }
-  renderTermStructure(document.getElementById('rv-term'), { maturities: MLAB, current, prior, lo, hi });
+  // 비교 오버레이: 선택 시(자기 자신 제외) 비교 섹터의 현재 커브를 점선으로
+  let compare = null;
+  if (state.compare && state.compare !== state.sector) {
+    compare = { name: state.compare, current: MATS.map((_, mi) => latest(bpSeries(state.compare, mi))) };
+  }
+  renderTermStructure(document.getElementById('rv-term'), {
+    maturities: MLAB, current, prior, lo, hi,
+    title: `${state.sector} — 스프레드 텀스트럭처 (bp)`, compare,
+  });
+  document.getElementById('rv-ts-sector').textContent =
+    state.sector + (compare ? ` vs ${compare.name}` : '');
 }
 
 // ============ [3] 기울기 패널 ============
@@ -171,11 +181,13 @@ function drawPairs() {
   });
 }
 
-// --- 섹터 선택 ---
+// --- 섹터 선택 (히트맵 클릭·드롭다운 공통 진입점) ---
 function selectSector(sector) {
   if (!CREDIT_SECTORS.includes(sector)) return;
   state.sector = sector;
   state.detailMi = 2;
+  const sel = document.getElementById('rv-sector-select'); // 드롭다운 동기화
+  if (sel && sel.value !== sector) sel.value = sector;
   drawScorecard(); drawDetail(); drawTermStructure(); drawSlopes();
 }
 
@@ -189,6 +201,16 @@ export function initCurveRV() {
   document.getElementById('rv-updated').textContent = DATA.meta.last_updated;
   document.getElementById('rv-range').textContent = `${DATA.dates[0]} ~ ${DATA.dates[DATA.dates.length - 1]}`;
   document.getElementById('rv-count').textContent = `${DATA.dates.length}일`;
+
+  // 섹터 드롭다운 (국고 제외 14) + 비교 드롭다운 ('없음' + 14)
+  const sectorSel = document.getElementById('rv-sector-select');
+  const compareSel = document.getElementById('rv-compare-select');
+  const opts = CREDIT_SECTORS.map(s => `<option value="${s}">${s}</option>`).join('');
+  sectorSel.innerHTML = opts;
+  sectorSel.value = state.sector;
+  compareSel.innerHTML = '<option value="">없음</option>' + opts;
+  sectorSel.addEventListener('change', () => selectSector(sectorSel.value));
+  compareSel.addEventListener('change', () => { state.compare = compareSel.value; drawTermStructure(); });
 
   // 히트맵 윈도우 토글
   document.querySelectorAll('[data-heatwin]').forEach(b =>

@@ -37,6 +37,8 @@
   .seg button:last-child { border-right: none; }
   .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
   .seg button:hover:not(.active) { background: var(--panel-2); color: var(--text); }
+  .rv-select { background: var(--panel); border: 1px solid var(--border-2); color: var(--text); border-radius: 7px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; min-width: 140px; }
+  .rv-select:focus { outline: none; border-color: var(--accent); }
 
   .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0 10px; }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; }
@@ -108,6 +110,18 @@
     </div>
   </div>
 
+  <!-- 섹터 선택 (히트맵 행 클릭과 이원화 — 같은 상태를 갱신) -->
+  <div class="controls">
+    <div class="ctrl-group">
+      <span class="ctrl-label">섹터</span>
+      <select id="rv-sector-select" class="rv-select"></select>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">비교 오버레이</span>
+      <select id="rv-compare-select" class="rv-select"><option value="">없음</option></select>
+    </div>
+  </div>
+
   <!-- [1] 스코어카드 -->
   <div class="section-title">스코어카드 — <span id="rv-sector-name">공사채AAA</span> (행 클릭 → 상세)</div>
   <div class="card">
@@ -131,7 +145,7 @@
   </div>
 
   <!-- [2] 텀스트럭처 -->
-  <div class="section-title">텀스트럭처 & 기울기</div>
+  <div class="section-title">텀스트럭처 & 기울기 — <span id="rv-ts-sector">공사채AAA</span></div>
   <div class="grid-side">
     <div class="card"><div class="chart-box" id="rv-term"></div></div>
     <div class="card">

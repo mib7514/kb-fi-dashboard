@@ -69,8 +69,9 @@ export function renderHeatmap(el, grid, onSelect) {
   }
 }
 
-// ── [2] 스프레드 텀스트럭처: 현재 커브 + 1년 전 + 3y min~max 밴드 ──
-// data: { maturities:[1,2,3,5,10], current:[..bp], prior:[..bp], lo:[..bp], hi:[..bp] }
+// ── [2] 스프레드 텀스트럭처: 현재 커브 + 1년 전 + 3y min~max 밴드 (+선택 비교 섹터 오버레이) ──
+// data: { maturities:[1,2,3,5,10], current:[..bp], prior:[..bp], lo:[..bp], hi:[..bp],
+//         title?, compare?: { name, current:[..bp] } }
 export function renderTermStructure(el, data) {
   const x = data.maturities;
   const traces = [
@@ -80,7 +81,14 @@ export function renderTermStructure(el, data) {
     { x, y: data.prior, name: '1년 전', mode: 'lines+markers', line: { color: COLORS.prior, width: 1.5, dash: 'dot' }, marker: { size: 5 } },
     { x, y: data.current, name: '현재', mode: 'lines+markers', line: { color: COLORS.current, width: 2 }, marker: { size: 7 } },
   ];
-  const layout = baseLayout('스프레드 텀스트럭처 (bp)', 'bp', {
+  // 비교 섹터 현재 커브 (점선 오버레이)
+  if (data.compare && Array.isArray(data.compare.current)) {
+    traces.push({
+      x, y: data.compare.current, name: `${data.compare.name} (비교)`, mode: 'lines+markers',
+      line: { color: COLORS.accent, width: 1.5, dash: 'dash' }, marker: { size: 5 },
+    });
+  }
+  const layout = baseLayout(data.title || '스프레드 텀스트럭처 (bp)', 'bp', {
     hovermode: 'x unified',
     xaxis: { type: 'category', gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 10 } },
   });
