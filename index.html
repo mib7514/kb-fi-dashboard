@@ -51,6 +51,7 @@
 <!-- data (기준일 표시용 — window.FENRIR_SERIES 자기등록) -->
 <script src="data/kr-cpi-headline.js"></script>
 <script src="data/credit-spread.js"></script>
+<script src="data/onoff-ktb3y.js"></script>
 <!-- app -->
 <script type="module">
   import { NAV_ITEMS } from './js/nav.js'; // nav 바 자동 렌더 + NAV_ITEMS 재사용
@@ -58,6 +59,7 @@
   // 모듈 id → 데이터 시리즈 키 (마지막 기준일 표시)
   const SERIES_KEY = { inflation: 'kr-cpi-headline', 'curve-rv': 'credit-spread' };
   const lastUpdated = (id) => {
+    if (id === 'onoff') return (window.ONOFF_KTB3Y && window.ONOFF_KTB3Y.updated) || null;
     const key = SERIES_KEY[id];
     const s = key && window.FENRIR_SERIES && window.FENRIR_SERIES[key];
     return (s && s.meta && s.meta.last_updated) || null;

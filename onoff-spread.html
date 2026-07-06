@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>On/Off 스프레드 — 국고 3년 지표물 커브조정 RV</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --forecast: #f0883e;
+    --ok: #3fb950; --ext: #f85149;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+
+  .series-bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; padding: 12px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin-bottom: 18px; font-size: 12px; }
+  .series-bar .sname { font-size: 14px; font-weight: 600; }
+  .series-bar .meta { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .series-bar .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--border-2); color: var(--muted); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 16px; align-items: center; }
+  .ctrl-group { display: flex; align-items: center; gap: 8px; }
+  .ctrl-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .oo-select { background: var(--panel); border: 1px solid var(--border-2); color: var(--text); border-radius: 7px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; min-width: 240px; }
+  .oo-select:focus { outline: none; border-color: var(--accent); }
+
+  .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0 10px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; }
+  .chart-box { width: 100%; height: 320px; }
+  .chart-box.tall { height: 380px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 4px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 13px 15px; }
+  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .stat-main { font-size: 22px; font-weight: 600; font-family: var(--mono); letter-spacing: -0.01em; }
+  .stat-main.ext-hi { color: var(--ext); }
+  .stat-main.ext-lo { color: var(--ok); }
+  .stat-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
+
+  .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+  .note { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+  .note b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap" id="oo-app">
+  <div class="eyebrow">
+    <span class="step">ON/OFF</span>
+    <span class="ctx">국고 3년 지표물 · 커브조정 상대가치</span>
+  </div>
+  <h1>On/Off-the-run 스프레드</h1>
+  <p class="tagline">지표물 fly = [지표−구지표] − [구지표−구구지표]. 세대별 이벤트타임 비교로 리치/저평가를 문맥화 — 원인 판단은 사람 몫.</p>
+
+  <div class="series-bar">
+    <span class="sname">국고 <span id="oo-tenor">3Y</span> On/Off 세대별 fly</span>
+    <span class="tag">파생 스프레드(bp)</span>
+    <span class="meta">기간 <span id="oo-range">—</span></span>
+    <span class="meta"><span id="oo-count">—</span></span>
+    <span class="meta">최신 <span id="oo-updated">—</span></span>
+  </div>
+
+  <!-- 세대 선택 -->
+  <div class="controls">
+    <div class="ctrl-group">
+      <span class="ctrl-label">세대 (기본 최신 · 과거 회고 조회)</span>
+      <select id="oo-gen-select" class="oo-select"></select>
+    </div>
+  </div>
+
+  <!-- Panel C — 요약 카드 -->
+  <div class="section-title">Panel C · 요약</div>
+  <div class="stats" id="oo-cards"></div>
+
+  <!-- Panel A — 분해 -->
+  <div class="section-title">Panel A · 현재 사이클 분해 (raw / slope / fly · 범례 클릭 토글)</div>
+  <div class="card"><div class="chart-box" id="oo-chart-a"></div></div>
+
+  <!-- Panel B — 이벤트타임 -->
+  <div class="section-title">Panel B · 이벤트타임 세대 비교</div>
+  <div class="card"><div class="chart-box tall" id="oo-chart-b"></div>
+    <div class="note">과거 세대(선택 제외)의 day별 <b>p25–p75 밴드</b>와 <b>median 점선</b> 위에 선택 세대 fly 를 겹쳐,
+      동일 이벤트타임(민평 개시 후 영업일)에서 상대 위치를 본다. 밴드는 표본 <b>n≥3</b> 인 day 만 표시.
+      <br>[한계] 주말만 제거·공휴일 미제거 → 세대 간 정렬 ±1~2 관측일 오차 가능(밴드 비교 목적상 허용).</div>
+  </div>
+</div>
+
+<!-- 공통 내비게이션 -->
+<script type="module" src="js/nav.js"></script>
+<!-- vendor -->
+<script src="vendor/plotly.min.js"></script>
+<!-- data (window.ONOFF_KTB3Y) -->
+<script src="data/onoff-ktb3y.js"></script>
+<!-- app (ES module) -->
+<script type="module">
+  import { initOnoff } from './js/onoff-ui.js';
+  initOnoff();
+</script>
+</body>
+</html>

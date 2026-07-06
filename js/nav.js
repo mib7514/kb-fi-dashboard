@@ -7,6 +7,7 @@ export const NAV_ITEMS = [
   { id: 'home', title: '홈', file: 'index.html', desc: '모듈 허브' },
   { id: 'inflation', title: '물가전망', file: 'inflation-forecast.html', desc: 'KR CPI 시즈널 m-m 추정 → y-y 시나리오' },
   { id: 'curve-rv', title: 'Curve RV', file: 'curve-rv.html', desc: '크레딧 스프레드 섹터×만기 상대가치 (캐리·롤·percentile·백테스트)' },
+  { id: 'onoff', title: 'On/Off 스프레드', file: 'onoff-spread.html', desc: '국고 3년 지표물 커브조정 상대가치 — 세대 이벤트타임 비교' },
 ];
 
 const CSS = `
