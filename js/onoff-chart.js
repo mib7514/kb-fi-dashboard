@@ -19,6 +19,23 @@ const COLORS = {
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const CONFIG = { displayModeBar: false, responsive: true };
 
+const EVENT_COLOR = { 반기말: '#bc8cff', 분기말: '#bc8cff', 입찰: '#3fb950' };
+
+// 이벤트 세로선 + 상단 라벨을 layout 에 주입. xOf(e) → x좌표(Panel A: 날짜, Panel B: day).
+function withEvents(layout, events, xOf) {
+  if (!events || !events.length) return layout;
+  const shapes = events.map(e => ({
+    type: 'line', xref: 'x', yref: 'paper', x0: xOf(e), x1: xOf(e), y0: 0, y1: 1,
+    line: { color: EVENT_COLOR[e.kind] || COLORS.muted, width: 1, dash: 'dot' }, layer: 'below',
+  }));
+  const annotations = events.map(e => ({
+    x: xOf(e), xref: 'x', y: 1, yref: 'paper', yanchor: 'bottom', xanchor: 'center',
+    text: `${e.kind}`, hovertext: `${e.kind} ${e.calendar || e.date} · day${e.day}`, showarrow: false,
+    font: { color: EVENT_COLOR[e.kind] || COLORS.muted, size: 9, family: FONT },
+  }));
+  return { ...layout, shapes: [...(layout.shapes || []), ...shapes], annotations: [...(layout.annotations || []), ...annotations] };
+}
+
 function baseLayout(title, yTitle, extra = {}) {
   return {
     title: { text: title, font: { color: COLORS.text, size: 13, family: FONT }, x: 0, xanchor: 'left' },
@@ -36,23 +53,24 @@ function baseLayout(title, yTitle, extra = {}) {
 }
 
 // ── Panel A — 현재 사이클 분해: raw / slope / fly 3계열 (x=날짜, 범례 클릭 토글) ──
-export function renderDecompose(el, gen) {
+export function renderDecompose(el, gen, events) {
   const fs = flySeries(gen);
   const traces = [
     { x: fs.dates, y: fs.raw, name: 'raw (지표−구지표)', mode: 'lines', line: { color: COLORS.raw, width: 1.3, dash: 'dot' } },
     { x: fs.dates, y: fs.slope, name: 'slope (구−구구)', mode: 'lines', line: { color: COLORS.slope, width: 1.3, dash: 'dot' } },
     { x: fs.dates, y: fs.fly, name: 'fly (커브조정)', mode: 'lines', line: { color: COLORS.fly, width: 2.2 } },
   ];
-  const layout = baseLayout(`Panel A · 현재 사이클 분해 — ${gen.tag} (vs ${gen.vs} · slope vs ${gen.slopeVs})`, 'bp', {
+  let layout = baseLayout(`Panel A · 현재 사이클 분해 — ${gen.tag} (vs ${gen.vs} · slope vs ${gen.slopeVs})`, 'bp', {
     hovermode: 'x unified',
     xaxis: { gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 10 } },
   });
+  layout = withEvents(layout, events, e => e.date); // Panel A x=날짜
   Plotly.react(el, traces, layout, CONFIG);
 }
 
 // ── Panel B — 이벤트타임 세대 비교: 과거 p25–p75 밴드 + median 점선 + 선택 세대 강조선 ──
 // gens 전체, selectedTag 는 강조/제외 대상. band day 범위 = 선택 세대 길이(사이클 horizon).
-export function renderEventTime(el, gens, selectedTag) {
+export function renderEventTime(el, gens, selectedTag, events) {
   const sel = gens.find(g => g.tag === selectedTag);
   if (!sel) { Plotly.react(el, [], baseLayout('Panel B', 'bp'), CONFIG); return; }
   const maxDay = sel.series.length;
@@ -76,10 +94,11 @@ export function renderEventTime(el, gens, selectedTag) {
       customdata: selDates, hovertemplate: 'day %{x} · %{customdata}<br>fly %{y:.1f}bp<extra></extra>',
     },
   ];
-  const layout = baseLayout(`Panel B · 이벤트타임 세대 비교 — ${selectedTag} vs 과거 ${gens.length - 1}세대`, 'fly bp', {
+  let layout = baseLayout(`Panel B · 이벤트타임 세대 비교 — ${selectedTag} vs 과거 ${gens.length - 1}세대`, 'fly bp', {
     hovermode: 'x unified',
     xaxis: { title: { text: '민평 개시 후 영업일(day)', font: { size: 10 } }, gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 10 } },
   });
+  layout = withEvents(layout, events, e => e.day); // Panel B x=day 인덱스
   Plotly.react(el, traces, layout, CONFIG);
 }
 

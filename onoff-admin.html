@@ -61,6 +61,8 @@
 
   .flow { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
   .flow b { color: var(--text); }
+  textarea { width: 100%; background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 7px; padding: 9px 11px; font-family: var(--mono); font-size: 12px; resize: vertical; }
+  textarea:focus { outline: none; border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -97,12 +99,45 @@
     <button class="btn accent" id="oo-export-btn" disabled>onoff-ktb3y.js 다운로드</button>
     <div class="flow">흐름: <b>다운로드</b> → data/ 폴더에 넣기 → <b>GitHub 커밋</b> → 조회 페이지 자동 반영</div>
   </div>
+
+  <!-- ─── 입찰일 이벤트 (독립 흐름) ─── -->
+  <h1 style="margin-top:36px">입찰일 이벤트</h1>
+  <p class="tagline">국고 3년 입찰일을 일괄 입력 → <span style="font-family:var(--mono)">data/onoff-events.js</span> 생성.
+    분기·반기말은 자동 계산되므로 입력 불필요. 판정 엔진의 컨세션 룰에 사용됩니다.</p>
+  <div class="card">
+    <h2>입찰일 입력</h2>
+    <p class="hint">쉼표·공백·줄바꿈 구분. 예: <span style="font-family:var(--mono)">2026-07-06, 2026-08-03, 2026-09-07</span></p>
+    <div class="field"><textarea id="oo-ev-input" rows="3" placeholder="2026-07-06, 2026-08-03, ..."></textarea></div>
+    <button class="btn accent" id="oo-ev-btn">onoff-events.js 다운로드</button>
+    <div class="status" id="oo-ev-status"></div>
+  </div>
+
+  <!-- ─── 코멘터리 (독립 흐름) ─── -->
+  <h1 style="margin-top:36px">코멘터리</h1>
+  <p class="tagline">조회 페이지의 <b style="color:var(--text)">[메트릭+판정 JSON 복사]</b> 결과를 붙여넣고 코멘터리를 작성 →
+    기존 히스토리에 append 하여 <span style="font-family:var(--mono)">data/onoff-commentary.js</span> 생성.</p>
+  <div class="card">
+    <h2>1. JSON 스냅샷 붙여넣기</h2>
+    <p class="hint">조회 페이지에서 복사한 { fly/z/분해, 최근 20영업일, 판정+evidence, 이벤트 } JSON.</p>
+    <div class="field"><textarea id="oo-cmt-snapshot" rows="5" placeholder='{ "tag":"26-5", "asof":"2026-07-06", ... }'></textarea></div>
+    <h2>2. 코멘터리 텍스트</h2>
+    <div class="field"><textarea id="oo-cmt-text" rows="4" placeholder="예: 반기말 수급으로 일시 확대 후 되돌림 완료. 현 지표물 리치 정상 범위."></textarea></div>
+    <button class="btn accent" id="oo-cmt-btn">onoff-commentary.js 다운로드 (append)</button>
+    <div class="status" id="oo-cmt-status"></div>
+    <div class="flow">현재 로드된 히스토리 수: <b id="oo-cmt-count">0</b>건 — 다운로드는 여기에 1건 append.</div>
+  </div>
 </div>
 
 <script src="vendor/xlsx.min.js"></script>
+<!-- 기존 코멘터리 로드(append 대상) -->
+<script src="data/onoff-commentary.js"></script>
 <script type="module">
-  import { initOnoffAdmin } from './js/onoff-admin-ui.js';
+  import { initOnoffAdmin, initOnoffEvents, initOnoffCommentary } from './js/onoff-admin-ui.js';
   initOnoffAdmin();
+  initOnoffEvents();
+  initOnoffCommentary();
+  const c = document.getElementById('oo-cmt-count');
+  if (c) c.textContent = (Array.isArray(window.ONOFF_COMMENTARY) ? window.ONOFF_COMMENTARY.length : 0);
 </script>
 </body>
 </html>

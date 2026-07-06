@@ -51,6 +51,36 @@
   .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
   .note { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
   .note b { color: var(--text); }
+
+  .btn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--text); font-size: 12px; padding: 7px 13px; border-radius: 7px; cursor: pointer; font-family: var(--sans); font-weight: 600; }
+  .btn:hover { border-color: var(--accent); }
+  .status { margin-top: 8px; font-size: 11px; font-family: var(--mono); color: var(--muted); min-height: 15px; }
+  .status.ok { color: var(--ok); } .status.bad { color: var(--ext); }
+
+  /* 판정 */
+  .verdict-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .verdict-main { font-size: 18px; font-weight: 700; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border-2); }
+  .verdict-main.v-period { color: #bc8cff; border-color: #bc8cff55; background: #bc8cff11; }
+  .verdict-main.v-concession { color: var(--ok); border-color: #3fb95055; background: #3fb95011; }
+  .verdict-main.v-liquidity { color: var(--forecast); border-color: #f0883e55; background: #f0883e11; }
+  .verdict-main.v-mixed { color: var(--accent); border-color: #58a6ff55; background: #58a6ff11; }
+  .verdict-main.v-none { color: var(--muted); }
+  .verdict-badges { display: flex; flex-direction: column; gap: 8px; }
+  .verdict-badge { background: var(--panel-2); border: 1px solid var(--border); border-left-width: 3px; border-radius: 7px; padding: 9px 12px; }
+  .verdict-badge.v-period { border-left-color: #bc8cff; }
+  .verdict-badge.v-concession { border-left-color: var(--ok); }
+  .verdict-badge.v-liquidity { border-left-color: var(--forecast); }
+  .verdict-badge.v-outlier { border-left-color: var(--ext); }
+  .verdict-badge.v-none { border-left-color: var(--border-2); }
+  .vb-label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .vb-evidence { margin: 6px 0 0; padding-left: 18px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); line-height: 1.6; }
+
+  /* 코멘터리 */
+  .cmt { background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; padding: 10px 13px; margin-bottom: 8px; }
+  .cmt.latest { border-color: var(--accent); }
+  .cmt-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-bottom: 5px; }
+  .cmt-tag { color: var(--accent); font-weight: 700; }
+  .cmt-text { font-size: 13px; color: var(--text); white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -78,6 +108,10 @@
     </div>
   </div>
 
+  <!-- 판정 -->
+  <div class="section-title">룰 판정 (참고 신호 · 근거 상시 노출)</div>
+  <div class="card" id="oo-verdict"></div>
+
   <!-- Panel C — 요약 카드 -->
   <div class="section-title">Panel C · 요약</div>
   <div class="stats" id="oo-cards"></div>
@@ -93,14 +127,20 @@
       동일 이벤트타임(민평 개시 후 영업일)에서 상대 위치를 본다. 밴드는 표본 <b>n≥3</b> 인 day 만 표시.
       <br>[한계] 주말만 제거·공휴일 미제거 → 세대 간 정렬 ±1~2 관측일 오차 가능(밴드 비교 목적상 허용).</div>
   </div>
+
+  <!-- 코멘터리 -->
+  <div class="section-title">코멘터리 (최신 + 히스토리 · 당시 fly/z 병기)</div>
+  <div id="oo-commentary"></div>
 </div>
 
 <!-- 공통 내비게이션 -->
 <script type="module" src="js/nav.js"></script>
 <!-- vendor -->
 <script src="vendor/plotly.min.js"></script>
-<!-- data (window.ONOFF_KTB3Y) -->
+<!-- data (window.ONOFF_KTB3Y / ONOFF_EVENTS / ONOFF_COMMENTARY) -->
 <script src="data/onoff-ktb3y.js"></script>
+<script src="data/onoff-events.js"></script>
+<script src="data/onoff-commentary.js"></script>
 <!-- app (ES module) -->
 <script type="module">
   import { initOnoff } from './js/onoff-ui.js';

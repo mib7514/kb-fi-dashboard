@@ -96,6 +96,62 @@ function exportData() {
   setStatus('다운로드: onoff-ktb3y.js → data/ 폴더에 넣고 커밋하세요.', 'ok');
 }
 
+// ── 다운로드 헬퍼 ──
+function download(name, text) {
+  const blob = new Blob([text], { type: 'text/javascript' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// ── 입찰일 → data/onoff-events.js ──
+function exportEvents() {
+  const ta = document.getElementById('oo-ev-input');
+  const st = id => (m, k) => { const e = document.getElementById(id); if (e) { e.textContent = m; e.className = 'status ' + (k || ''); } };
+  const setEv = st('oo-ev-status')();
+  const raw = (ta.value || '').split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+  const bad = raw.filter(d => !DATE_RE.test(d) || Number.isNaN(Date.parse(d)));
+  if (bad.length) { const e = document.getElementById('oo-ev-status'); e.textContent = '날짜 형식 오류: ' + bad.slice(0, 5).join(', '); e.className = 'status bad'; return; }
+  const auctions = [...new Set(raw)].sort();
+  download('onoff-events.js',
+    '// 입찰일 이벤트 — onoff-admin 생성. 분기·반기말은 자동 계산.\n' +
+    'window.ONOFF_EVENTS = { auctions: ' + JSON.stringify(auctions) + ' };\n');
+  const e = document.getElementById('oo-ev-status'); e.textContent = `입찰일 ${auctions.length}건 → onoff-events.js 다운로드. data/ 에 넣고 커밋.`; e.className = 'status ok';
+}
+
+// ── 코멘터리 append → data/onoff-commentary.js ──
+function exportCommentary() {
+  const snapEl = document.getElementById('oo-cmt-snapshot');
+  const textEl = document.getElementById('oo-cmt-text');
+  const status = document.getElementById('oo-cmt-status');
+  const fail = m => { status.textContent = m; status.className = 'status bad'; };
+  let snap;
+  try { snap = JSON.parse(snapEl.value); } catch { return fail('JSON 스냅샷 파싱 실패 — 조회 페이지 [JSON 복사] 결과를 붙여넣으세요.'); }
+  const text = (textEl.value || '').trim();
+  if (!text) return fail('코멘터리 텍스트를 입력하세요.');
+  const item = { date: snap.asof || '', text, inputSnapshot: snap };
+  const existing = Array.isArray(window.ONOFF_COMMENTARY) ? window.ONOFF_COMMENTARY : [];
+  const next = [...existing, item];
+  download('onoff-commentary.js',
+    '// 코멘터리 히스토리 — onoff-admin append. 각 항목 { date, text, inputSnapshot }.\n' +
+    'window.ONOFF_COMMENTARY = [\n' +
+    next.map(it => '  ' + JSON.stringify(it)).join(',\n') +
+    '\n];\n');
+  status.textContent = `코멘터리 append (총 ${next.length}건) → onoff-commentary.js 다운로드. data/ 에 넣고 커밋.`;
+  status.className = 'status ok';
+}
+
+export function initOnoffEvents() {
+  const btn = document.getElementById('oo-ev-btn');
+  if (btn) btn.addEventListener('click', exportEvents);
+}
+export function initOnoffCommentary() {
+  const btn = document.getElementById('oo-cmt-btn');
+  if (btn) btn.addEventListener('click', exportCommentary);
+}
+
 export function initOnoffAdmin() {
   const drop = document.getElementById('oo-dropzone');
   const fileInput = document.getElementById('oo-file-input');

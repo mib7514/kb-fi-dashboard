@@ -6,11 +6,14 @@ import {
   orderGenerations, currentTag, generationZ, flyChange, flyExtremes, bandStats,
 } from './onoff-calc.js';
 import { renderDecompose, renderEventTime } from './onoff-chart.js';
+import { allEvents, judge, buildSnapshot } from './onoff-judge.js';
 
 const $ = id => document.getElementById(id);
 const fmt = (v, u = '') => (typeof v === 'number' && Number.isFinite(v)) ? (v > 0 ? '+' : '') + v.toFixed(1) + u : '—';
 
-const state = { data: null, gens: [], selected: null };
+const state = { data: null, gens: [], selected: null, auctions: [], commentary: [], lastSnapshot: null };
+
+const VERDICT_CLASS = { period: 'v-period', concession: 'v-concession', liquidity: 'v-liquidity', mixed: 'v-mixed', none: 'v-none' };
 
 function fillMeta() {
   const d = state.data;
@@ -57,11 +60,69 @@ function renderCards() {
     </div>`).join('');
 }
 
+// 판정 배지 + 근거(evidence 상시 노출) + JSON 복사
+function renderVerdict(gen) {
+  const day = gen.series.length - 1;
+  const z = generationZ(state.data.generations, day, { tag: gen.tag });
+  const events = allEvents(gen, state.auctions);
+  const jr = judge(gen, state.auctions, z);
+  state.lastSnapshot = buildSnapshot(gen, jr, z);
+
+  const cls = VERDICT_CLASS[jr.verdict.type] || 'v-none';
+  const badges = jr.badges.map(b => {
+    const bcls = VERDICT_CLASS[b.type] || (b.type === 'outlier' ? 'v-outlier' : 'v-none');
+    const conds = b.evidence.map(e => `<li>${e}</li>`).join('');
+    return `<div class="verdict-badge ${bcls}">
+      <span class="vb-label">${b.label}</span>
+      <ul class="vb-evidence">${conds}</ul>
+    </div>`;
+  }).join('');
+  $('oo-verdict').innerHTML = `
+    <div class="verdict-head">
+      <span class="verdict-main ${cls}">${jr.verdict.label}</span>
+      <button class="btn" id="oo-copy-btn">메트릭+판정 JSON 복사</button>
+    </div>
+    <div class="verdict-badges">${badges || '<div class="empty" style="padding:8px">충족된 룰 없음 — 관찰.</div>'}</div>
+    <div class="status" id="oo-copy-status"></div>`;
+  $('oo-copy-btn').addEventListener('click', copySnapshot);
+  return events;
+}
+
+async function copySnapshot() {
+  const txt = JSON.stringify(state.lastSnapshot, null, 2);
+  const done = ok => { const s = $('oo-copy-status'); if (s) { s.textContent = ok ? '복사됨 — onoff-admin 코멘터리 입력란에 붙여넣기' : '복사 실패(수동 복사 필요)'; s.className = 'status ' + (ok ? 'ok' : 'bad'); } };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(txt); done(true); }
+    else throw new Error('no clipboard');
+  } catch { // 폴백: 임시 textarea
+    const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch { ok = false; }
+    document.body.removeChild(ta); done(ok);
+  }
+}
+
+// 최신 코멘터리 + 히스토리(당시 fly/z 병기)
+function renderCommentary() {
+  const el = $('oo-commentary');
+  if (!el) return;
+  const items = [...state.commentary].sort((a, b) => (a.date < b.date ? 1 : -1)); // 최신 먼저
+  if (!items.length) { el.innerHTML = '<div class="empty">등록된 코멘터리가 없습니다. (onoff-admin 에서 추가)</div>'; return; }
+  el.innerHTML = items.map((it, i) => {
+    const snap = it.inputSnapshot || {};
+    const meta = `${it.date || snap.asof || '—'} · ${snap.tag || ''} fly ${fmt(snap.fly, 'bp')} · z ${snap.z ?? '—'}${snap.verdict ? ' · ' + snap.verdict : ''}`;
+    return `<div class="cmt ${i === 0 ? 'latest' : ''}">
+      <div class="cmt-meta">${meta}${i === 0 ? ' <span class="cmt-tag">최신</span>' : ''}</div>
+      <div class="cmt-text">${(it.text || '').replace(/</g, '&lt;')}</div>
+    </div>`;
+  }).join('');
+}
+
 function renderAll() {
   const gen = state.gens.find(g => g.tag === state.selected);
   renderCards();
-  renderDecompose($('oo-chart-a'), gen);
-  renderEventTime($('oo-chart-b'), state.data.generations, state.selected);
+  const events = renderVerdict(gen);
+  renderDecompose($('oo-chart-a'), gen, events);
+  renderEventTime($('oo-chart-b'), state.data.generations, state.selected, events);
 }
 
 export function initOnoff() {
@@ -74,10 +135,13 @@ export function initOnoff() {
   state.data = data;
   state.gens = orderGenerations(data.generations); // 최신 → 과거
   state.selected = currentTag(data.generations);
+  state.auctions = (window.ONOFF_EVENTS && window.ONOFF_EVENTS.auctions) || [];
+  state.commentary = Array.isArray(window.ONOFF_COMMENTARY) ? window.ONOFF_COMMENTARY : [];
 
   fillMeta();
   fillDropdown();
   renderAll();
+  renderCommentary();
 
   $('oo-gen-select').addEventListener('change', (e) => {
     state.selected = e.target.value;
