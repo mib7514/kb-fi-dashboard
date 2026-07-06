@@ -42,6 +42,9 @@ function fillExplainer() {
   set('oo-x-slope', last[2]);
   set('oo-x-fly', last[3]);
   set('oo-x-med', band.median);
+  // {NGEN} = 밴드 비교에 쓰는 과거(현재 세대 제외) 지표물 세대 수
+  const ngen = $('oo-x-ngen');
+  if (ngen) ngen.textContent = String(state.data.generations.length - 1);
   // 펼침 상태 localStorage 기억 (기본 접힘)
   const ex = $('oo-explainer');
   if (ex) {
@@ -148,7 +151,7 @@ function renderVerdict(gen) {
 
 async function copySnapshot() {
   const txt = JSON.stringify(state.lastSnapshot, null, 2);
-  const done = ok => { const s = $('oo-copy-status'); if (s) { s.textContent = ok ? '복사됨 — onoff-admin 코멘터리 입력란에 붙여넣기' : '복사 실패(수동 복사 필요)'; s.className = 'status ' + (ok ? 'ok' : 'bad'); } };
+  const done = ok => { const s = $('oo-copy-status'); if (s) { s.textContent = ok ? '복사됨 — 데이터 공장(admin) 코멘터리 입력란에 붙여넣기' : '복사 실패(수동 복사 필요)'; s.className = 'status ' + (ok ? 'ok' : 'bad'); } };
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(txt); done(true); }
     else throw new Error('no clipboard');
@@ -164,7 +167,7 @@ function renderCommentary() {
   const el = $('oo-commentary');
   if (!el) return;
   const items = [...state.commentary].sort((a, b) => (a.date < b.date ? 1 : -1)); // 최신 먼저
-  if (!items.length) { el.innerHTML = '<div class="empty">등록된 코멘터리가 없습니다. (onoff-admin 에서 추가)</div>'; return; }
+  if (!items.length) { el.innerHTML = '<div class="empty">등록된 코멘터리가 없습니다. (데이터 공장 admin 에서 추가)</div>'; return; }
   el.innerHTML = items.map((it, i) => {
     const snap = it.inputSnapshot || {};
     const meta = `${it.date || snap.asof || '—'} · ${snap.tag || ''} fly ${fmt(snap.fly, 'bp')} · z ${snap.z ?? '—'}${snap.verdict ? ' · ' + snap.verdict : ''}`;

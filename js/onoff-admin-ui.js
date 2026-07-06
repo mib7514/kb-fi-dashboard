@@ -4,7 +4,7 @@
 //
 // [라이선스] 원본 수익률은 이 페이지 메모리에서만 존재하고, export 산출물에는 파생 스프레드(bp)만
 // 담긴다. 원본 xlsx 자체는 절대 다운로드/커밋하지 않는다(.gitignore *.xlsx).
-// SheetJS(XLSX)는 onoff-admin.html 이 로드한 vendor/xlsx.min.js 전역을 사용.
+// SheetJS(XLSX)는 admin.html 이 로드한 vendor/xlsx.min.js 전역을 사용(On/Off 섹션).
 
 import { buildDataset, serialize, validateStructure } from './onoff-parse.js';
 
