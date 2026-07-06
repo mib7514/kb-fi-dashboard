@@ -1,5 +1,6 @@
 *.csv
 *.xlsx
+tests/local/
 cors-test.html
 team-dashboard-spec.md
 curve-rv-command.md

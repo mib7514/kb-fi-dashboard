@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>On/Off Admin — 세대별 스프레드 공장</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --forecast: #f0883e; --ok: #3fb950; --bad: #f85149;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .badge { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--forecast); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 22px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; margin: 0 0 4px; }
+  .card .hint { font-size: 12px; color: var(--muted); margin: 0 0 14px; }
+
+  .dropzone {
+    border: 1.5px dashed var(--border-2); border-radius: 9px; padding: 26px; text-align: center;
+    color: var(--muted); font-size: 13px; cursor: pointer; transition: all 0.15s;
+  }
+  .dropzone.over { border-color: var(--accent); background: var(--panel-2); color: var(--text); }
+  .dropzone b { color: var(--accent); }
+  input[type=file] { display: none; }
+
+  .rows { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+  .row-opt {
+    display: grid; grid-template-columns: 60px 1fr auto auto; align-items: center; gap: 12px;
+    padding: 8px 13px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px;
+    font-size: 13px;
+  }
+  .row-opt .ro-account { font-weight: 600; font-family: var(--mono); }
+  .row-opt .ro-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .row-opt .ro-count { font-size: 11px; color: var(--muted); font-family: var(--mono); text-align: right; }
+
+  .pv-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .pv-stat { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; }
+  .pv-stat .l { font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+  .pv-stat .m { font-size: 19px; font-weight: 600; font-family: var(--mono); }
+  .pv-stat .m span { font-size: 10px; color: var(--muted); margin-left: 5px; font-weight: 400; }
+
+  .btn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--text); font-size: 13px; padding: 9px 16px; border-radius: 7px; cursor: pointer; font-family: var(--sans); font-weight: 600; }
+  .btn.accent { background: var(--forecast); color: #08111f; border-color: var(--forecast); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .status { margin-top: 12px; font-size: 12px; font-family: var(--mono); color: var(--muted); min-height: 18px; }
+  .status.ok { color: var(--ok); }
+  .status.bad { color: var(--bad); }
+  .empty { color: var(--muted); font-size: 13px; padding: 16px; text-align: center; }
+
+  .flow { font-size: 11px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
+  .flow b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">
+    <span class="badge">ADMIN · LOCAL</span>
+    <span class="ctx">On/Off 세대별 스프레드 공장 — 나만 사용, 커밋도 나만</span>
+  </div>
+  <h1>On/Off-the-run 데이터 업로드</h1>
+  <p class="tagline">인포맥스 종목별 민평 xlsx 업로드 → 세대 정렬 + 커브조정 스프레드(bp) 변환 →
+    <span style="font-family:var(--mono)">data/onoff-ktb3y.js</span> 생성.
+    원본 수익률은 브라우저 메모리에만 있고, 산출물에는 <b style="color:var(--text)">파생 스프레드만</b> 담깁니다(유료 벤더 데이터 재배포 금지).</p>
+
+  <div class="card">
+    <h2>1. xlsx 업로드</h2>
+    <p class="hint"><span style="font-family:var(--mono)">표ktb3y_지표비지표.xlsx</span> — 시트 <b>Sheet1</b>,
+      row1 종목명(2열 간격), row3~ [일자·수익률]. 주말 행은 자동 제거됩니다.</p>
+    <label class="dropzone" id="oo-dropzone" for="oo-file-input">
+      여기로 <b>xlsx 파일을 드래그</b>하거나 클릭해서 선택
+    </label>
+    <input type="file" id="oo-file-input" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+    <div class="status" id="oo-status"></div>
+  </div>
+
+  <div class="card">
+    <h2>2. 세대별 변환 미리보기</h2>
+    <p class="hint">구조 검증 통과 시 세대 수·현재 세대 분해(raw/slope/fly)·세대 목록을 표시합니다.</p>
+    <div id="oo-preview"></div>
+  </div>
+
+  <div class="card">
+    <h2>3. 발행</h2>
+    <p class="hint">data/onoff-ktb3y.js 를 생성해 다운로드합니다 (node 스크립트 산출물과 바이트 동일).</p>
+    <button class="btn accent" id="oo-export-btn" disabled>onoff-ktb3y.js 다운로드</button>
+    <div class="flow">흐름: <b>다운로드</b> → data/ 폴더에 넣기 → <b>GitHub 커밋</b> → 조회 페이지 자동 반영</div>
+  </div>
+</div>
+
+<script src="vendor/xlsx.min.js"></script>
+<script type="module">
+  import { initOnoffAdmin } from './js/onoff-admin-ui.js';
+  initOnoffAdmin();
+</script>
+</body>
+</html>
