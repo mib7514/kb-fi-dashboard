@@ -147,3 +147,16 @@ export function makeProvisional(gen, input) {
 export function appendProvisional(gen, point) {
   return { ...gen, series: [...gen.series, [point.date, point.raw, point.slope, point.fly]] };
 }
+
+// 기준일에 따라 append / override / 무효 판별.
+//   date > 최종일 : append (day N+1)
+//   date == 최종일: override (최종일 값을 잠정으로 대체, day N) — 당일 인트라데이 갱신(캐리오버 포함)
+//   date <  최종일: null (무효)
+// 반환: { gen(수정 세대), mode, provDay, anchorDay(점선 연결 시작 관측 인덱스) }
+export function withProvisional(gen, point) {
+  const s = gen.series, N = s.length - 1, lastDate = s[N][0];
+  const row = [point.date, point.raw, point.slope, point.fly];
+  if (point.date > lastDate) return { gen: appendProvisional(gen, point), mode: 'append', provDay: N + 1, anchorDay: N };
+  if (point.date === lastDate) return { gen: { ...gen, series: s.slice(0, N).concat([row]) }, mode: 'override', provDay: N, anchorDay: N - 1 };
+  return null;
+}

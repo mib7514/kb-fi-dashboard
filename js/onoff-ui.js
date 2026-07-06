@@ -4,7 +4,7 @@
 
 import {
   orderGenerations, currentTag, generationZ, flyChange, flyExtremes, bandStats,
-  makeProvisional, appendProvisional,
+  makeProvisional, withProvisional,
 } from './onoff-calc.js';
 import { renderDecompose, renderEventTime } from './onoff-chart.js';
 import { judge, buildSnapshot } from './onoff-judge.js';
@@ -99,13 +99,14 @@ function renderVerdict(gen) {
     const pbadges = pj.headline.filter(e => e.type !== 'preAuction').map(e => badgeHtml(e)).join('') +
       pj.flags.map(f => badgeHtml(f, 'v-outlier')).join('') +
       pj.upcoming.map(e => badgeHtml(e, e.fired ? 'v-concession' : 'v-upcoming')).join('');
+    const modeTag = p.mode === 'override' ? `당일 override${p.carryover ? '(캐리오버 감지)' : ''}` : '익일 append';
     provHtml = `<div class="prov-verdict">
-      <div class="verdict-sub">잠정 (호가 기반) · ${p.point.date} · fly ${fmt(p.point.fly, 'bp')} = raw ${fmt(p.point.raw)} − slope ${fmt(p.point.slope)}${p.point.slopeAssumed ? ` <span class="prov-assumed">(기울기 가정: 최종 민평 ${fmt(p.point.slope, 'bp')})</span>` : ''}</div>
+      <div class="verdict-sub">잠정 (호가 기반) · ${p.point.date} · ${modeTag} · fly ${fmt(p.point.fly, 'bp')} = raw ${fmt(p.point.raw)} − slope ${fmt(p.point.slope)}${p.point.slopeAssumed ? ` <span class="prov-assumed">(기울기 가정: 최종 민평 ${fmt(p.point.slope, 'bp')})</span>` : ''}</div>
       <div class="verdict-head"><span class="verdict-main ${pcls}">${pj.verdict.label}</span></div>
       <div class="verdict-badges">${pbadges || '<div class="empty" style="padding:8px">잠정 발화 룰 없음.</div>'}</div>
     </div>`;
     const ps = buildSnapshot(p.appended, pj, p.z);
-    state.lastSnapshot.provisional = { provisional: true, point: p.point, verdict: ps.verdict, evidence: ps.evidence, flags: ps.flags, upcoming: ps.upcoming, past: ps.past };
+    state.lastSnapshot.provisional = { provisional: true, mode: p.mode, carryover: p.carryover, point: p.point, verdict: ps.verdict, evidence: ps.evidence, flags: ps.flags, upcoming: ps.upcoming, past: ps.past };
   }
 
   $('oo-verdict').innerHTML = `
@@ -151,20 +152,26 @@ function renderCommentary() {
   }).join('');
 }
 
-// 잠정 포인트 계산(현재 세대·기준일이 최종 관측일 이후일 때만). 실패 시 null.
+// 잠정 포인트 계산(현재 세대·기준일이 최종일 당일 override 또는 이후 append). 무효 시 null.
+// displayGen = 차트 실선용(override 시 최종일 원값 제외 → 마지막 유효 관측까지). appended = 판정용.
 function computeProv(gen) {
   if (!state.provisional || state.selected !== currentTag(state.data.generations)) return null;
-  const lastDate = gen.series[gen.series.length - 1][0];
-  if (!(state.provisional.date > lastDate)) return null;
   const point = makeProvisional(gen, state.provisional);
-  const appended = appendProvisional(gen, point);
-  const provGens = state.data.generations.map(g => g.tag === gen.tag ? appended : g);
-  const z = generationZ(provGens, appended.series.length - 1, { tag: gen.tag });
-  return { point, appended, judge: judge(appended, state.auctions, z), z };
+  const wp = withProvisional(gen, point);
+  if (!wp) return null; // 기준일 < 최종일 → 무효
+  const provGens = state.data.generations.map(g => g.tag === gen.tag ? wp.gen : g);
+  const z = generationZ(provGens, wp.gen.series.length - 1, { tag: gen.tag });
+  const displayGen = wp.mode === 'override' ? { ...gen, series: gen.series.slice(0, -1) } : gen;
+  const s = gen.series, prev = s[s.length - 2], last = s[s.length - 1];
+  const carryover = !!prev && last[1] === prev[1] && last[2] === prev[2] && last[3] === prev[3];
+  return { point, appended: wp.gen, judge: judge(wp.gen, state.auctions, z), z, mode: wp.mode, displayGen, carryover };
 }
 
 function renderPanelB() {
-  renderEventTime($('oo-chart-b'), state.data.generations, state.selected, state.events, state.forwardDays, state.prov ? state.prov.point : null);
+  const gens = state.prov
+    ? state.data.generations.map(g => g.tag === state.selected ? state.prov.displayGen : g)
+    : state.data.generations;
+  renderEventTime($('oo-chart-b'), gens, state.selected, state.events, state.forwardDays, state.prov ? state.prov.point : null);
 }
 
 function renderAll() {
@@ -172,7 +179,7 @@ function renderAll() {
   state.prov = computeProv(gen);
   renderCards();
   state.events = renderVerdict(gen);
-  renderDecompose($('oo-chart-a'), gen, state.events, state.prov ? state.prov.point : null);
+  renderDecompose($('oo-chart-a'), state.prov ? state.prov.displayGen : gen, state.events, state.prov ? state.prov.point : null);
   renderPanelB();
 }
 
@@ -185,13 +192,14 @@ function applyProvisional() {
   const curTag = currentTag(state.data.generations);
   const cur = state.gens.find(g => g.tag === curTag);
   const lastDate = cur.series[cur.series.length - 1][0];
-  if (!(date > lastDate)) { provStatus(`기준일(${date})이 민평 최종일(${lastDate}) 이전이거나 같음 → 무시. 최종일 이후 날짜를 입력하세요.`, 'bad'); return; }
+  if (date < lastDate) { provStatus(`기준일(${date})이 민평 최종일(${lastDate}) 이전 → 무시. 최종일 당일(override) 또는 이후(append)만 유효.`, 'bad'); return; }
   state.provisional = { date, yOn: +yOn, yOff1: +yOff1, yOff2: yOff2 === '' ? null : +yOff2 };
   localStorage.setItem(LS_PROV, JSON.stringify(state.provisional));
   if (state.selected !== curTag) { state.selected = curTag; $('oo-gen-select').value = curTag; } // 잠정은 현재 세대 전용
   renderAll();
   const p = state.prov;
-  provStatus(p ? `적용됨 — fly ${fmt(p.point.fly, 'bp')} = raw ${fmt(p.point.raw)} − slope ${fmt(p.point.slope)}${p.point.slopeAssumed ? ' (기울기 가정: 최종 민평)' : ''} · 개인 뷰(비커밋)` : '적용 실패', p ? 'ok' : 'bad');
+  const modeTag = p ? (p.mode === 'override' ? `당일 override${p.carryover ? '(캐리오버 감지)' : ''}` : '익일 append') : '';
+  provStatus(p ? `적용됨 [${modeTag}] — fly ${fmt(p.point.fly, 'bp')} = raw ${fmt(p.point.raw)} − slope ${fmt(p.point.slope)}${p.point.slopeAssumed ? ' (기울기 가정: 최종 민평)' : ''} · 개인 뷰(비커밋)` : '적용 실패', p ? 'ok' : 'bad');
 }
 
 function clearProvisional() {
@@ -234,6 +242,13 @@ export function initOnoff() {
   loadProvisional();
   renderAll();
   renderCommentary();
+  // 저장된 잠정 기준일이 무효(최종일 이전)면 로드 시 조용히 미표시되지 않도록 안내
+  if (state.provisional && !state.prov) {
+    const lastDate = state.gens.find(g => g.tag === currentTag(state.data.generations)).series.slice(-1)[0][0];
+    provStatus(`저장된 잠정 기준일(${state.provisional.date})이 최종일(${lastDate}) 이전 → 미적용. 최종일 당일/이후로 다시 입력하세요.`, 'bad');
+  } else if (state.prov) {
+    provStatus(`저장된 잠정 적용됨 [${state.prov.mode === 'override' ? '당일 override' : '익일 append'}].`, 'ok');
+  }
 
   $('oo-gen-select').addEventListener('change', (e) => {
     state.selected = e.target.value;

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import {
   spreadBp, orderGenerations, currentTag, flySeries, flyAtDay,
   eventTimeAlign, percentile, bandStats, generationZ, flyChange, flyExtremes, decompose,
-  makeProvisional, appendProvisional,
+  makeProvisional, appendProvisional, withProvisional,
 } from '../js/onoff-calc.js';
 
 // 손계산 가능한 합성 세대 4개. fly 만 의미 있게 채우고 raw/slope 는 0.
@@ -112,4 +112,19 @@ test('makeProvisional — slope 가정(최종 민평)/직접입력 분기 + appe
   assert.equal(c.series.length, 2);
   assert.deepEqual(c.series[1], ['2026-07-07', 6, 4.4, 1.6]);
   assert.equal(g.series.length, 1); // 원본 불변
+});
+
+test('withProvisional — override(==최종일)/append(>최종일)/무효(<최종일)', () => {
+  const g = { tag: 'T', vs: 'x', slopeVs: 'y', start: '2026-07-03', maturity: '2029-06', series: [['2026-07-03', 2, 4.5, -2.5], ['2026-07-06', 2.6, 4.4, -1.8]] };
+  // override: 기준일 == 최종일 → 최종일 값 대체(계열 길이 유지), provDay=N, anchorDay=N-1
+  const ov = withProvisional(g, { date: '2026-07-06', raw: 6, slope: 4.4, fly: 1.6 });
+  assert.equal(ov.mode, 'override'); assert.equal(ov.provDay, 1); assert.equal(ov.anchorDay, 0);
+  assert.equal(ov.gen.series.length, 2);
+  assert.deepEqual(ov.gen.series[1], ['2026-07-06', 6, 4.4, 1.6]); // 최종일 값 override
+  // append: 기준일 > 최종일 → day N+1 추가
+  const ap = withProvisional(g, { date: '2026-07-07', raw: 6, slope: 4.4, fly: 1.6 });
+  assert.equal(ap.mode, 'append'); assert.equal(ap.provDay, 2); assert.equal(ap.gen.series.length, 3);
+  // 무효: 기준일 < 최종일 → null
+  assert.equal(withProvisional(g, { date: '2026-07-02', raw: 1, slope: 1, fly: 0 }), null);
+  assert.equal(g.series.length, 2); // 원본 불변
 });
