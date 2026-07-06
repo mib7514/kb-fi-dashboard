@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import {
   spreadBp, orderGenerations, currentTag, flySeries, flyAtDay,
   eventTimeAlign, percentile, bandStats, generationZ, flyChange, flyExtremes, decompose,
+  makeProvisional, appendProvisional,
 } from '../js/onoff-calc.js';
 
 // 손계산 가능한 합성 세대 4개. fly 만 의미 있게 채우고 raw/slope 는 0.
@@ -87,4 +88,19 @@ test('flyChange / flyExtremes — 현재 세대 요약', () => {
   assert.equal(flyChange(a, 1), -2);       // 6 - 8
   assert.equal(flyChange(a, 5), null);     // 표본 부족
   assert.deepEqual(flyExtremes(a), { current: 6, day: 2, date: '2025-01-03', min: 6, max: 10 });
+});
+
+test('makeProvisional — slope 가정(최종 민평)/직접입력 분기 + appendProvisional', () => {
+  const g = { tag: 'T', vs: 'x', slopeVs: 'y', start: '2026-07-06', maturity: '2029-06', series: [['2026-07-06', 6, 4.4, 1.6]] };
+  // 구구지표 미입력 → slope = 최종 민평 slope(4.4) 가정
+  const a = makeProvisional(g, { date: '2026-07-07', yOn: 3.775, yOff1: 3.715 });
+  assert.deepEqual({ raw: a.raw, slope: a.slope, fly: a.fly, slopeAssumed: a.slopeAssumed }, { raw: 6, slope: 4.4, fly: 1.6, slopeAssumed: true });
+  // 구구지표 직접입력 → slope = (구지표−구구지표)*100
+  const b = makeProvisional(g, { date: '2026-07-07', yOn: 3.775, yOff1: 3.715, yOff2: 3.68 });
+  assert.deepEqual({ raw: b.raw, slope: b.slope, fly: b.fly, slopeAssumed: b.slopeAssumed }, { raw: 6, slope: 3.5, fly: 2.5, slopeAssumed: false });
+  // append → day N+1 로 계열 확장(원본 불변)
+  const c = appendProvisional(g, a);
+  assert.equal(c.series.length, 2);
+  assert.deepEqual(c.series[1], ['2026-07-07', 6, 4.4, 1.6]);
+  assert.equal(g.series.length, 1); // 원본 불변
 });

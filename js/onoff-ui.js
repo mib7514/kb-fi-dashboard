@@ -4,14 +4,16 @@
 
 import {
   orderGenerations, currentTag, generationZ, flyChange, flyExtremes, bandStats,
+  makeProvisional, appendProvisional,
 } from './onoff-calc.js';
 import { renderDecompose, renderEventTime } from './onoff-chart.js';
 import { judge, buildSnapshot } from './onoff-judge.js';
 
 const $ = id => document.getElementById(id);
 const fmt = (v, u = '') => (typeof v === 'number' && Number.isFinite(v)) ? (v > 0 ? '+' : '') + v.toFixed(1) + u : '—';
+const LS_PROV = 'onoff-provisional';
 
-const state = { data: null, gens: [], selected: null, auctions: [], commentary: [], lastSnapshot: null, forwardDays: 60, events: null };
+const state = { data: null, gens: [], selected: null, auctions: [], commentary: [], lastSnapshot: null, forwardDays: 60, events: null, provisional: null, prov: null };
 
 const VERDICT_CLASS = { period: 'v-period', concession: 'v-concession', liquidity: 'v-liquidity', mixed: 'v-mixed', none: 'v-none' };
 
@@ -78,7 +80,8 @@ function renderVerdict(gen) {
   state.lastSnapshot = buildSnapshot(gen, jr, z);
 
   const cls = VERDICT_CLASS[jr.verdict.type] || 'v-none';
-  const headline = jr.headline.map(e => badgeHtml(e)).join('') +
+  // preAuction 은 아래 '다가오는 입찰' 섹션에서 노출 → 헤드라인 배지에서는 제외(중복 방지)
+  const headline = jr.headline.filter(e => e.type !== 'preAuction').map(e => badgeHtml(e)).join('') +
     jr.flags.map(f => badgeHtml(f, 'v-outlier')).join('');
   const upcoming = jr.upcoming.length
     ? `<div class="verdict-sub">다가오는 입찰</div>` + jr.upcoming.map(e => badgeHtml(e, e.fired ? 'v-concession' : 'v-upcoming')).join('')
@@ -88,6 +91,23 @@ function renderVerdict(gen) {
         ${jr.past.map(e => badgeHtml(e, 'v-past')).join('')}</details>`
     : '';
 
+  // 잠정(호가 기반) 병렬 판정 — 기존 EOD 판정을 대체하지 않고 아래 병기
+  let provHtml = '';
+  if (state.prov) {
+    const p = state.prov, pj = p.judge;
+    const pcls = VERDICT_CLASS[pj.verdict.type] || 'v-none';
+    const pbadges = pj.headline.filter(e => e.type !== 'preAuction').map(e => badgeHtml(e)).join('') +
+      pj.flags.map(f => badgeHtml(f, 'v-outlier')).join('') +
+      pj.upcoming.map(e => badgeHtml(e, e.fired ? 'v-concession' : 'v-upcoming')).join('');
+    provHtml = `<div class="prov-verdict">
+      <div class="verdict-sub">잠정 (호가 기반) · ${p.point.date} · fly ${fmt(p.point.fly, 'bp')} = raw ${fmt(p.point.raw)} − slope ${fmt(p.point.slope)}${p.point.slopeAssumed ? ` <span class="prov-assumed">(기울기 가정: 최종 민평 ${fmt(p.point.slope, 'bp')})</span>` : ''}</div>
+      <div class="verdict-head"><span class="verdict-main ${pcls}">${pj.verdict.label}</span></div>
+      <div class="verdict-badges">${pbadges || '<div class="empty" style="padding:8px">잠정 발화 룰 없음.</div>'}</div>
+    </div>`;
+    const ps = buildSnapshot(p.appended, pj, p.z);
+    state.lastSnapshot.provisional = { provisional: true, point: p.point, verdict: ps.verdict, evidence: ps.evidence, flags: ps.flags, upcoming: ps.upcoming, past: ps.past };
+  }
+
   $('oo-verdict').innerHTML = `
     <div class="verdict-head">
       <span class="verdict-main ${cls}">${jr.verdict.label}</span>
@@ -96,6 +116,7 @@ function renderVerdict(gen) {
     <div class="verdict-badges">${headline || '<div class="empty" style="padding:8px">게이트 내 발화 룰 없음 — 관찰.</div>'}</div>
     ${upcoming}
     ${past}
+    ${provHtml}
     <div class="status" id="oo-copy-status"></div>`;
   $('oo-copy-btn').addEventListener('click', copySnapshot);
   return jr.events;
@@ -130,16 +151,69 @@ function renderCommentary() {
   }).join('');
 }
 
+// 잠정 포인트 계산(현재 세대·기준일이 최종 관측일 이후일 때만). 실패 시 null.
+function computeProv(gen) {
+  if (!state.provisional || state.selected !== currentTag(state.data.generations)) return null;
+  const lastDate = gen.series[gen.series.length - 1][0];
+  if (!(state.provisional.date > lastDate)) return null;
+  const point = makeProvisional(gen, state.provisional);
+  const appended = appendProvisional(gen, point);
+  const provGens = state.data.generations.map(g => g.tag === gen.tag ? appended : g);
+  const z = generationZ(provGens, appended.series.length - 1, { tag: gen.tag });
+  return { point, appended, judge: judge(appended, state.auctions, z), z };
+}
+
 function renderPanelB() {
-  renderEventTime($('oo-chart-b'), state.data.generations, state.selected, state.events, state.forwardDays);
+  renderEventTime($('oo-chart-b'), state.data.generations, state.selected, state.events, state.forwardDays, state.prov ? state.prov.point : null);
 }
 
 function renderAll() {
   const gen = state.gens.find(g => g.tag === state.selected);
+  state.prov = computeProv(gen);
   renderCards();
   state.events = renderVerdict(gen);
-  renderDecompose($('oo-chart-a'), gen, state.events);
+  renderDecompose($('oo-chart-a'), gen, state.events, state.prov ? state.prov.point : null);
   renderPanelB();
+}
+
+// ── 당일 호가 잠정 입력 (localStorage · 비커밋) ──
+function provStatus(msg, kind) { const s = $('oo-prov-status'); if (s) { s.textContent = msg; s.className = 'status ' + (kind || ''); } }
+
+function applyProvisional() {
+  const date = $('oo-prov-date').value, yOn = $('oo-prov-on').value, yOff1 = $('oo-prov-off1').value, yOff2 = $('oo-prov-off2').value;
+  if (!date || yOn === '' || yOff1 === '') { provStatus('기준일·지표·구지표는 필수입니다.', 'bad'); return; }
+  const curTag = currentTag(state.data.generations);
+  const cur = state.gens.find(g => g.tag === curTag);
+  const lastDate = cur.series[cur.series.length - 1][0];
+  if (!(date > lastDate)) { provStatus(`기준일(${date})이 민평 최종일(${lastDate}) 이전이거나 같음 → 무시. 최종일 이후 날짜를 입력하세요.`, 'bad'); return; }
+  state.provisional = { date, yOn: +yOn, yOff1: +yOff1, yOff2: yOff2 === '' ? null : +yOff2 };
+  localStorage.setItem(LS_PROV, JSON.stringify(state.provisional));
+  if (state.selected !== curTag) { state.selected = curTag; $('oo-gen-select').value = curTag; } // 잠정은 현재 세대 전용
+  renderAll();
+  const p = state.prov;
+  provStatus(p ? `적용됨 — fly ${fmt(p.point.fly, 'bp')} = raw ${fmt(p.point.raw)} − slope ${fmt(p.point.slope)}${p.point.slopeAssumed ? ' (기울기 가정: 최종 민평)' : ''} · 개인 뷰(비커밋)` : '적용 실패', p ? 'ok' : 'bad');
+}
+
+function clearProvisional() {
+  state.provisional = null;
+  localStorage.removeItem(LS_PROV);
+  ['oo-prov-on', 'oo-prov-off1', 'oo-prov-off2'].forEach(id => { const e = $(id); if (e) e.value = ''; });
+  renderAll();
+  provStatus('초기화됨.', '');
+}
+
+function loadProvisional() {
+  const dEl = $('oo-prov-date');
+  if (dEl && !dEl.value) { try { dEl.value = new Date().toISOString().slice(0, 10); } catch { /* noop */ } } // 기본=오늘
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LS_PROV) || 'null'); } catch { saved = null; }
+  if (saved && saved.date) {
+    state.provisional = saved;
+    if (dEl) dEl.value = saved.date;
+    if ($('oo-prov-on')) $('oo-prov-on').value = saved.yOn ?? '';
+    if ($('oo-prov-off1')) $('oo-prov-off1').value = saved.yOff1 ?? '';
+    if ($('oo-prov-off2')) $('oo-prov-off2').value = saved.yOff2 ?? '';
+  }
 }
 
 export function initOnoff() {
@@ -157,6 +231,7 @@ export function initOnoff() {
 
   fillMeta();
   fillDropdown();
+  loadProvisional();
   renderAll();
   renderCommentary();
 
@@ -164,6 +239,8 @@ export function initOnoff() {
     state.selected = e.target.value;
     renderAll();
   });
+  if ($('oo-prov-apply')) $('oo-prov-apply').addEventListener('click', applyProvisional);
+  if ($('oo-prov-clear')) $('oo-prov-clear').addEventListener('click', clearProvisional);
 
   // 포워드 참조 토글 (Panel B x축 연장)
   const seg = $('oo-forward-seg');

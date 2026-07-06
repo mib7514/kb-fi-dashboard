@@ -59,6 +59,7 @@
 
   .btn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--text); font-size: 12px; padding: 7px 13px; border-radius: 7px; cursor: pointer; font-family: var(--sans); font-weight: 600; }
   .btn:hover { border-color: var(--accent); }
+  .btn.accent { background: var(--accent); color: #08111f; border-color: var(--accent); }
   .status { margin-top: 8px; font-size: 11px; font-family: var(--mono); color: var(--muted); min-height: 15px; }
   .status.ok { color: var(--ok); } .status.bad { color: var(--ext); }
 
@@ -86,6 +87,14 @@
   .verdict-past[open] summary { margin-bottom: 8px; }
   .vb-label { font-size: 13px; font-weight: 600; color: var(--text); }
   .vb-evidence { margin: 6px 0 0; padding-left: 18px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); line-height: 1.6; }
+
+  /* 잠정 입력 */
+  .prov-grid { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; }
+  .prov-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); }
+  .prov-grid input { background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 7px; padding: 7px 9px; font-family: var(--mono); font-size: 12px; min-width: 120px; }
+  .prov-grid input:focus { outline: none; border-color: var(--accent); }
+  .prov-verdict { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-2); }
+  .prov-assumed { color: var(--forecast); font-weight: 600; }
 
   /* 코멘터리 */
   .cmt { background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; padding: 10px 13px; margin-bottom: 8px; }
@@ -118,6 +127,23 @@
       <span class="ctrl-label">세대 (기본 최신 · 과거 회고 조회)</span>
       <select id="oo-gen-select" class="oo-select"></select>
     </div>
+  </div>
+
+  <!-- 당일 호가 잠정 입력 -->
+  <div class="section-title">당일 호가 잠정 입력 (개인 뷰 · localStorage · 비커밋)</div>
+  <div class="card">
+    <p class="note" style="margin:-2px 0 12px">현재 지표물 삼종(지표/구지표/구구지표) 당일 호가를 넣어 잠정 fly 포인트를 얹습니다.
+      구구지표 미입력 시 <b>기울기는 최종 민평 slope 가정</b>. 기준일은 민평 최종일 이후만 유효(이전·같으면 무시).
+      저장은 이 브라우저에만(비커밋).</p>
+    <div class="prov-grid">
+      <label>기준일<input type="date" id="oo-prov-date"></label>
+      <label>지표 수익률(%)<input type="number" step="0.001" id="oo-prov-on" placeholder="3.775"></label>
+      <label>구지표 수익률(%)<input type="number" step="0.001" id="oo-prov-off1" placeholder="3.715"></label>
+      <label>구구지표(%·옵션)<input type="number" step="0.001" id="oo-prov-off2" placeholder="미입력=최종 민평 slope"></label>
+      <button class="btn accent" id="oo-prov-apply">적용</button>
+      <button class="btn" id="oo-prov-clear">초기화</button>
+    </div>
+    <div class="status" id="oo-prov-status"></div>
   </div>
 
   <!-- 판정 -->

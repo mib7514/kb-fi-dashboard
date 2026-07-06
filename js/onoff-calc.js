@@ -120,3 +120,22 @@ export function flyExtremes(gen) {
     max: fly.length ? Math.max(...fly) : null,
   };
 }
+
+// ── 당일 호가 잠정 포인트 (수동 입력) ──
+// 원본 수익률(지표/구지표/구구지표) 3개(구구지표 옵션)에서 파생 [raw, slope, fly] 를 계산.
+// 구구지표 미입력 시 slope = 최종 민평 slope(가정) — slopeAssumed=true 로 표시.
+// 순수 함수: UI 는 이 결과만 사용하고 series 배열을 직접 조작하지 않는다.
+export function makeProvisional(gen, input) {
+  const yOn = +input.yOn, yOff1 = +input.yOff1;
+  const raw = round1((yOn - yOff1) * 100);
+  const last = gen.series[gen.series.length - 1];
+  const hasOff2 = input.yOff2 != null && input.yOff2 !== '' && Number.isFinite(+input.yOff2);
+  const slope = hasOff2 ? round1((yOff1 - (+input.yOff2)) * 100) : last[2];
+  const fly = round1(raw - slope);
+  return { date: input.date, raw, slope, fly, slopeAssumed: !hasOff2, slopeRef: hasOff2 ? null : last[2] };
+}
+
+// 잠정 포인트를 세대 계열 끝에 append 한 새 세대(불변). day N+1 로 판정 재실행에 사용.
+export function appendProvisional(gen, point) {
+  return { ...gen, series: [...gen.series, [point.date, point.raw, point.slope, point.fly]] };
+}

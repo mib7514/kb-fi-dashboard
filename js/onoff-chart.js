@@ -39,6 +39,18 @@ function withEvents(layout, events, xOf) {
   return { ...layout, shapes: [...(layout.shapes || []), ...shapes], annotations: [...(layout.annotations || []), ...annotations] };
 }
 
+// 잠정 포인트 트레이스: 마지막 실측 → 잠정으로 점선 연결 + 속빈 다이아몬드 마커.
+// xs/ys = [마지막실측, 잠정] 2점. 마커는 잠정(둘째)만 표시(size 0,11).
+function provisionalTrace(xs, ys, p) {
+  return {
+    x: xs, y: ys, name: '오늘 호가 (잠정)', mode: 'lines+markers',
+    line: { color: COLORS.cheap, width: 1.4, dash: 'dot' },
+    marker: { symbol: ['circle', 'diamond-open'], size: [0, 11], color: COLORS.cheap, line: { width: 1.8, color: COLORS.cheap } },
+    customdata: [[null, null, ''], [p.raw, p.slope, p.slopeAssumed ? '가정' : '직접']],
+    hovertemplate: '오늘 호가(잠정)<br>fly %{y:.1f}bp = raw %{customdata[0]:.1f} − slope %{customdata[1]:.1f} (%{customdata[2]})<extra></extra>',
+  };
+}
+
 function baseLayout(title, yTitle, extra = {}) {
   return {
     title: { text: title, font: { color: COLORS.text, size: 13, family: FONT }, x: 0, xanchor: 'left' },
@@ -58,7 +70,7 @@ function baseLayout(title, yTitle, extra = {}) {
 // ── Panel A — 답(fly) + 보조설명(raw/slope 토글). 기본은 fly 단독. ──
 // raw/slope 는 범례에 존재하되 기본 숨김(legendonly). hover 에는 fly=raw−slope 관계를 병기해
 // 숨김 상태에서도 세 값이 함께 보인다. y=0 기준으로 위=저평가(이례)/아래=리치(정상) 라벨.
-export function renderDecompose(el, gen, events) {
+export function renderDecompose(el, gen, events, provPoint) {
   const fs = flySeries(gen);
   const cd = fs.dates.map((_, i) => [fs.raw[i], fs.slope[i]]); // hover 병기용 [raw, slope]
   const traces = [
@@ -69,6 +81,7 @@ export function renderDecompose(el, gen, events) {
       customdata: cd, hovertemplate: 'fly %{y:.1f}bp = raw %{customdata[0]:.1f} − slope %{customdata[1]:.1f}<extra></extra>',
     },
   ];
+  if (provPoint) traces.push(provisionalTrace([fs.dates[fs.dates.length - 1], provPoint.date], [fs.fly[fs.fly.length - 1], provPoint.fly], provPoint));
   let layout = baseLayout(`Panel A · 커브조정 상대가치 — ${gen.tag} (vs ${gen.vs} · slope vs ${gen.slopeVs})`, 'bp', {
     hovermode: 'x unified',
     xaxis: { gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 10 } },
@@ -88,12 +101,12 @@ export function renderDecompose(el, gen, events) {
 // gens 전체, selectedTag 는 강조/제외 대상. forwardDays = 선택 세대 마지막 관측일 이후 연장 영업일수
 // (0/20/60). 밴드·median·직전세대는 연장 범위까지, 현재 세대 선은 마지막 관측일(현재 점선)에서 끝.
 // 점선 우측 = 과거 세대 경로(참고용, 예측 아님) 음영 구간. 직전세대 = 정렬상 선택 세대 바로 뒤 세대.
-export function renderEventTime(el, gens, selectedTag, events, forwardDays = 60) {
+export function renderEventTime(el, gens, selectedTag, events, forwardDays = 60, provPoint) {
   const sel = gens.find(g => g.tag === selectedTag);
   if (!sel) { Plotly.react(el, [], baseLayout('Panel B', 'bp'), CONFIG); return; }
   const nowDay = sel.series.length - 1;         // 선택 세대 마지막 관측일 인덱스
   const ext = Math.max(0, forwardDays | 0);
-  const xUpper = nowDay + ext;                  // x축 상한(연장 포함)
+  const xUpper = Math.max(nowDay + ext, provPoint ? nowDay + 1 : nowDay); // x축 상한(연장·잠정 포함)
 
   // 밴드·median: 0..xUpper (n≥3 인 day 만 — 표본 부족 시 자동 미표시)
   const days = [], lo = [], hi = [], med = [];
@@ -129,6 +142,7 @@ export function renderEventTime(el, gens, selectedTag, events, forwardDays = 60)
     line: { color: COLORS.current, width: 2.2 }, marker: { size: 4 },
     customdata: selDates, hovertemplate: 'day %{x} · %{customdata}<br>fly %{y:.1f}bp<extra></extra>',
   });
+  if (provPoint) traces.push(provisionalTrace([nowDay, nowDay + 1], [selFly[selFly.length - 1], provPoint.fly], provPoint));
 
   let layout = baseLayout(`Panel B · 이벤트타임 세대 비교 — ${selectedTag} vs 과거 ${gens.length - 1}세대`, 'fly bp', {
     hovermode: 'x unified',

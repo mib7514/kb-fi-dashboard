@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { periodEnds, auctionEvents, futureAuctions, judge, buildSnapshot, TH } from '../js/onoff-judge.js';
+import { appendProvisional } from '../js/onoff-calc.js';
 
 function bdays(startISO, n) {
   const out = []; let d = new Date(startISO + 'T00:00:00Z');
@@ -26,10 +27,10 @@ test('periodEnds — 분기말/반기말 앵커(마지막 관측일)', () => {
 test('auctionEvents / futureAuctions — 앵커·미래 horizon', () => {
   const ds = bdays('2025-08-01', 15);
   assert.deepEqual(auctionEvents(ds, ['2025-08-14']), [{ kind: '입찰', calendar: '2025-08-14', date: '2025-08-14', day: ds.indexOf('2025-08-14') }]);
-  // 최종 관측일 이후 5영업일 내 → futureAuctions
+  // 최종 관측일 당일(D−0)~5영업일 내 → futureAuctions (잠정 포인트 append 시 그 날짜가 D0)
   const last = ds[ds.length - 1];
-  const fa = futureAuctions(ds, [last, '2030-01-01']); // last 는 미래 아님 → 제외, 2030 은 horizon 밖
-  assert.deepEqual(fa, []);
+  const fa = futureAuctions(ds, [last, '2030-01-01']); // last=당일(bdaysAhead 0), 2030 은 horizon 밖 제외
+  assert.deepEqual(fa, [{ calendar: last, bdaysAhead: 0 }]);
 });
 
 test('judge — 분기·반기말 되돌림 완료(헤드라인)', () => {
@@ -101,6 +102,19 @@ test('judge — 게이트 내 복수 발화 → 혼합/관찰', () => {
   assert.equal(r.headline.length, 2);
   assert.equal(r.verdict.type, 'mixed');
   assert.match(r.verdict.label, /혼합\/관찰/);
+});
+
+// ── 잠정 포인트: ① 포함 시 발화 전환 ② 미포함 시 원판정 유지 ──
+test('judge — 잠정 포인트 포함 시 다가오는 입찰 발화 전환', () => {
+  const base = gen('T', '2025-08-01', [-3, -3, -3, -3, -3, -3, -3, -3]); // last 2025-08-12
+  const r0 = judge(base, ['2025-08-14'], null);
+  assert.equal(r0.verdict.type, 'none');       // ② 미포함 원판정
+  assert.equal(r0.upcoming[0].fired, false);
+  const prov = appendProvisional(base, { date: '2025-08-13', raw: 5, slope: 4, fly: 1 });
+  const r1 = judge(prov, ['2025-08-14'], null); // ① 잠정 포함 → 발화
+  assert.equal(r1.upcoming[0].fired, true);
+  assert.match(r1.upcoming[0].label, /진행 중/);
+  assert.equal(r1.verdict.type, 'preAuction');
 });
 
 test('buildSnapshot — 헤드라인/다가오는/지난 구조', () => {

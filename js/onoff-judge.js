@@ -47,13 +47,13 @@ export function periodEnds(dates) {
   return out;
 }
 
-// 입찰일 → 해당일(또는 직전) 관측 앵커
+// 입찰일 → 해당일(또는 직전) 관측 앵커. 최종 관측일과 같거나 이후는 futureAuctions(사전 윈도우) 담당.
 export function auctionEvents(dates, auctions) {
   if (!dates.length) return [];
   const first = dates[0], last = dates[dates.length - 1];
   const out = [];
   for (const a of (auctions || [])) {
-    if (a < first || a > last) continue;
+    if (a < first || a >= last) continue;
     let idx = -1;
     for (let i = 0; i < dates.length; i++) { if (dates[i] <= a) idx = i; else break; }
     if (idx < 0) continue;
@@ -68,13 +68,15 @@ export function allEvents(gen, auctions) {
   return [...periodEnds(dates), ...auctionEvents(dates, auctions)].sort((a, b) => a.day - b.day);
 }
 
-// 최종 관측일 이후 upcomingDays 영업일 내 입찰(미래 입찰) → 사전 컨세션 부분 평가 대상
+// 최종 관측일 당일(=잠정 포인트) 또는 이후 upcomingDays 영업일 내 입찰 → 사전 컨세션 부분 평가 대상.
+// 잠정 포인트를 append 하면 최종 관측일이 잠정일이 되어, 그 날짜의 입찰이 사전 윈도우(D−4~현재)에
+// 잠정 포인트를 포함해 재평가된다. bdaysAhead=0 이면 '당일'.
 export function futureAuctions(dates, auctions) {
   if (!dates.length) return [];
   const last = dates[dates.length - 1];
   const out = [];
   for (const a of (auctions || [])) {
-    if (a <= last) continue;
+    if (a < last) continue;
     let n = 0, d = new Date(last + 'T00:00:00Z'); const end = new Date(a + 'T00:00:00Z');
     while (d < end) { d = new Date(d.getTime() + 86400000); const g = d.getUTCDay(); if (g !== 0 && g !== 6) n++; }
     if (n <= TH.upcomingDays) out.push({ calendar: a, bdaysAhead: n });
