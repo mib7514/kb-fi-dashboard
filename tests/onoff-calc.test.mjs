@@ -62,13 +62,22 @@ test('percentile — 선형 보간(numpy 기본)', () => {
   assert.equal(percentile([], 0.5), null);
 });
 
-test('bandStats — 현재 세대(A) 제외, day별 p25/median/p75', () => {
-  // day0 과거 세대(B,C,D) fly = [4,2,-2] → p25 0 / median 2 / p75 3
-  assert.deepEqual(bandStats(GENS, 0), { day: 0, n: 3, p25: 0, median: 2, p75: 3 });
-  // day1: B 만 존재(=3)
-  assert.deepEqual(bandStats(GENS, 1), { day: 1, n: 1, p25: 3, median: 3, p75: 3 });
-  // excludeTag 로 기준 세대 교체(B 제외 → A,C,D day0 = [10,2,-2])
-  assert.deepEqual(bandStats(GENS, 0, { excludeTag: 'B' }), { day: 0, n: 3, p25: 0, median: 2, p75: 6 });
+test('bandStats — 현재 세대(A) 제외, day별 p25/median/p75 + min/max/태그', () => {
+  // day0 과거 세대(C,D,B) fly = [2,-2,4] → p25 0 / median 2 / p75 3, min −2(D) / max 4(B)
+  assert.deepEqual(bandStats(GENS, 0), { day: 0, n: 3, p25: 0, median: 2, p75: 3, min: -2, max: 4, minTag: 'D', maxTag: 'B' });
+  // day1: B 만 존재(=3) → min=max=3, 태그 모두 B
+  assert.deepEqual(bandStats(GENS, 1), { day: 1, n: 1, p25: 3, median: 3, p75: 3, min: 3, max: 3, minTag: 'B', maxTag: 'B' });
+  // excludeTag 로 기준 세대 교체(B 제외 → A,C,D day0 = [10,2,-2]) → min −2(D) / max 10(A)
+  assert.deepEqual(bandStats(GENS, 0, { excludeTag: 'B' }), { day: 0, n: 3, p25: 0, median: 2, p75: 6, min: -2, max: 10, minTag: 'D', maxTag: 'A' });
+});
+
+test('bandStats — 극단값 세대 태그(동률 시 배열 순서 우선)', () => {
+  // 동률 max: C(5) 와 B(5) 동률 → 배열 순서상 먼저 등장한 C 가 maxTag
+  const G = (tag, ...f) => ({ tag, vs: 'x', slopeVs: 'y', start: '2025-01-0' + f.length, maturity: '2029-06', series: f.map((v, i) => [`2025-01-0${i + 1}`, 0, 0, v]) });
+  const gens = [G('cur', 9), G('C', 5), G('B', 5), G('D', 1)]; // 현재=cur(자동=start 최신? 명시 excludeTag)
+  const b = bandStats(gens, 0, { excludeTag: 'cur' });
+  assert.equal(b.max, 5); assert.equal(b.maxTag, 'C'); // 동률 → 먼저 등장한 C
+  assert.equal(b.min, 1); assert.equal(b.minTag, 'D');
 });
 
 test('generationZ — 현재(A) fly vs 과거 분포', () => {

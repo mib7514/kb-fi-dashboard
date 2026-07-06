@@ -72,15 +72,23 @@ const round2 = v => (Number.isFinite(v) ? Math.round(v * 100) / 100 : null);
 // opts.excludeTag 로 기준 세대를 바꿀 수 있다(회고 조회 시 선택 세대 제외).
 export function bandStats(generations, day, opts = {}) {
   const cur = opts.excludeTag !== undefined ? opts.excludeTag : currentTag(generations);
-  const vals = generations
+  const pairs = generations
     .filter(g => g.tag !== cur)
-    .map(g => flyAtDay(g, day))
-    .filter(v => v != null);
+    .map(g => ({ tag: g.tag, v: flyAtDay(g, day) }))
+    .filter(p => p.v != null);
+  const vals = pairs.map(p => p.v);
+  // 최소/최대 + 해당 세대 태그(극단값 식별). 동률은 배열 순서상 먼저 등장한 세대.
+  let min = null, max = null, minTag = null, maxTag = null;
+  for (const p of pairs) {
+    if (min === null || p.v < min) { min = p.v; minTag = p.tag; }
+    if (max === null || p.v > max) { max = p.v; maxTag = p.tag; }
+  }
   return {
     day, n: vals.length,
     p25: round1(percentile(vals, 0.25)),
     median: round1(percentile(vals, 0.50)),
     p75: round1(percentile(vals, 0.75)),
+    min: round1(min), max: round1(max), minTag, maxTag,
   };
 }
 

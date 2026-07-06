@@ -8,6 +8,7 @@ const COLORS = {
   raw: '#8b949e',      // raw (회색)
   slope: '#f0883e',    // slope (주황)
   band: 'rgba(88,166,255,0.10)',
+  bandOuter: 'rgba(88,166,255,0.05)', // 외곽 밴드(min–max) — 같은 hue, 내부의 ~50% 진하기
   median: '#8b949e',
   current: '#58a6ff',
   prior: '#6e7681',    // 직전세대 (가는 회색 실선)
@@ -108,14 +109,15 @@ export function renderEventTime(el, gens, selectedTag, events, forwardDays = 60,
   const ext = Math.max(0, forwardDays | 0);
   const xUpper = Math.max(nowDay + ext, provPoint ? nowDay + 1 : nowDay); // x축 상한(연장·잠정 포함)
 
-  // 밴드·median: 0..xUpper (n≥3 인 day 만 — 표본 부족 시 자동 미표시)
-  const days = [], lo = [], hi = [], med = [];
+  // 밴드: 0..xUpper (n≥3 인 day 만). 내부 p25–p75 + 외곽 min–max + 극단 세대 태그.
+  const days = [], lo = [], hi = [], med = [], mn = [], mx = [], cd = [];
   for (let d = 0; d <= xUpper; d++) {
     const b = bandStats(gens, d, { excludeTag: selectedTag });
+    const ok = b.n >= 3;
     days.push(d);
-    lo.push(b.n >= 3 ? b.p25 : null);
-    hi.push(b.n >= 3 ? b.p75 : null);
-    med.push(b.n >= 3 ? b.median : null);
+    lo.push(ok ? b.p25 : null); hi.push(ok ? b.p75 : null); med.push(ok ? b.median : null);
+    mn.push(ok ? b.min : null); mx.push(ok ? b.max : null);
+    cd.push(ok ? [b.min, b.p25, b.p75, b.max, b.minTag, b.maxTag] : [null, null, null, null, '', '']);
   }
   const selFly = sel.series.map(r => r[3]);     // 현재 세대: 0..nowDay 만(연장 없음)
   const selDates = sel.series.map(r => r[0]);
@@ -125,10 +127,19 @@ export function renderEventTime(el, gens, selectedTag, events, forwardDays = 60,
   const selIdx = ordered.findIndex(g => g.tag === selectedTag);
   const prior = (selIdx >= 0 && selIdx + 1 < ordered.length) ? ordered[selIdx + 1] : null;
 
+  const OUTLINE = 'rgba(139,148,158,0.35)';
   const traces = [
+    // 외곽 밴드 min–max (같은 hue, 더 옅은 음영 + 가는 윤곽선)
+    { x: days, y: mn, name: 'min', mode: 'lines', line: { width: 0.6, color: OUTLINE }, hoverinfo: 'skip', showlegend: false, connectgaps: false },
+    { x: days, y: mx, name: '과거 극단 범위(0–100%)', mode: 'lines', line: { width: 0.6, color: OUTLINE }, fill: 'tonexty', fillcolor: COLORS.bandOuter, hoverinfo: 'skip', connectgaps: false },
+    // 내부 밴드 p25–p75 (기존 진한 음영, 외곽 위에 겹쳐 더 진해짐)
     { x: days, y: lo, name: 'p25', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps: false },
-    { x: days, y: hi, name: '과거세대 p25–p75', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: COLORS.band, hoverinfo: 'skip', connectgaps: false },
-    { x: days, y: med, name: '과거세대 median', mode: 'lines', line: { color: COLORS.median, width: 1.3, dash: 'dot' }, connectgaps: false },
+    { x: days, y: hi, name: '과거 25–75%', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: COLORS.band, hoverinfo: 'skip', connectgaps: false },
+    // median + 밴드 요약 hover(day 단위: min(세대)·p25·median·p75·max(세대))
+    {
+      x: days, y: med, name: '과거세대 median', mode: 'lines', line: { color: COLORS.median, width: 1.3, dash: 'dot' }, connectgaps: false,
+      customdata: cd, hovertemplate: 'min %{customdata[0]:.1f} (%{customdata[4]}) · p25 %{customdata[1]:.1f} · median %{y:.1f} · p75 %{customdata[2]:.1f} · max %{customdata[3]:.1f} (%{customdata[5]})<extra>과거세대 밴드</extra>',
+    },
   ];
   if (prior) {
     traces.push({
