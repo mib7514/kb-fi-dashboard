@@ -51,7 +51,7 @@ export function renderNav(active = activeId()) {
   const links = NAV_ITEMS.map(i =>
     `<a href="${i.file}"${i.id === active ? ' class="active"' : ''}>${i.title}</a>`).join('');
   bar.innerHTML = `<div class="inner">
-    <a class="brand" href="index.html">KB자산 채권운용실</a>
+    <a class="brand" href="index.html">FI Dashboard</a>
     <div class="links">${links}</div>
   </div>`;
 }

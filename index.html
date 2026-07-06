@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>KB자산 채권운용실 — 대시보드</title>
+<title>FI Dashboard</title>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
@@ -34,18 +34,22 @@
   .hub-card .arrow { font-size: 13px; color: var(--accent); font-weight: 600; }
 
   .empty { color: var(--muted); font-size: 13px; }
+  .site-foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--muted); font-family: var(--mono); letter-spacing: 0.01em; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="eyebrow">
     <span class="step">HUB</span>
-    <span class="ctx">채권운용실 데이터 대시보드 · 무빌드 정적</span>
+    <span class="ctx">FI Dashboard · 무빌드 정적 데이터 대시보드</span>
   </div>
-  <h1>KB자산 채권운용실</h1>
+  <h1>FI Dashboard</h1>
   <p class="tagline">운용 판단 보조 모듈 모음 — 계산은 도구가, 원인 판단은 사람이.</p>
 
   <div class="hub-grid" id="hub-grid"></div>
+
+  <footer class="site-foot">bp by bp — 확률적 우위의 누적</footer>
 </div>
 
 <!-- data (기준일 표시용 — window.FENRIR_SERIES 자기등록) -->
