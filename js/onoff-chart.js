@@ -85,25 +85,29 @@ export function renderDecompose(el, gen, events) {
 }
 
 // ── Panel B — 이벤트타임 세대 비교: 과거 p25–p75 밴드 + median 점선 + 직전세대 실선 + 선택 세대 강조선 ──
-// gens 전체, selectedTag 는 강조/제외 대상. band day 범위 = 선택 세대 길이(사이클 horizon).
-// 직전세대 = 정렬상 선택 세대 바로 뒤(과거) 세대. 자기 길이 전체를 그리되 x축 범위는 선택 세대
-// horizon 유지(직전세대가 더 길면 잘림 허용).
-export function renderEventTime(el, gens, selectedTag, events) {
+// gens 전체, selectedTag 는 강조/제외 대상. forwardDays = 선택 세대 마지막 관측일 이후 연장 영업일수
+// (0/20/60). 밴드·median·직전세대는 연장 범위까지, 현재 세대 선은 마지막 관측일(현재 점선)에서 끝.
+// 점선 우측 = 과거 세대 경로(참고용, 예측 아님) 음영 구간. 직전세대 = 정렬상 선택 세대 바로 뒤 세대.
+export function renderEventTime(el, gens, selectedTag, events, forwardDays = 60) {
   const sel = gens.find(g => g.tag === selectedTag);
   if (!sel) { Plotly.react(el, [], baseLayout('Panel B', 'bp'), CONFIG); return; }
-  const maxDay = sel.series.length;
+  const nowDay = sel.series.length - 1;         // 선택 세대 마지막 관측일 인덱스
+  const ext = Math.max(0, forwardDays | 0);
+  const xUpper = nowDay + ext;                  // x축 상한(연장 포함)
+
+  // 밴드·median: 0..xUpper (n≥3 인 day 만 — 표본 부족 시 자동 미표시)
   const days = [], lo = [], hi = [], med = [];
-  for (let d = 0; d < maxDay; d++) {
+  for (let d = 0; d <= xUpper; d++) {
     const b = bandStats(gens, d, { excludeTag: selectedTag });
     days.push(d);
     lo.push(b.n >= 3 ? b.p25 : null);
     hi.push(b.n >= 3 ? b.p75 : null);
     med.push(b.n >= 3 ? b.median : null);
   }
-  const selFly = sel.series.map(r => r[3]);
+  const selFly = sel.series.map(r => r[3]);     // 현재 세대: 0..nowDay 만(연장 없음)
   const selDates = sel.series.map(r => r[0]);
 
-  // 직전세대(선택 세대 바로 뒤)
+  // 직전세대(선택 세대 바로 뒤) — 자기 길이 전체(x축 범위에서 잘림 허용, 연장 구간의 참조 경로)
   const ordered = orderGenerations(gens);
   const selIdx = ordered.findIndex(g => g.tag === selectedTag);
   const prior = (selIdx >= 0 && selIdx + 1 < ordered.length) ? ordered[selIdx + 1] : null;
@@ -121,16 +125,24 @@ export function renderEventTime(el, gens, selectedTag, events) {
     });
   }
   traces.push({
-    x: days, y: selFly, name: `${selectedTag} (선택)`, mode: 'lines+markers',
+    x: days.slice(0, nowDay + 1), y: selFly, name: `${selectedTag} (선택)`, mode: 'lines+markers',
     line: { color: COLORS.current, width: 2.2 }, marker: { size: 4 },
     customdata: selDates, hovertemplate: 'day %{x} · %{customdata}<br>fly %{y:.1f}bp<extra></extra>',
   });
 
   let layout = baseLayout(`Panel B · 이벤트타임 세대 비교 — ${selectedTag} vs 과거 ${gens.length - 1}세대`, 'fly bp', {
     hovermode: 'x unified',
-    // x축 범위 = 선택 세대 horizon 고정(직전세대가 더 길면 잘림 허용)
-    xaxis: { title: { text: '민평 개시 후 영업일(day)', font: { size: 10 } }, gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 10 }, range: [-0.5, maxDay - 0.5] },
+    xaxis: { title: { text: '민평 개시 후 영업일(day)', font: { size: 10 } }, gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 10 }, range: [-0.5, xUpper + 0.5] },
   });
+
+  // 현재 점선 + (연장 시) 우측 음영 + "과거 세대 경로" 주석
+  layout.shapes = [{ type: 'line', xref: 'x', x0: nowDay, x1: nowDay, yref: 'paper', y0: 0, y1: 1, line: { color: COLORS.current, width: 1, dash: 'dash' }, layer: 'below' }];
+  layout.annotations = [{ x: nowDay, xref: 'x', y: 0, yref: 'paper', yanchor: 'top', xanchor: 'right', text: `현재 (day ${nowDay})`, showarrow: false, font: { color: COLORS.current, size: 9, family: FONT } }];
+  if (ext > 0) {
+    layout.shapes.unshift({ type: 'rect', xref: 'x', x0: nowDay, x1: xUpper + 0.5, yref: 'paper', y0: 0, y1: 1, fillcolor: 'rgba(139,148,158,0.06)', line: { width: 0 }, layer: 'below' });
+    layout.annotations.push({ x: (nowDay + xUpper) / 2, xref: 'x', y: 1, yref: 'paper', yanchor: 'bottom', xanchor: 'center', text: '과거 세대 경로 (참고용, 예측 아님)', showarrow: false, font: { color: COLORS.muted, size: 9, family: FONT } });
+  }
+
   layout = withEvents(layout, events, e => e.day); // Panel B x=day 인덱스
   Plotly.react(el, traces, layout, CONFIG);
 }

@@ -11,7 +11,7 @@ import { judge, buildSnapshot } from './onoff-judge.js';
 const $ = id => document.getElementById(id);
 const fmt = (v, u = '') => (typeof v === 'number' && Number.isFinite(v)) ? (v > 0 ? '+' : '') + v.toFixed(1) + u : '—';
 
-const state = { data: null, gens: [], selected: null, auctions: [], commentary: [], lastSnapshot: null };
+const state = { data: null, gens: [], selected: null, auctions: [], commentary: [], lastSnapshot: null, forwardDays: 60, events: null };
 
 const VERDICT_CLASS = { period: 'v-period', concession: 'v-concession', liquidity: 'v-liquidity', mixed: 'v-mixed', none: 'v-none' };
 
@@ -130,12 +130,16 @@ function renderCommentary() {
   }).join('');
 }
 
+function renderPanelB() {
+  renderEventTime($('oo-chart-b'), state.data.generations, state.selected, state.events, state.forwardDays);
+}
+
 function renderAll() {
   const gen = state.gens.find(g => g.tag === state.selected);
   renderCards();
-  const events = renderVerdict(gen);
-  renderDecompose($('oo-chart-a'), gen, events);
-  renderEventTime($('oo-chart-b'), state.data.generations, state.selected, events);
+  state.events = renderVerdict(gen);
+  renderDecompose($('oo-chart-a'), gen, state.events);
+  renderPanelB();
 }
 
 export function initOnoff() {
@@ -159,5 +163,15 @@ export function initOnoff() {
   $('oo-gen-select').addEventListener('change', (e) => {
     state.selected = e.target.value;
     renderAll();
+  });
+
+  // 포워드 참조 토글 (Panel B x축 연장)
+  const seg = $('oo-forward-seg');
+  if (seg) seg.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-fwd]');
+    if (!btn) return;
+    state.forwardDays = parseInt(btn.dataset.fwd, 10) || 0;
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+    renderPanelB();
   });
 }

@@ -34,6 +34,11 @@
   .ctrl-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
   .oo-select { background: var(--panel); border: 1px solid var(--border-2); color: var(--text); border-radius: 7px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; min-width: 240px; }
   .oo-select:focus { outline: none; border-color: var(--accent); }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--border-2); border-radius: 7px; overflow: hidden; }
+  .seg button { background: transparent; border: none; color: var(--muted); font-family: var(--mono); font-size: 12px; padding: 6px 12px; cursor: pointer; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+  .seg button:hover:not(.active) { background: var(--panel-2); color: var(--text); }
 
   .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0 10px; }
   .card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; }
@@ -131,6 +136,16 @@
 
   <!-- Panel B — 이벤트타임 -->
   <div class="section-title">Panel B · 이벤트타임 세대 비교</div>
+  <div class="controls" style="margin-bottom:10px">
+    <div class="ctrl-group">
+      <span class="ctrl-label">포워드 참조 (과거 세대 경로 연장)</span>
+      <div class="seg" id="oo-forward-seg">
+        <button data-fwd="0">현재까지</button>
+        <button data-fwd="20">+1개월</button>
+        <button data-fwd="60" class="active">+3개월</button>
+      </div>
+    </div>
+  </div>
   <div class="card"><div class="chart-box tall" id="oo-chart-b"></div>
     <div class="note">과거 세대(선택 제외)의 day별 <b>p25–p75 밴드</b>와 <b>median 점선</b> 위에 선택 세대 fly 를 겹쳐,
       동일 이벤트타임(민평 개시 후 영업일)에서 상대 위치를 본다. 밴드는 표본 <b>n≥3</b> 인 day 만 표시.
