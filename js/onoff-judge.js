@@ -20,6 +20,8 @@ export const TH = {
   liquidityWiden: 3.0,       // 확대 임계(bp)
   liquidityRevertMax: 0.5,   // 되돌림 부재 판정(되돌림 비율 < 0.5)
   zOutlier: 1.5,             // 세대간 z 아웃라이어 플래그(별도 병기)
+  recentDays: 7,             // 헤드라인 최근성 게이트: 현재로부터 ±7영업일 내 발화만 headline
+  upcomingDays: 5,           // 미래 입찰: 최종 관측일 이후 5영업일 내면 사전 윈도우 평가
 };
 
 const round1 = v => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
@@ -66,6 +68,20 @@ export function allEvents(gen, auctions) {
   return [...periodEnds(dates), ...auctionEvents(dates, auctions)].sort((a, b) => a.day - b.day);
 }
 
+// 최종 관측일 이후 upcomingDays 영업일 내 입찰(미래 입찰) → 사전 컨세션 부분 평가 대상
+export function futureAuctions(dates, auctions) {
+  if (!dates.length) return [];
+  const last = dates[dates.length - 1];
+  const out = [];
+  for (const a of (auctions || [])) {
+    if (a <= last) continue;
+    let n = 0, d = new Date(last + 'T00:00:00Z'); const end = new Date(a + 'T00:00:00Z');
+    while (d < end) { d = new Date(d.getTime() + 86400000); const g = d.getUTCDay(); if (g !== 0 && g !== 6) n++; }
+    if (n <= TH.upcomingDays) out.push({ calendar: a, bdaysAhead: n });
+  }
+  return out;
+}
+
 // 관측창 [evDay−pre .. evDay] 확대 + [evDay+1 .. evDay+revertDays] 되돌림 계산
 function windowStats(fly, evDay, pre, revertDays) {
   const start = Math.max(0, evDay - pre);
@@ -82,47 +98,40 @@ function windowStats(fly, evDay, pre, revertDays) {
   return { start, baseline: round1(baseline), peak: round1(peak), peakDay, widen, postMin: hasPost ? round1(postMin) : null, giveback };
 }
 
-// ── 판정 엔진 ──
+// ── 판정 엔진 (에피소드 모델) ──
+// 세대 전 구간의 이벤트를 평가해 episodes[] 를 만든다. 헤드라인 verdict 는 최근성 게이트
+// (현재±recentDays) 내 발화 에피소드로 결정(복수 발화 → 혼합/관찰). 게이트 밖 발화는 past(이력),
+// 미래 입찰은 upcoming(사전 윈도우, 발화/비발화 모두 표기). z 아웃라이어는 flags 로 별도 병기.
+//
 // gen: 파생 세대, auctions: 입찰일 배열, zInfo: generationZ(현재 day, 해당 세대) 결과
-// 반환: { verdict:{label,type}, badges:[{type,label,evidence[]}], events, now, z }
+// 반환: { verdict:{label,type}, episodes, headline, past, upcoming, flags, events, now, z }
 export function judge(gen, auctions, zInfo) {
   const fly = gen.series.map(r => r[3]);
+  const dates = gen.series.map(r => r[0]);
   const now = fly.length - 1;
-  const events = allEvents(gen, auctions);
-  const badges = [];
-  const primary = [];
+  const events = allEvents(gen, auctions); // 분기·반기말 + 세대 기간 내 입찰 (차트 오버레이 공용)
+  const isRecent = day => (now - day) <= TH.recentDays;
+  const episodes = [];
 
   for (const ev of events) {
     if (ev.kind === '입찰') {
-      if (ev.day < now - (TH.concessionPre + TH.concessionGivebackDays) || ev.day > now) continue;
       const w = windowStats(fly, ev.day, TH.concessionPre, TH.concessionGivebackDays);
-      if (w.widen < TH.concessionWiden) continue;
+      if (w.widen < TH.concessionWiden) continue; // 비발화 일반 입찰은 생략(노이즈)
       const evidence = [`입찰 ${ev.calendar}(day${ev.day}): D−${TH.concessionPre}~D0 fly +${w.widen}bp 확대 (${w.baseline}→${w.peak})`];
-      let label = '입찰 컨세션';
-      if (w.giveback != null && w.giveback >= TH.concessionGiveback) {
-        evidence.push(`D+${TH.concessionGivebackDays} 내 ${pctStr(w.giveback)} 반납(≥${pctStr(TH.concessionGiveback)}) → 소멸`);
-        label += ' (소멸)';
-      }
-      badges.push({ type: 'concession', label, evidence });
-      primary.push('concession');
+      let label = '입찰 컨세션', status;
+      if (w.giveback != null && w.giveback >= TH.concessionGiveback) { evidence.push(`D+${TH.concessionGivebackDays} 내 ${pctStr(w.giveback)} 반납(≥${pctStr(TH.concessionGiveback)}) → 소멸`); label += ' (소멸)'; status = '소멸'; }
+      else if (w.giveback != null) { evidence.push(`D+${TH.concessionGivebackDays} 내 ${pctStr(w.giveback)} 반납(<${pctStr(TH.concessionGiveback)}) → 잔존`); label += ' (잔존)'; status = '잔존'; }
+      else { evidence.push(`D+${TH.concessionGivebackDays} 관측 부족 → 반납 판정 보류`); label += ' (관찰)'; status = '보류'; }
+      episodes.push({ type: 'concession', kind: ev.kind, event: ev, fired: true, widen: w.widen, revert: { giveback: w.giveback, status }, recent: isRecent(ev.day), label, evidence });
     } else {
-      if (ev.day < now - (TH.periodPre + TH.periodRevertDays) || ev.day > now) continue;
       const w = windowStats(fly, ev.day, TH.periodPre, TH.periodRevertDays);
       if (w.widen < TH.periodWiden) continue;
       const evidence = [`${ev.kind} ${ev.calendar}(day${ev.day}): D−${TH.periodPre} 대비 fly +${w.widen}bp 확대 (${w.baseline}→${w.peak})`];
-      let label = '분기·반기말 수급';
-      if (w.giveback != null && w.giveback >= TH.periodRevert) {
-        evidence.push(`익월 ${TH.periodRevertDays}영업일 내 ${pctStr(w.giveback)} 되돌림(≥${pctStr(TH.periodRevert)}) → 되돌림 완료`);
-        label += ' (되돌림 완료)';
-      } else if (w.giveback != null) {
-        evidence.push(`되돌림 ${pctStr(w.giveback)} (<${pctStr(TH.periodRevert)}) → 진행중/미완`);
-        label += ' (되돌림 미완)';
-      } else {
-        evidence.push('익월 관측 부족 → 되돌림 판정 보류');
-        label += ' (관찰)';
-      }
-      badges.push({ type: 'period', label, evidence });
-      primary.push('period');
+      let label = '분기·반기말 수급', status;
+      if (w.giveback != null && w.giveback >= TH.periodRevert) { evidence.push(`익월 ${TH.periodRevertDays}영업일 내 ${pctStr(w.giveback)} 되돌림(≥${pctStr(TH.periodRevert)}) → 되돌림 완료`); label += ' (되돌림 완료)'; status = '되돌림 완료'; }
+      else if (w.giveback != null) { evidence.push(`되돌림 ${pctStr(w.giveback)} (<${pctStr(TH.periodRevert)}) → 진행중/미완`); label += ' (되돌림 미완)'; status = '되돌림 미완'; }
+      else { evidence.push('익월 관측 부족 → 되돌림 판정 보류'); label += ' (관찰)'; status = '보류'; }
+      episodes.push({ type: 'period', kind: ev.kind, event: ev, fired: true, widen: w.widen, revert: { giveback: w.giveback, status }, recent: isRecent(ev.day), label, evidence });
     }
   }
 
@@ -136,34 +145,52 @@ export function judge(gen, auctions, zInfo) {
     const span = peak - baseline;
     const revertFrac = span > 0 ? (peak - fly[now]) / span : null;
     if (!hasEvent && widen >= TH.liquidityWiden && (revertFrac == null || revertFrac < TH.liquidityRevertMax)) {
-      badges.push({
-        type: 'liquidity', label: '유동성 리프라이싱',
+      episodes.push({
+        type: 'liquidity', kind: '유동성', event: null, fired: true, widen, revert: { giveback: revertFrac, status: '되돌림 부재' }, recent: true, label: '유동성 리프라이싱',
         evidence: [`이벤트 무관 ${TH.liquidityDays}영업일 fly +${widen}bp 지속 확대 (${round1(baseline)}→${round1(fly[now])}) · 되돌림 ${pctStr(revertFrac)}(<${pctStr(TH.liquidityRevertMax)}) 부재`],
       });
-      primary.push('liquidity');
     }
   }
 
-  // verdict 결정 (복수/판별불가 → 혼합/관찰)
-  const uniq = [...new Set(primary)];
-  let verdict;
-  if (uniq.length === 0) verdict = { label: '관찰 (뚜렷한 패턴 없음)', type: 'none' };
-  else if (uniq.length === 1) verdict = { label: badges.find(b => b.type === uniq[0]).label, type: uniq[0] };
-  else verdict = { label: '혼합/관찰', type: 'mixed' };
-
-  // 아웃라이어 플래그(별도 병기)
-  if (zInfo && zInfo.z != null && zInfo.z >= TH.zOutlier) {
-    badges.push({
-      type: 'outlier', label: `아웃라이어 (세대간 z ${zInfo.z}≥+${TH.zOutlier})`,
-      evidence: [`현재 fly ${fly[now]}bp, 과거 세대 대비 z=${zInfo.z} (n=${zInfo.n})`],
-    });
+  // 미래 입찰(C): 최종 관측일 앵커로 부분 윈도우 D−4~현재 평가 — 발화/비발화 모두 기록
+  const upcoming = [];
+  for (const fa of futureAuctions(dates, auctions)) {
+    const start = Math.max(0, now - TH.concessionPre + 1); // 마지막 concessionPre 관측
+    let peak = -Infinity; for (let d = start; d <= now; d++) peak = Math.max(peak, fly[d]);
+    const baseline = round1(fly[start]);
+    const widen = round1(peak - fly[start]);
+    const net = round1(fly[now] - fly[start]);
+    const win = `${dates[start]}~${dates[now]}`;
+    const fired = widen >= TH.concessionWiden;
+    const ep = fired
+      ? { type: 'preAuction', kind: '입찰(예정)', event: { kind: '입찰(예정)', calendar: fa.calendar, day: now }, fired: true, widen, revert: { giveback: null, status: '진행 중' }, recent: true, label: '사전 컨세션 (진행 중)',
+          evidence: [`다가오는 입찰 ${fa.calendar}(D−${fa.bdaysAhead}): D−${TH.concessionPre}~현재(${win}) fly +${widen}bp 확대 (${baseline}→${round1(fly[now])}) → 사전 컨세션 진행 중`] }
+      : { type: 'preAuction', kind: '입찰(예정)', event: { kind: '입찰(예정)', calendar: fa.calendar, day: now }, fired: false, widen, revert: null, recent: true, label: '다가오는 입찰: 사전 확대 없음',
+          evidence: [`다가오는 입찰 ${fa.calendar}(D−${fa.bdaysAhead}): D−${TH.concessionPre}~현재(${win}) fly ${net > 0 ? '+' : ''}${net}bp (${baseline}→${round1(fly[now])}) → 사전 확대 없음 (+${widen}bp < ${TH.concessionWiden}) → 컨세션 배제`] };
+    episodes.push(ep);
+    upcoming.push(ep);
   }
 
-  return { verdict, badges, events, now, z: zInfo ? zInfo.z : null };
+  // 분류: headline(발화&게이트내) / past(발화&게이트밖) / upcoming(미래입찰)
+  const firedRecent = episodes.filter(e => e.fired && e.recent);
+  const past = episodes.filter(e => e.fired && !e.recent);
+
+  let verdict;
+  if (firedRecent.length === 0) verdict = { label: '관찰 (뚜렷한 패턴 없음)', type: 'none' };
+  else if (firedRecent.length === 1) verdict = { label: firedRecent[0].label, type: firedRecent[0].type };
+  else verdict = { label: '혼합/관찰', type: 'mixed' };
+
+  // 아웃라이어 플래그(별도 병기 — verdict 계수에 불포함)
+  const flags = [];
+  if (zInfo && zInfo.z != null && zInfo.z >= TH.zOutlier) {
+    flags.push({ type: 'outlier', label: `아웃라이어 (세대간 z ${zInfo.z}≥+${TH.zOutlier})`, evidence: [`현재 fly ${fly[now]}bp, 과거 세대 대비 z=${zInfo.z} (n=${zInfo.n})`] });
+  }
+
+  return { verdict, episodes, headline: firedRecent, past, upcoming, flags, events, now, z: zInfo ? zInfo.z : null };
 }
 
 // ── 코멘터리 스냅샷 (JSON 복사용) ──
-// { 현재 fly/z/분해, 최근 20영업일 fly 경로, 판정 verdict+evidence, 이벤트 ±10영업일 }
+// { 현재 fly/z/분해, 최근 20영업일 fly 경로, 헤드라인 verdict+evidence, 지난/다가오는 에피소드, 이벤트 ±10영업일 }
 export function buildSnapshot(gen, judgeResult, zInfo) {
   const s = gen.series;
   const now = s.length - 1;
@@ -172,12 +199,16 @@ export function buildSnapshot(gen, judgeResult, zInfo) {
   const events10 = judgeResult.events
     .filter(e => Math.abs(e.day - now) <= 10)
     .map(e => ({ kind: e.kind, date: e.date, day: e.day }));
+  const epOut = e => ({ label: e.label, type: e.type, day: e.event ? e.event.day : null, widen: e.widen, revert: e.revert ? e.revert.status : null, conditions: e.evidence });
   return {
     tag: gen.tag, asof: last[0],
     fly: last[3], raw: last[1], slope: last[2],
     z: zInfo ? zInfo.z : null, zN: zInfo ? zInfo.n : null,
     verdict: judgeResult.verdict.label,
-    evidence: judgeResult.badges.map(b => ({ label: b.label, conditions: b.evidence })),
+    evidence: judgeResult.headline.map(epOut),
+    flags: (judgeResult.flags || []).map(f => ({ label: f.label, conditions: f.evidence })),
+    upcoming: judgeResult.upcoming.map(epOut),
+    past: judgeResult.past.map(epOut),
     fly20, events10,
   };
 }

@@ -6,7 +6,7 @@ import {
   orderGenerations, currentTag, generationZ, flyChange, flyExtremes, bandStats,
 } from './onoff-calc.js';
 import { renderDecompose, renderEventTime } from './onoff-chart.js';
-import { allEvents, judge, buildSnapshot } from './onoff-judge.js';
+import { judge, buildSnapshot } from './onoff-judge.js';
 
 const $ = id => document.getElementById(id);
 const fmt = (v, u = '') => (typeof v === 'number' && Number.isFinite(v)) ? (v > 0 ? '+' : '') + v.toFixed(1) + u : '—';
@@ -60,32 +60,45 @@ function renderCards() {
     </div>`).join('');
 }
 
-// 판정 배지 + 근거(evidence 상시 노출) + JSON 복사
+// 에피소드 배지 렌더 헬퍼
+function badgeHtml(ep, forceCls) {
+  const bcls = forceCls || VERDICT_CLASS[ep.type] || 'v-none';
+  const conds = ep.evidence.map(e => `<li>${e}</li>`).join('');
+  return `<div class="verdict-badge ${bcls}">
+    <span class="vb-label">${ep.label}</span>
+    <ul class="vb-evidence">${conds}</ul>
+  </div>`;
+}
+
+// 헤드라인 판정 + 다가오는 입찰 + 지난 에피소드 + 아웃라이어 병기 + JSON 복사
 function renderVerdict(gen) {
   const day = gen.series.length - 1;
   const z = generationZ(state.data.generations, day, { tag: gen.tag });
-  const events = allEvents(gen, state.auctions);
   const jr = judge(gen, state.auctions, z);
   state.lastSnapshot = buildSnapshot(gen, jr, z);
 
   const cls = VERDICT_CLASS[jr.verdict.type] || 'v-none';
-  const badges = jr.badges.map(b => {
-    const bcls = VERDICT_CLASS[b.type] || (b.type === 'outlier' ? 'v-outlier' : 'v-none');
-    const conds = b.evidence.map(e => `<li>${e}</li>`).join('');
-    return `<div class="verdict-badge ${bcls}">
-      <span class="vb-label">${b.label}</span>
-      <ul class="vb-evidence">${conds}</ul>
-    </div>`;
-  }).join('');
+  const headline = jr.headline.map(e => badgeHtml(e)).join('') +
+    jr.flags.map(f => badgeHtml(f, 'v-outlier')).join('');
+  const upcoming = jr.upcoming.length
+    ? `<div class="verdict-sub">다가오는 입찰</div>` + jr.upcoming.map(e => badgeHtml(e, e.fired ? 'v-concession' : 'v-upcoming')).join('')
+    : '';
+  const past = jr.past.length
+    ? `<details class="verdict-past"><summary>지난 에피소드 (${jr.past.length}) — 게이트 밖(현재±${7}영업일)</summary>
+        ${jr.past.map(e => badgeHtml(e, 'v-past')).join('')}</details>`
+    : '';
+
   $('oo-verdict').innerHTML = `
     <div class="verdict-head">
       <span class="verdict-main ${cls}">${jr.verdict.label}</span>
       <button class="btn" id="oo-copy-btn">메트릭+판정 JSON 복사</button>
     </div>
-    <div class="verdict-badges">${badges || '<div class="empty" style="padding:8px">충족된 룰 없음 — 관찰.</div>'}</div>
+    <div class="verdict-badges">${headline || '<div class="empty" style="padding:8px">게이트 내 발화 룰 없음 — 관찰.</div>'}</div>
+    ${upcoming}
+    ${past}
     <div class="status" id="oo-copy-status"></div>`;
   $('oo-copy-btn').addEventListener('click', copySnapshot);
-  return events;
+  return jr.events;
 }
 
 async function copySnapshot() {
