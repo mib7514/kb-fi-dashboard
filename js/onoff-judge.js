@@ -88,8 +88,8 @@ export function futureAuctions(dates, auctions) {
 function windowStats(fly, evDay, pre, revertDays) {
   const start = Math.max(0, evDay - pre);
   const baseline = fly[start];
-  let peak = -Infinity, peakDay = start;
-  for (let d = start; d <= evDay; d++) if (fly[d] > peak) { peak = fly[d]; peakDay = d; }
+  let peak = -Infinity, peakDay = start, low = Infinity;
+  for (let d = start; d <= evDay; d++) { if (fly[d] > peak) { peak = fly[d]; peakDay = d; } if (fly[d] < low) low = fly[d]; }
   const widen = round1(peak - baseline);
   const rEnd = Math.min(fly.length - 1, evDay + revertDays);
   let postMin = Infinity;
@@ -97,7 +97,15 @@ function windowStats(fly, evDay, pre, revertDays) {
   const hasPost = postMin !== Infinity;
   const span = peak - baseline;
   const giveback = (hasPost && span > 0) ? (peak - postMin) / span : null;
-  return { start, baseline: round1(baseline), peak: round1(peak), peakDay, widen, postMin: hasPost ? round1(postMin) : null, giveback };
+  return { start, baseline: round1(baseline), peak: round1(peak), peakDay, low: round1(low), widen, postMin: hasPost ? round1(postMin) : null, giveback };
+}
+
+// 확대폭 기준 = [윈도우 시작점 대비 peak](임계값 판정에 사용, 무변경).
+// 윈도우 저점이 시작점과 0.5bp 이상 다를 때만 참고 1줄 병기(저점 대비 확대폭은 판정에 미사용).
+function lowRefLine(baseline, low, peak) {
+  return (Math.abs(low - baseline) >= 0.5)
+    ? `(참고: 윈도우 저점 ${low} 대비 +${round1(peak - low)}bp)`
+    : null;
 }
 
 // ── 판정 엔진 (에피소드 모델) ──
@@ -120,6 +128,7 @@ export function judge(gen, auctions, zInfo) {
       const w = windowStats(fly, ev.day, TH.concessionPre, TH.concessionGivebackDays);
       if (w.widen < TH.concessionWiden) continue; // 비발화 일반 입찰은 생략(노이즈)
       const evidence = [`입찰 ${ev.calendar}(day${ev.day}): D−${TH.concessionPre}~D0 fly +${w.widen}bp 확대 (${w.baseline}→${w.peak})`];
+      const ref = lowRefLine(w.baseline, w.low, w.peak); if (ref) evidence.push(ref);
       let label = '입찰 컨세션', status;
       if (w.giveback != null && w.giveback >= TH.concessionGiveback) { evidence.push(`D+${TH.concessionGivebackDays} 내 ${pctStr(w.giveback)} 반납(≥${pctStr(TH.concessionGiveback)}) → 소멸`); label += ' (소멸)'; status = '소멸'; }
       else if (w.giveback != null) { evidence.push(`D+${TH.concessionGivebackDays} 내 ${pctStr(w.giveback)} 반납(<${pctStr(TH.concessionGiveback)}) → 잔존`); label += ' (잔존)'; status = '잔존'; }
@@ -158,7 +167,7 @@ export function judge(gen, auctions, zInfo) {
   const upcoming = [];
   for (const fa of futureAuctions(dates, auctions)) {
     const start = Math.max(0, now - TH.concessionPre + 1); // 마지막 concessionPre 관측
-    let peak = -Infinity; for (let d = start; d <= now; d++) peak = Math.max(peak, fly[d]);
+    let peak = -Infinity, low = Infinity; for (let d = start; d <= now; d++) { peak = Math.max(peak, fly[d]); low = Math.min(low, fly[d]); }
     const baseline = round1(fly[start]);
     const widen = round1(peak - fly[start]);
     const net = round1(fly[now] - fly[start]);
@@ -169,6 +178,7 @@ export function judge(gen, auctions, zInfo) {
           evidence: [`다가오는 입찰 ${fa.calendar}(D−${fa.bdaysAhead}): D−${TH.concessionPre}~현재(${win}) fly +${widen}bp 확대 (${baseline}→${round1(fly[now])}) → 사전 컨세션 진행 중`] }
       : { type: 'preAuction', kind: '입찰(예정)', event: { kind: '입찰(예정)', calendar: fa.calendar, day: now }, fired: false, widen, revert: null, recent: true, label: '다가오는 입찰: 사전 확대 없음',
           evidence: [`다가오는 입찰 ${fa.calendar}(D−${fa.bdaysAhead}): D−${TH.concessionPre}~현재(${win}) fly ${net > 0 ? '+' : ''}${net}bp (${baseline}→${round1(fly[now])}) → 사전 확대 없음 (+${widen}bp < ${TH.concessionWiden}) → 컨세션 배제`] };
+    const pref = lowRefLine(round1(fly[start]), round1(low), round1(peak)); if (pref) ep.evidence.push(pref);
     episodes.push(ep);
     upcoming.push(ep);
   }

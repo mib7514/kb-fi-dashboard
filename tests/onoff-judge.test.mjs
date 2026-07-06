@@ -117,6 +117,18 @@ test('judge — 잠정 포인트 포함 시 다가오는 입찰 발화 전환', 
   assert.equal(r1.verdict.type, 'preAuction');
 });
 
+// 확대폭 기준(시작점 대비 유지) — 윈도우 저점이 시작점과 0.5bp↑ 다를 때만 참고 병기
+test('judge — 사전 컨세션 evidence 저점 참고 병기 조건 분기', () => {
+  // A) 윈도우 저점(-3) < 시작점(0) → 참고 병기. 마지막 4관측 [0,-3,-1,3]
+  const a = judge(gen('T', '2025-08-01', [-3, -3, -3, -3, 0, -3, -1, 3]), ['2025-08-13'], null);
+  assert.equal(a.upcoming[0].fired, true);
+  assert.ok(a.upcoming[0].evidence.some(e => /참고: 윈도우 저점 -3 대비 \+6bp/.test(e)), '저점 참고 병기');
+  // B) 저점(-3) == 시작점(-3) → 병기 없음. 마지막 4관측 [-3,-2,-1,3]
+  const b = judge(gen('T', '2025-08-01', [-3, -3, -3, -3, -3, -2, -1, 3]), ['2025-08-13'], null);
+  assert.equal(b.upcoming[0].fired, true);
+  assert.ok(!b.upcoming[0].evidence.some(e => /참고: 윈도우 저점/.test(e)), '차이<0.5bp → 병기 없음');
+});
+
 test('buildSnapshot — 헤드라인/다가오는/지난 구조', () => {
   const fly = [-5, -5, -5, -5, -4, -3, -2, -1, 0, 1.5, 3, -1, -3, -4, -3];
   const g = gen('T', '2025-06-16', fly);
