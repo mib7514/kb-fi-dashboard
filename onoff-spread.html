@@ -102,6 +102,25 @@
   .cmt-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-bottom: 5px; }
   .cmt-tag { color: var(--accent); font-weight: 700; }
   .cmt-text { font-size: 13px; color: var(--text); white-space: pre-wrap; }
+
+  /* OO-9 지표 해설 ("이 화면 읽는 법") */
+  .oo-explainer { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin: 0 0 20px; }
+  .oo-explainer > summary { cursor: pointer; padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--accent); list-style: none; user-select: none; }
+  .oo-explainer > summary::-webkit-details-marker { display: none; }
+  .oo-explainer > summary::before { content: "▸ "; color: var(--muted); }
+  .oo-explainer[open] > summary::before { content: "▾ "; }
+  .oo-explainer > summary:hover { color: var(--text); }
+  .oo-explainer[open] > summary { border-bottom: 1px solid var(--border); }
+  .ex-body { padding: 14px 18px 18px; font-size: 13px; line-height: 1.75; max-width: 860px; }
+  .ex-body h4 { font-size: 12px; font-weight: 700; color: var(--text); margin: 18px 0 6px; }
+  .ex-body h4:first-child { margin-top: 0; }
+  .ex-body p { margin: 0 0 8px; color: var(--text); }
+  .ex-eq { font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 6px; padding: 8px 12px; margin: 8px 0; display: inline-block; }
+  .ex-body ul { margin: 6px 0 8px; padding-left: 20px; }
+  .ex-body li { margin: 0 0 6px; }
+  .ex-x { font-family: var(--mono); font-weight: 600; color: var(--accent); }
+  .oo-term { border-bottom: 1px dotted var(--muted); cursor: help; }
+  .oo-info { cursor: help; color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 5px; }
 </style>
 </head>
 <body>
@@ -112,6 +131,47 @@
   </div>
   <h1>On/Off-the-run 스프레드</h1>
   <p class="tagline">지표물 fly = [지표−구지표] − [구지표−구구지표]. 세대별 이벤트타임 비교로 리치/저평가를 문맥화 — 원인 판단은 사람 몫.</p>
+
+  <!-- OO-9 이 화면 읽는 법 (접이식 · 펼침 상태 localStorage 기억) -->
+  <details class="oo-explainer" id="oo-explainer">
+    <summary>❓ 이 화면 읽는 법 — fly가 뭔가요?</summary>
+    <div class="ex-body">
+      <h4>무엇을 보는 화면인가</h4>
+      <p>"지금 3년 <span class="oo-term" title="가장 최근 발행되어 가장 활발히 거래되는 종목(on-the-run). 유동성이 가장 높다.">지표물</span>이 커브 대비 싼가, 비싼가"를 판별하는 화면입니다.
+        지표물이 이유 없이 싸 보일 때 그것이 입찰 물량 소화인지, 분기말
+        수급인지, 유동성 프리미엄의 구조적 변화인지를 과거 지표물
+        세대들과 비교해 판정합니다.</p>
+
+      <h4>왜 단순 스프레드가 아니라 fly인가</h4>
+      <p>지표물(현 26-5)은 <span class="oo-term" title="직전 지표물(off-the-run 1). 현 지표물보다 만기가 6개월 짧다.">구지표</span>(25-10)보다 만기가 6개월 깁니다. 그래서
+        [지표−구지표] 스프레드에는 종목 효과와 커브 기울기 6개월치가 섞여
+        있습니다. 커브가 서기만 해도 스프레드가 벌어져, 종목이 싼지
+        비싼지를 스프레드만으로는 알 수 없습니다.</p>
+      <p>그래서 같은 6개월 만기 차이인 [구지표−구구지표] 스프레드를 순수
+        커브 기울기의 근사치로 삼아 빼줍니다:</p>
+      <p class="ex-eq">fly = [지표−구지표] − [구지표−구구지표]</p>
+      <p>지금 값으로 보면: 원시 스프레드 <span class="ex-x" id="oo-x-raw">—</span>bp에서 기울기 <span class="ex-x" id="oo-x-slope">—</span>bp를 뺀
+        <span class="ex-x" id="oo-x-fly">—</span>bp가 종목 효과입니다. 'fly'는 채권시장의 버터플라이(세 만기로
+        커브 굽음을 재는 지표) 계산법을 인접 세 종목에 적용한 것입니다.</p>
+
+      <h4>부호 읽는 법</h4>
+      <ul>
+        <li>fly &lt; 0: 지표물이 커브 대비 비쌈 = <span class="oo-term" title="커브 대비 비싼 상태(요구수익률이 낮음). cheap의 반대.">리치</span>. 지표물은 유동성
+          프리미엄 때문에 평소 이 상태가 정상입니다 (과거 세대 중앙값
+          <span class="ex-x" id="oo-x-med">—</span>bp 부근).</li>
+        <li>fly &gt; 0: 지표물이 커브 대비 쌈 = 저평가. 이례적 상태로,
+          입찰 <span class="oo-term" title="입찰 물량을 소화시키기 위해 일시적으로 지표물이 싸지는(양보) 현상.">컨세션</span>·분기말 수급 등 원인 판별이 필요합니다.</li>
+      </ul>
+
+      <h4>밴드와 판정</h4>
+      <p>아래 차트의 음영은 과거 17개 지표물 세대가 같은 라이프사이클
+        시점에 보였던 fly 분포입니다 (진한 음영 25~75%, 옅은 음영
+        전체 범위). 현재 선이 진한 음영을 벗어나면 이례적, 옅은 음영마저
+        벗어나면 역사적 극단입니다. 판정 배지는 확대·되돌림 패턴과 입찰
+        일정을 결합한 룰 기반 분류이며, 근거가 항상 함께 표시됩니다.
+        판정은 참고 신호이며 매매 판단은 운용역의 몫입니다.</p>
+    </div>
+  </details>
 
   <div class="series-bar">
     <span class="sname">국고 <span id="oo-tenor">3Y</span> On/Off 세대별 fly</span>
@@ -155,13 +215,13 @@
   <div class="stats" id="oo-cards"></div>
 
   <!-- Panel A — 분해 -->
-  <div class="section-title">Panel A · 커브조정 상대가치(fly)</div>
+  <div class="section-title">Panel A · 커브조정 상대가치(fly)<span class="oo-info" title="파란 선(fly)이 0 위로 올라오면 이례 신호">ⓘ</span></div>
   <p class="note" style="margin:-4px 0 10px">지표물이 커브 대비 싼가? (원시 스프레드에서 만기차 효과를 뺀 값) —
     기본은 <b>fly 단독</b>, 범례에서 원시 스프레드·기울기 효과를 켤 수 있음. hover 에는 세 값이 함께 표시됩니다.</p>
   <div class="card"><div class="chart-box" id="oo-chart-a"></div></div>
 
   <!-- Panel B — 이벤트타임 -->
-  <div class="section-title">Panel B · 이벤트타임 세대 비교</div>
+  <div class="section-title">Panel B · 이벤트타임 세대 비교<span class="oo-info" title="현재 세대가 과거 분포의 어디에 있는지">ⓘ</span></div>
   <div class="controls" style="margin-bottom:10px">
     <div class="ctrl-group">
       <span class="ctrl-label">포워드 참조 (과거 세대 경로 연장)</span>

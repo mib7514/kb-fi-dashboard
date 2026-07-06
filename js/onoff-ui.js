@@ -12,6 +12,7 @@ import { judge, buildSnapshot } from './onoff-judge.js';
 const $ = id => document.getElementById(id);
 const fmt = (v, u = '') => (typeof v === 'number' && Number.isFinite(v)) ? (v > 0 ? '+' : '') + v.toFixed(1) + u : '—';
 const LS_PROV = 'onoff-provisional';
+const LS_EXPLAIN = 'onoff-explainer-open';
 
 const state = { data: null, gens: [], selected: null, auctions: [], commentary: [], lastSnapshot: null, forwardDays: 60, events: null, provisional: null, prov: null };
 
@@ -25,6 +26,28 @@ function fillMeta() {
   $('oo-range').textContent = `${first} ~ ${d.updated}`;
   $('oo-count').textContent = `${gens.length}세대`;
   $('oo-updated').textContent = d.updated;
+}
+
+// OO-9 해설 섹션 — 최신(현재) 세대의 최신 raw/slope/fly + 밴드 median 을 문안에 동적 주입.
+// 요약 카드(renderCards)와 동일한 계산·포맷을 써서 초기 표시가 카드와 일치한다.
+function fillExplainer() {
+  const curTag = currentTag(state.data.generations);
+  const cur = state.gens.find(g => g.tag === curTag);
+  if (!cur) return;
+  const day = cur.series.length - 1;
+  const last = cur.series[day];
+  const band = bandStats(state.data.generations, day, { excludeTag: curTag });
+  const set = (id, v) => { const el = $(id); if (el) el.textContent = fmt(v); };
+  set('oo-x-raw', last[1]);
+  set('oo-x-slope', last[2]);
+  set('oo-x-fly', last[3]);
+  set('oo-x-med', band.median);
+  // 펼침 상태 localStorage 기억 (기본 접힘)
+  const ex = $('oo-explainer');
+  if (ex) {
+    try { ex.open = localStorage.getItem(LS_EXPLAIN) === '1'; } catch { /* noop */ }
+    ex.addEventListener('toggle', () => { try { localStorage.setItem(LS_EXPLAIN, ex.open ? '1' : '0'); } catch { /* noop */ } });
+  }
 }
 
 function fillDropdown() {
@@ -238,6 +261,7 @@ export function initOnoff() {
   state.commentary = Array.isArray(window.ONOFF_COMMENTARY) ? window.ONOFF_COMMENTARY : [];
 
   fillMeta();
+  fillExplainer();
   fillDropdown();
   loadProvisional();
   renderAll();
