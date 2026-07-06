@@ -129,6 +129,16 @@ test('judge — 사전 컨세션 evidence 저점 참고 병기 조건 분기', (
   assert.ok(!b.upcoming[0].evidence.some(e => /참고: 윈도우 저점/.test(e)), '차이<0.5bp → 병기 없음');
 });
 
+test('judge — 비발화(사전 확대 없음)에서도 저점 참고 병기', () => {
+  // 마지막 4관측 [0.6,-0.6,-2.5,-1.8]: 시작점 0.6/peak 0.6 → widen 0 <2 (비발화),
+  // 저점 -2.5 는 시작점과 3.1bp 차 → 발화 여부와 무관하게 참고 병기
+  const r = judge(gen('T', '2025-08-01', [-3, -3, -3, -3, 0.6, -0.6, -2.5, -1.8]), ['2025-08-13'], null);
+  const e = r.upcoming[0];
+  assert.equal(e.fired, false);
+  assert.match(e.evidence[0], /사전 확대 없음/);
+  assert.ok(e.evidence.some(x => /참고: 윈도우 저점 -2\.5 대비 \+3\.1bp/.test(x)), '비발화에도 저점 참고 병기');
+});
+
 test('buildSnapshot — 헤드라인/다가오는/지난 구조', () => {
   const fly = [-5, -5, -5, -5, -4, -3, -2, -1, 0, 1.5, 3, -1, -3, -4, -3];
   const g = gen('T', '2025-06-16', fly);
