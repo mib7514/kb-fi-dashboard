@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>캐리 손익분기 — 레버리지 캐리 vs 금리·스프레드 리스크 | FI Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --forecast: #f0883e;
+    --ok: #3fb950; --ext: #f85149;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+
+  /* 해설 (On/Off 패턴) */
+  .oo-explainer { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin: 0 0 20px; }
+  .oo-explainer > summary { cursor: pointer; padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--accent); list-style: none; user-select: none; }
+  .oo-explainer > summary::-webkit-details-marker { display: none; }
+  .oo-explainer > summary::before { content: "▸ "; color: var(--muted); }
+  .oo-explainer[open] > summary::before { content: "▾ "; }
+  .oo-explainer > summary:hover { color: var(--text); }
+  .oo-explainer[open] > summary { border-bottom: 1px solid var(--border); }
+  .ex-body { padding: 14px 18px 18px; font-size: 13px; line-height: 1.75; max-width: 880px; }
+  .ex-body h4 { font-size: 12px; font-weight: 700; color: var(--text); margin: 18px 0 6px; }
+  .ex-body h4:first-child { margin-top: 0; }
+  .ex-body p { margin: 0 0 8px; color: var(--text); }
+  .ex-body ul { margin: 6px 0 8px; padding-left: 20px; }
+  .ex-body li { margin: 0 0 6px; }
+  .ex-eq { font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 6px; padding: 8px 12px; margin: 6px 0; display: block; }
+  .ex-warn { border-left: 3px solid var(--forecast); background: #f0883e11; padding: 8px 12px; border-radius: 0 6px 6px 0; color: var(--text); }
+  .term { border-bottom: 1px dotted var(--muted); cursor: help; }
+
+  .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0 10px; display: flex; align-items: center; gap: 8px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 16px; }
+  .note { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+  .note b { color: var(--text); }
+
+  /* 입력 그리드 */
+  .in-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+  .in-field { display: flex; flex-direction: column; gap: 5px; }
+  .in-field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .in-field input[type=number] { background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 7px; padding: 8px 10px; font-family: var(--mono); font-size: 13px; width: 100%; }
+  .in-field input:focus { outline: none; border-color: var(--accent); }
+  .in-field .unit { font-size: 10px; color: var(--muted); }
+
+  .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--border-2); border-radius: 7px; overflow: hidden; }
+  .seg button { background: transparent; border: none; color: var(--muted); font-family: var(--mono); font-size: 12px; padding: 8px 12px; cursor: pointer; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+  .seg button:hover:not(.active) { background: var(--panel-2); color: var(--text); }
+
+  .derived { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 5px; }
+  .derived b { color: var(--accent); }
+
+  /* 시나리오 입력 테이블 */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .scen-tbl th { text-align: left; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; padding: 4px 8px; font-weight: 600; }
+  .scen-tbl td { padding: 4px 8px; }
+  .scen-tbl input { background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 6px 8px; font-family: var(--mono); font-size: 12px; width: 100%; }
+  .scen-tbl input:focus { outline: none; border-color: var(--accent); }
+  .scen-tbl input.lbl { font-family: var(--sans); }
+  .icon-btn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--muted); border-radius: 6px; width: 28px; height: 30px; cursor: pointer; font-size: 14px; line-height: 1; }
+  .icon-btn:hover { border-color: var(--ext); color: var(--ext); }
+
+  .badge { font-size: 11px; font-family: var(--mono); padding: 3px 9px; border-radius: 5px; border: 1px solid var(--border-2); }
+  .badge.ok { color: var(--ok); border-color: #3fb95055; background: #3fb95011; }
+  .badge.warn { color: var(--forecast); border-color: #f0883e55; background: #f0883e11; }
+
+  .btn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--text); font-size: 12px; padding: 7px 13px; border-radius: 7px; cursor: pointer; font-family: var(--sans); font-weight: 600; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.sm { padding: 6px 11px; font-size: 11.5px; }
+
+  .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+  /* 요약 카드 */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 14px 15px; }
+  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .stat-main { font-size: 24px; font-weight: 600; font-family: var(--mono); letter-spacing: -0.01em; }
+  .stat-main.pos { color: var(--ok); }
+  .stat-main.neg { color: var(--ext); }
+  .stat-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
+
+  /* 출력 테이블 공통 */
+  .out-tbl th, .out-tbl td { padding: 8px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12.5px; }
+  .out-tbl th { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600; text-align: right; }
+  .out-tbl th.l, .out-tbl td.l { text-align: left; font-family: var(--sans); }
+  .out-tbl td { text-align: right; }
+  .out-tbl tr.worst td { background: #f8514911; }
+  .out-tbl .tag { font-size: 9px; padding: 1px 5px; border-radius: 4px; background: #f8514922; color: var(--ext); margin-left: 6px; vertical-align: middle; }
+  .pos { color: var(--ok); } .neg { color: var(--ext); }
+
+  .grid-tbl td, .grid-tbl th { padding: 7px 8px; text-align: right; font-family: var(--mono); font-size: 12px; border-bottom: 1px solid var(--border); }
+  .grid-tbl th { color: var(--muted); font-size: 10px; font-weight: 600; }
+  .grid-tbl th.l, .grid-tbl td.l { text-align: left; color: var(--muted); }
+  .grid-tbl td.cur { background: var(--accent); color: #08111f; font-weight: 700; border-radius: 4px; }
+  .grid-tbl td.cur-col { background: #58a6ff14; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">
+    <span class="step">CARRY</span>
+    <span class="ctx">레버리지 캐리 · 손익분기 · 시나리오 기대값 (입력형 · 데이터 파일 없음)</span>
+  </div>
+  <h1>레버리지 캐리 손익분기</h1>
+  <p class="tagline">캐리가 금리·스프레드 확대 리스크를 넘는 폭을 손익분기와 확률가중 기대값으로 계산합니다. 결과는 숫자·분포만 — 매매 판단은 표시하지 않습니다.</p>
+
+  <!-- 해설 -->
+  <details class="oo-explainer" id="cb-explainer">
+    <summary>❓ 이 계산기 읽는 법 — 손익분기가 뭔가요?</summary>
+    <div class="ex-body">
+      <h4>무엇을 계산하나</h4>
+      <p>레포로 자금을 조달해 채권을 보유할 때, 보유기간 동안 쌓이는 <span class="term" title="YTM에서 레포조달비용을 뺀 순이자 수취분 + 롤다운">캐리</span>가
+        금리·스프레드 확대로 인한 평가손실을 얼마나 버티는지를 봅니다.</p>
+
+      <h4>수식</h4>
+      <span class="ex-eq">순캐리율(bp) = YTM − 레포 + 롤다운연율</span>
+      <span class="ex-eq">보유기간 캐리(bp) = 순캐리율 × h/12</span>
+      <span class="ex-eq">손익분기 허용 확대폭(bp) = 캐리 / D</span>
+      <span class="ex-eq">E[Δy](bp) = Σ pᵢ·(ΔKTBᵢ + Δspreadᵢ)   (헤지 ON → ΔKTB 항 제외)</span>
+      <span class="ex-eq">기대 초과수익(bp) = 캐리 − D × E[Δy]</span>
+      <span class="ex-eq">시나리오 손익(bp) = 캐리 − D × (ΔKTBᵢ + Δspreadᵢ)</span>
+
+      <h4>항 정의</h4>
+      <ul>
+        <li><b>YTM</b> — 보유 채권의 만기수익률(%). <b>레포</b> — 조달비용(%). 둘의 차 = 픽업.</li>
+        <li><b>롤다운연율</b> — 커브를 타고 내려오며 얻는 연율 수익(bp, 기본 0).</li>
+        <li><b>D</b> — 수정듀레이션. 직접 입력하거나 잔존만기에서 <span class="term" title="D ≈ 잔존 / (1 + YTM/2)">근사</span>합니다.</li>
+        <li><b>h</b> — 보유기간(개월). 캐리는 h/12 로 비례 안분.</li>
+        <li><b>ΔKTB / Δspread</b> — 시나리오별 국고금리·스프레드 변화(bp). <b>p</b> — 확률(%).</li>
+        <li><b>국고헤지</b> — ON이면 국고금리 변화(ΔKTB)를 손익·기대값에서 제외(스프레드 리스크만 남김).</li>
+        <li><b>손익분기 허용 확대폭</b> — (ΔKTB+Δspread)가 이만큼 벌어지면 초과수익이 정확히 0이 되는 지점.</li>
+      </ul>
+
+      <h4>주의</h4>
+      <p class="ex-warn">레포비용은 금리 시나리오와 독립이 아닙니다 — 금리 인상 사이클에서는 조달비용이 함께 올라 캐리가 축소됩니다. 시나리오의 ΔKTB와 레포를 따로 두는 것은 단순화이며, 강세·약세 시 레포도 조정해 보정하세요.</p>
+    </div>
+  </details>
+
+  <!-- 입력 -->
+  <div class="section-title">입력</div>
+  <div class="card">
+    <div class="in-grid">
+      <div class="in-field"><label>YTM <span class="unit">%</span></label><input type="number" step="0.01" id="cb-ytm"></div>
+      <div class="in-field"><label>레포비용 <span class="unit">%</span></label><input type="number" step="0.01" id="cb-repo"></div>
+      <div class="in-field">
+        <label>듀레이션 기준</label>
+        <div class="seg" id="cb-durmode">
+          <button data-dur="D" class="active">D 직접</button>
+          <button data-dur="mat">잔존만기</button>
+        </div>
+      </div>
+      <div class="in-field" id="cb-dur-wrap"><label>수정듀레이션 <span class="unit">년</span></label><input type="number" step="0.1" id="cb-dur"></div>
+      <div class="in-field" id="cb-mat-wrap" style="display:none"><label>잔존만기 <span class="unit">년</span></label><input type="number" step="0.1" id="cb-mat"><div class="derived" id="cb-dapprox"></div></div>
+      <div class="in-field"><label>보유기간 <span class="unit">개월</span></label><input type="number" step="1" id="cb-h"></div>
+      <div class="in-field"><label>롤다운연율 <span class="unit">bp</span></label><input type="number" step="1" id="cb-roll"></div>
+      <div class="in-field">
+        <label>국고헤지</label>
+        <div class="seg" id="cb-hedge">
+          <button data-hedge="0" class="active">OFF</button>
+          <button data-hedge="1">ON</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row-between" style="margin:18px 0 8px">
+      <span class="section-title" style="margin:0">시나리오</span>
+      <div style="display:flex; gap:8px; align-items:center">
+        <span class="badge" id="cb-psum">합계 —</span>
+        <button class="btn sm" id="cb-scen-add">+ 행 추가</button>
+        <button class="btn sm" id="cb-reset">초기화</button>
+      </div>
+    </div>
+    <table class="scen-tbl">
+      <thead><tr>
+        <th style="width:22%">라벨</th><th style="width:16%">확률 p (%)</th>
+        <th style="width:22%">ΔKTB (bp)</th><th style="width:22%">Δspread (bp)</th><th style="width:40px"></th>
+      </tr></thead>
+      <tbody id="cb-scen-body"></tbody>
+    </table>
+    <div class="note" id="cb-norm-note"></div>
+  </div>
+
+  <!-- ① 요약 카드 -->
+  <div class="section-title">① 요약</div>
+  <div class="stats" id="cb-cards"></div>
+
+  <!-- ② 시나리오 테이블 -->
+  <div class="section-title">② 시나리오 손익 <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">— 최악 행 강조(감내 여부는 직접 확인)</span></div>
+  <div class="card"><table class="out-tbl" id="cb-scen-out"></table></div>
+
+  <!-- ③ 그리드 -->
+  <div class="section-title">③ 손익분기 허용 확대폭 그리드 <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">— 듀레이션 × 보유기간 (bp), 현재 입력 근접셀 강조</span></div>
+  <div class="card" style="overflow-x:auto"><table class="grid-tbl" id="cb-grid"></table>
+    <div class="note">각 셀 = (YTM−레포+롤다운)×h/12 / D. 파란 셀이 현재 입력에 가장 가까운 (D, h) 조합입니다. D가 0.5 격자에 없으면 최근접 행으로 표시.</div>
+  </div>
+</div>
+
+<!-- 공통 내비게이션 -->
+<script type="module" src="js/nav.js"></script>
+<!-- app -->
+<script type="module">
+  import { initCarry } from './js/carry-ui.js';
+  initCarry();
+</script>
+</body>
+</html>
