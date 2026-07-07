@@ -62,6 +62,7 @@
 
   // 모듈 id → 데이터 시리즈 키 (마지막 기준일 표시)
   const SERIES_KEY = { inflation: 'kr-cpi-headline', 'curve-rv': 'credit-spread' };
+  const DATALESS = new Set(['carry']); // 입력형 모듈(데이터 파일 없음) — 기준일 대신 안내
   const lastUpdated = (id) => {
     if (id === 'onoff') return (window.ONOFF_KTB3Y && window.ONOFF_KTB3Y.updated) || null;
     const key = SERIES_KEY[id];
@@ -70,12 +71,14 @@
   };
 
   const cards = NAV_ITEMS.filter(i => i.id !== 'home').map(i => {
-    const up = lastUpdated(i.id);
+    const meta = DATALESS.has(i.id)
+      ? '입력형 · 데이터 없음'
+      : (lastUpdated(i.id) ? '기준일 ' + lastUpdated(i.id) : '&nbsp;');
     return `<a class="hub-card" href="${i.file}">
       <h2>${i.title}</h2>
       <p>${i.desc}</p>
       <div class="foot">
-        <span class="meta">${up ? '기준일 ' + up : '&nbsp;'}</span>
+        <span class="meta">${meta}</span>
         <span class="arrow">열기 →</span>
       </div>
     </a>`;
