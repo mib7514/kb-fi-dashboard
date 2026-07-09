@@ -13,6 +13,7 @@ import {
   SECTORS, SECTOR_DIRS, SECTOR_DIR_LABEL, sectorProbs, setSectorProb, sectorBandBp, expectedDs,
   buildSectorRows, rankByAttractiveness,
 } from './rg-sector.js';
+import { scoreJudgment, maturityOf, ddayTo } from './rg-score.js';
 
 const $ = id => document.getElementById(id);
 const LS_DRAFT = 'rg:draft';
@@ -550,6 +551,7 @@ function buildSnippet() {
   const b = calibBands();
   const week = isoWeek(state.date);
   const rec = {
+    judgeDate: state.date,      // 판단일 → 만기(判+1개월)·D-day 계산(RG-4)
     probs: { rate: rateObj, spread: spreadObj },
     mode: { cell: m.key, name: PHASES[m.key].name, p: round1(m.p), top2: round1(top2Sum(cells)) },
     baseline: { bandKtb3yBp: b.ktb3y, bandRepSpreadBp: b.repSpread, calib: b.period },
@@ -578,9 +580,14 @@ function buildSnippet() {
   const byTenor = expectedDyByTenor(rateN, sceneCurves());
   const mixed = mixEDy(parallel, byTenor, wFrac());
   if (curveComplete(curveY)) {
-    const { top } = rolldownTable(curveY, mixed);
+    const { rows, top } = rolldownTable(curveY, mixed);
     const version = state.v2.w === 100 ? 'v1-parallel' : state.v2.w === 0 ? 'v2-scenario' : 'mixed';
-    rec.rg2 = { version, topTenor: top ? top.tenor : null, topReturnBp: top ? top.total : null, w: state.v2.w, eDy3YBp: mixed ? round1(mixed[TENOR3Y]) : null };
+    // carryRollBp(구간별 캐리+롤다운, 파생 bp·레벨 아님) → RG-4 실현 순위 재계산용
+    rec.rg2 = {
+      version, topTenor: top ? top.tenor : null, topReturnBp: top ? top.total : null,
+      w: state.v2.w, eDy3YBp: mixed ? round1(mixed[TENOR3Y]) : null,
+      carryRollBp: rows.map(r => round1(r.carry + r.rolldown)),
+    };
   }
   return { week, text: `window.RG_LEDGER.judgments[${JSON.stringify(week)}] = ${JSON.stringify(rec, null, 2)};\n` };
 }
@@ -606,6 +613,138 @@ async function copySnippet() {
   }
 }
 
+// ── RG-4 채점 원장 ──
+const CREDIT_SECTORS = ['공사채', '은행채', '카드채', '여전채'];  // 비공유 신용섹터(국고=rate·회사=spread 제외)
+function todayISO() { try { return new Date().toISOString().slice(0, 10); } catch { return null; } }
+function ledger() { return window.RG_LEDGER || { judgments: {}, scores: {} }; }
+
+// 미결 창: judgments 중 scores 없는 주차. 만기(判+1M)·D-day, 만기순 정렬.
+function pendingList() {
+  const L = ledger(), j = L.judgments || {}, sc = L.scores || {}, t = todayISO();
+  return Object.keys(j).filter(w => !sc[w]).map(w => {
+    const rec = j[w], mat = maturityOf(rec.judgeDate), dd = mat ? ddayTo(mat, t) : null;
+    return { week: w, judgeDate: rec.judgeDate || null, maturity: mat, dday: dd, mature: dd != null && dd <= 0 };
+  }).sort((a, b) => String(a.maturity).localeCompare(String(b.maturity)));
+}
+
+function renderPending() {
+  if (!$('rg-pending')) return;
+  const items = pendingList();
+  $('rg-pending').innerHTML = items.length
+    ? items.map(p => `<div class="pend ${p.mature ? 'mature' : ''}">
+        <span class="pend-wk">${p.week}</span>
+        <span class="pend-meta">판단 ${p.judgeDate || '—'} · 만기 ${p.maturity || '—'}</span>
+        <span class="pend-dd">${p.dday == null ? '' : p.mature ? '만기 도래' : `D−${p.dday}`}</span>
+      </div>`).join('')
+    : '<div class="empty">미결 창이 없습니다. RG-1에서 주간 판단을 확정하면 여기 쌓입니다.</div>';
+  // 채점 대상 = 만기 도래 & 미채점
+  const sel = $('rg-score-select');
+  const mature = items.filter(p => p.mature);
+  sel.innerHTML = '<option value="">— 만기 도래 창 선택 —</option>' +
+    mature.map(p => `<option value="${p.week}">${p.week} (만기 ${p.maturity})</option>`).join('');
+  $('rg-score-hint').textContent = mature.length ? `채점 가능 ${mature.length}건.` : '만기 도래한 창이 없습니다.';
+}
+
+// 실현값 입력 그리드(1회 생성). 전부 파생 Δbp — 커브 레벨 원본은 받지 않는다(§0.3).
+function buildScoreInputs() {
+  const cell = (id, label) => `<label class="sc-cell">${label}<input type="number" step="0.1" id="${id}"></label>`;
+  $('rg-score-inputs').innerHTML =
+    `<div class="sc-grid">
+       ${cell('rg-r-ktb3y', '국고3Y Δbp')}${cell('rg-r-repspread', '대표 스프레드 Δbp')}
+       ${CREDIT_SECTORS.map((k, i) => cell(`rg-r-sec-${i}`, `${k} Δbp`)).join('')}
+     </div>
+     <div class="sc-label">실현 커브 8구간 Δbp (RG-2 순위 채점용)</div>
+     <div class="sc-grid sc-grid-8">${RD_TENORS.map((t, i) => cell(`rg-r-cv-${i}`, t)).join('')}</div>`;
+}
+function readRealized() {
+  const num = id => { const v = +($(id) && $(id).value); return Number.isFinite(v) ? v : 0; };
+  return {
+    ktb3yDeltaBp: num('rg-r-ktb3y'), repSpreadDeltaBp: num('rg-r-repspread'),
+    sectorsDeltaBp: Object.fromEntries(CREDIT_SECTORS.map((k, i) => [k, num(`rg-r-sec-${i}`)])),
+    curveDeltaBp: RD_TENORS.map((_, i) => num(`rg-r-cv-${i}`)),
+  };
+}
+function yn(b) { return b ? '<b class="pos">적중</b>' : '<b class="neg">미적중</b>'; }
+function onScore() {
+  const week = $('rg-score-select').value;
+  if (!week) { scoreStatus('만기 도래 창을 선택하세요.', 'bad'); return; }
+  const j = ledger().judgments[week];
+  if (!j) { scoreStatus('판단 레코드를 찾을 수 없습니다.', 'bad'); return; }
+  const realized = readRealized();
+  const metrics = scoreJudgment(j, realized, window.RG_CALIB && window.RG_CALIB.bands);
+  const sec = metrics.brier.sectors;
+  const rg2 = metrics.rg2Rank;
+  $('rg-score-result').innerHTML = `<div class="sc-res">
+    <div>실현 셀 <b>${metrics.realized.cell || '—'}</b> · 최빈 셀 ${yn(metrics.modalHit)}</div>
+    <div>축 적중 — 금리 ${yn(metrics.axisHit.rate)} · 스프레드 ${yn(metrics.axisHit.spread)}</div>
+    <div>Brier 9셀 <b>${fmtP(metrics.brier.cells9)}</b> · 섹터 신용평균 <b>${fmtP(sec.creditAvg)}</b> (6섹터평균 ${fmtP(sec.allAvg)})</div>
+    <div>RG-2 순위 — ${rg2 ? `선택 ${rg2.picked} · 실현최고 ${rg2.realizedTop1} · top1 ${yn(rg2.hitTop1)} / top2 ${yn(rg2.hitTop2)}` : '판단 레코드에 rg2 없음(커브 미입력)'}</div>
+  </div>`;
+  const payload = { realized, metrics, scoredAt: new Date().toISOString() };
+  $('rg-score-snippet').value = `window.RG_LEDGER.scores[${JSON.stringify(week)}] = ${JSON.stringify(payload, null, 2)};\n`;
+  $('rg-score-snippet-wrap').style.display = '';
+  scoreStatus(`${week} 채점 완료 — 스니펫을 data/rg-ledger.js 에 붙여넣고 커밋하세요.`, 'ok');
+}
+function scoreStatus(msg, kind) { const s = $('rg-score-status'); if (s) { s.textContent = msg; s.className = 'status ' + (kind || ''); } }
+async function copyScoreSnippet() {
+  const txt = $('rg-score-snippet').value; if (!txt) return;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(txt); scoreStatus('복사됨 — data/rg-ledger.js 에 붙여넣기.', 'ok'); }
+    else throw new Error('no clipboard');
+  } catch {
+    const ta = $('rg-score-snippet'); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch { ok = false; }
+    scoreStatus(ok ? '복사됨(폴백).' : '복사 실패 — 수동 복사.', ok ? 'ok' : 'bad');
+  }
+}
+
+// 누적 대시보드: scores 기반. 2건 미만이면 표본 부족.
+function renderDashboard() {
+  if (!$('rg-dashboard')) return;
+  const sc = ledger().scores || {};
+  const weeks = Object.keys(sc).sort();
+  if (weeks.length < 2) {
+    $('rg-dashboard').innerHTML = `<div class="empty">표본 부족 — 채점 ${weeks.length}건(2건 이상 필요). 만기 도래 창을 채점해 원장에 쌓으세요.</div>`;
+    return;
+  }
+  const rows = weeks.map(w => ({ w, m: sc[w].metrics }));
+  const rate = a => (a.length ? a.filter(Boolean).length / a.length : null);
+  const mean = a => { const f = a.filter(Number.isFinite); return f.length ? f.reduce((x, y) => x + y, 0) / f.length : null; };
+  const modalR = rate(rows.map(r => r.m.modalHit));
+  const rateR = rate(rows.map(r => r.m.axisHit.rate));
+  const spreadR = rate(rows.map(r => r.m.axisHit.spread));
+  const b9 = mean(rows.map(r => r.m.brier.cells9));
+  const bSec = mean(rows.map(r => r.m.brier.sectors.creditAvg));
+  const pct = v => (v == null ? '—' : (v * 100).toFixed(0) + '%');
+  // 주차별 표(최근 → 과거) + Brier 미니바
+  const maxB = Math.max(0.001, ...rows.map(r => r.m.brier.cells9).filter(Number.isFinite));
+  const perWeek = rows.slice().reverse().map(r => {
+    const b = r.m.brier.cells9;
+    return `<tr><td class="l">${r.w}</td><td>${r.m.modalHit ? '✓' : '·'}</td>
+      <td>${r.m.axisHit.rate ? '✓' : '·'}/${r.m.axisHit.spread ? '✓' : '·'}</td>
+      <td>${fmtP(b)}</td>
+      <td><span class="db-bar"><span style="width:${(b / maxB * 100).toFixed(0)}%"></span></span></td>
+      <td>${r.m.rg2Rank ? (r.m.rg2Rank.hitTop1 ? 'top1' : r.m.rg2Rank.hitTop2 ? 'top2' : '—') : '—'}</td></tr>`;
+  }).join('');
+  // 섹터별 평균 Brier
+  const secKeys = ['국고채', '공사채', '은행채', '회사채', '카드채', '여전채'];
+  const secAvg = secKeys.map(k => ({ k, v: mean(rows.map(r => r.m.brier.sectors.perSector[k] && r.m.brier.sectors.perSector[k].brier)) }));
+
+  $('rg-dashboard').innerHTML = `
+    <div class="db-cards">
+      <div class="db-card"><div class="db-l">최빈 셀 적중률</div><div class="db-m">${pct(modalR)}</div></div>
+      <div class="db-card"><div class="db-l">금리 축 적중률</div><div class="db-m">${pct(rateR)}</div></div>
+      <div class="db-card"><div class="db-l">스프레드 축 적중률</div><div class="db-m">${pct(spreadR)}</div></div>
+      <div class="db-card"><div class="db-l">Brier 9셀 평균</div><div class="db-m">${fmtP(b9)}</div></div>
+      <div class="db-card"><div class="db-l">섹터 Brier(신용) 평균</div><div class="db-m">${fmtP(bSec)}</div></div>
+      <div class="db-card"><div class="db-l">채점 표본</div><div class="db-m">${weeks.length}</div></div>
+    </div>
+    <div class="sc-label" style="margin-top:14px">주차별 (Brier 낮을수록 정확)</div>
+    <div style="overflow-x:auto"><table class="out-tbl"><thead><tr><th class="l">주차</th><th>최빈</th><th>금리/스프레드</th><th>Brier9</th><th>추이</th><th>RG-2</th></tr></thead><tbody>${perWeek}</tbody></table></div>
+    <div class="sc-label" style="margin-top:14px">섹터별 평균 Brier <span style="color:var(--muted);font-weight:400">(국고=금리축·회사=스프레드축 공유 — 신용 4섹터가 독립 신호)</span></div>
+    <div style="overflow-x:auto"><table class="out-tbl"><thead><tr>${secKeys.map(k => `<th>${k}</th>`).join('')}</tr></thead>
+      <tbody><tr>${secAvg.map(s => `<td>${fmtP(s.v)}</td>`).join('')}</tr></tbody></table></div>`;
+}
+
 // ── 초기화 ──
 export function initRg() {
   if (!$('rg-heatmap')) return;
@@ -618,6 +757,7 @@ export function initRg() {
   buildCurveInputs();
   buildV2Blocks();
   buildSectorRowsDom();
+  buildScoreInputs();
   const dateEl = $('rg-date'); if (dateEl) dateEl.value = state.date;
   const wEl = $('rg-w'); if (wEl) { wEl.value = state.v2.w; const wv = $('rg-w-val'); if (wv) wv.textContent = state.v2.w + '%'; }
   writeInputs();
@@ -626,6 +766,8 @@ export function initRg() {
   renderPlaybook();
   renderOutputs();      // renderRolldown 포함
   renderConfirmed();
+  renderPending();      // RG-4 미결 창 + 채점 대상
+  renderDashboard();    // RG-4 누적 대시보드
 
   // 입력 위임(숫자↔슬라이더 동기, 형제 자동조정 없음)
   const onInput = (e) => {
@@ -726,6 +868,11 @@ export function initRg() {
   // 확정 + 복사
   $('rg-confirm').addEventListener('click', onConfirm);
   $('rg-snippet-copy').addEventListener('click', copySnippet);
+
+  // RG-4 채점
+  if ($('rg-score-btn')) $('rg-score-btn').addEventListener('click', onScore);
+  if ($('rg-score-copy')) $('rg-score-copy').addEventListener('click', copyScoreSnippet);
+  if ($('rg-score-select')) $('rg-score-select').addEventListener('change', () => { scoreStatus('', ''); $('rg-score-result').innerHTML = ''; $('rg-score-snippet-wrap').style.display = 'none'; });
 
   // 해설 펼침 기억
   const ex = $('rg-explainer');

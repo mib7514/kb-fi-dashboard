@@ -185,6 +185,28 @@
   .sec-eds { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 130px; text-align: right; }
   .sec-eds b.pos { color: var(--ok); } .sec-eds b.neg { color: var(--ext); }
 
+  /* RG-4 채점 원장 */
+  .pend { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 7px; margin-bottom: 6px; background: var(--panel-2); font-size: 12.5px; }
+  .pend.mature { border-color: var(--forecast); background: #f0883e11; }
+  .pend-wk { font-family: var(--mono); font-weight: 700; }
+  .pend-meta { color: var(--muted); font-size: 11.5px; }
+  .pend-dd { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--forecast); font-weight: 700; }
+  .sc-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .sc-grid-8 { grid-template-columns: repeat(8, 1fr); }
+  @media (max-width: 720px) { .sc-grid, .sc-grid-8 { grid-template-columns: repeat(4, 1fr); } }
+  .sc-cell { display: flex; flex-direction: column; gap: 4px; font-size: 10px; color: var(--muted); }
+  .sc-cell input { background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 5px 6px; font-family: var(--mono); font-size: 12px; text-align: right; }
+  .sc-cell input:focus { outline: none; border-color: var(--accent); }
+  .sc-label { font-size: 11px; color: var(--muted); margin: 12px 0 6px; }
+  .sc-res { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-top: 12px; font-size: 13px; line-height: 1.9; }
+  .sc-res b.pos { color: var(--ok); } .sc-res b.neg { color: var(--ext); }
+  .db-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .db-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; }
+  .db-l { font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+  .db-m { font-size: 20px; font-weight: 600; font-family: var(--mono); }
+  .db-bar { display: inline-block; width: 60px; height: 8px; background: var(--border-2); border-radius: 4px; overflow: hidden; vertical-align: middle; }
+  .db-bar span { display: block; height: 100%; background: var(--accent); }
+
   /* 확정 */
   .cf { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   .cf.latest { border-color: var(--accent); }
@@ -337,6 +359,37 @@
 
   <div class="section-title">확정본 <span class="sub">— data/rg-ledger.js 로드분</span></div>
   <div class="card"><div id="rg-confirmed"></div></div>
+
+  <!-- RG-4 채점 원장 -->
+  <div class="section-title">채점 원장 <span class="sub">— RG-4 · 만기 도래 판단을 실현값과 대조해 채점</span></div>
+  <div class="card">
+    <div class="note" style="margin:0 0 12px"><b>운영 규칙:</b> 실현 방향은 판단 시점과 동일한 σ 보합밴드로 분류합니다(|Δ| &lt; 밴드 = 보합, |Δ| ≥ 밴드 = 방향). <b>채점 완료 주차의 judgment/score는 수정하지 않습니다(관례).</b> 오입력 시 data/rg-ledger.js 의 해당 scores 항목을 삭제하고 재채점하세요.</div>
+
+    <div class="section-title" style="margin:8px 0 8px">미결 창 <span class="sub">— judgments 중 미채점 · 만기순(도래분 강조)</span></div>
+    <div id="rg-pending"></div>
+
+    <div class="section-title" style="margin:16px 0 8px">채점 입력 <span class="sub">— 실현값(전부 파생 Δbp · 커브 레벨 원본 미입력)</span></div>
+    <div class="row-between" style="margin-bottom:10px">
+      <select class="date-in" id="rg-score-select" style="min-width:260px"></select>
+      <span class="note" id="rg-score-hint" style="margin:0"></span>
+    </div>
+    <div id="rg-score-inputs"></div>
+    <div class="row-between" style="margin-top:12px">
+      <button class="btn accent" id="rg-score-btn">채점</button>
+    </div>
+    <div id="rg-score-result"></div>
+    <div id="rg-score-snippet-wrap" style="display:none">
+      <textarea id="rg-score-snippet" rows="10" readonly></textarea>
+      <div class="row-between" style="margin-top:8px">
+        <button class="btn sm" id="rg-score-copy">복사</button>
+        <span class="note" style="margin:0">복사 → data/rg-ledger.js 의 <span style="font-family:var(--mono)">scores</span>에 붙여넣기 → 커밋 → 재로드 시 대시보드 반영.</span>
+      </div>
+    </div>
+    <div class="status" id="rg-score-status"></div>
+
+    <div class="section-title" style="margin:18px 0 8px">누적 대시보드 <span class="sub">— scores 기반 적중률·Brier 추이</span></div>
+    <div id="rg-dashboard"></div>
+  </div>
 </div>
 
 <!-- 데이터: 캘리브레이션(밴드) + 확정 원장 -->
