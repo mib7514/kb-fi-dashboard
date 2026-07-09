@@ -141,6 +141,29 @@
   .out-tbl tr.top td { background: rgba(88,166,255,0.08); }
   .out-tbl .pos { color: var(--ok); } .out-tbl .neg { color: var(--ext); }
 
+  /* RG-2 v2 시나리오 블록 */
+  .v2-block { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel-2); }
+  .v2-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .v2-title { font-size: 13px; font-weight: 700; }
+  .v2-prob { font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+  .v2-src { font-size: 11px; color: var(--muted); }
+  .v2-head .btn { margin-left: auto; }
+  .v2-cells { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+  @media (max-width: 720px) { .v2-cells { grid-template-columns: repeat(4, 1fr); } }
+  .v2-cell { display: flex; flex-direction: column; gap: 4px; }
+  .v2-cell label { font-size: 11px; color: var(--muted); font-family: var(--mono); text-align: center; }
+  .v2-dot { color: var(--forecast); font-size: 9px; vertical-align: middle; cursor: help; }
+  .v2-num { width: 100%; background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 5px 5px; font-family: var(--mono); font-size: 12px; text-align: right; }
+  .v2-num:focus { outline: none; border-color: var(--accent); }
+  .v2-range { width: 100%; accent-color: var(--forecast); }
+  .v2-mix { margin-top: 12px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+  .v2-mix-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
+  .v2-mix-row label { color: var(--muted); } .v2-mix-row b { color: var(--accent); }
+  .w-range { width: 220px; accent-color: var(--accent); }
+  .w-val { font-family: var(--mono); font-size: 13px; color: var(--accent); min-width: 42px; }
+  .v2-mix-row .btn { margin-left: auto; }
+  .rd-edy { margin-top: 14px; }
+
   /* 확정 */
   .cf { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   .cf.latest { border-color: var(--accent); }
@@ -223,15 +246,29 @@
   </div>
 
   <!-- RG-2 롤다운 탐색기 -->
-  <div class="section-title">롤다운 탐색기 <span class="sub">— RG-2 v1 · 1개월 보유 구간별 기대수익(bp) = 캐리 + 롤다운 + 커브이동</span></div>
+  <div class="section-title">롤다운 탐색기 <span class="sub">— RG-2 · 1개월 보유 구간별 기대수익(bp) = 캐리 + 롤다운 + 커브이동</span></div>
   <div class="card">
     <div class="row-between" style="margin-bottom:10px">
       <span style="font-size:13px;font-weight:600">국고 커브 입력 <span style="color:var(--muted);font-weight:400">· 구간별 민평 수익률(%)</span></span>
       <span class="badge warn" title="§0.3 라이선스 원칙">세션 전용 · 저장되지 않음</span>
     </div>
     <div class="cv-cells" id="rg-curve-inputs"></div>
-    <div class="rd-edy"><span id="rg-edy"></span> <span class="badge ok" style="margin-left:8px">평행이동 가정 (v1)</span></div>
-    <div class="section-title" style="margin:18px 0 8px">구간별 기대수익 <span class="sub">— 캐리 / 롤다운 / 커브이동 3성분 (좌=음수, 우=양수)</span></div>
+
+    <!-- v2 시나리오별 커브이동 (24칸) -->
+    <div class="section-title" style="margin:18px 0 8px">시나리오별 커브이동 (v2) <span class="sub">— 9레짐 조건부 기본값(스프레드 확률 가중) · 내 전망 덮어쓰기 · 단위 Δbp</span></div>
+    <div id="rg-v2-blocks"></div>
+    <div class="v2-mix">
+      <div class="v2-mix-row">
+        <label>커브이동 혼합 <b>w</b></label>
+        <input type="range" min="0" max="100" step="1" id="rg-w" class="w-range">
+        <span class="w-val" id="rg-w-val">100%</span>
+        <span class="rd-note">w=100% 평행(v1) · w=0% 내전망(v2) · 그 사이 혼합(shrinkage)</span>
+        <button class="btn sm" id="rg-v2-reset-all">전체 기본값 리셋</button>
+      </div>
+    </div>
+
+    <div class="rd-edy" id="rg-edy"></div>
+    <div class="section-title" style="margin:18px 0 8px">구간별 기대수익 <span class="sub">— 혼합 기준 · 캐리 / 롤다운 / 커브이동 3성분 (좌=음수, 우=양수)</span></div>
     <div class="rd-legend">
       <span class="lg"><span class="lg-dot" style="background:var(--accent)"></span>캐리</span>
       <span class="lg"><span class="lg-dot" style="background:var(--ok)"></span>롤다운</span>
@@ -239,9 +276,11 @@
       <span class="lg" style="color:var(--muted)">· 좌측(빗금)=음수 성분</span>
     </div>
     <div id="rg-rd-bars"></div>
-    <div class="section-title" style="margin:16px 0 8px">순위 <span class="sub">— 기대수익 내림차순</span></div>
+    <div class="section-title" style="margin:16px 0 8px">v1 / v2 / 혼합 비교 <span class="sub">— 구간별 기대수익(bp)</span></div>
+    <div style="overflow-x:auto"><table class="out-tbl" id="rg-rd-compare"></table></div>
+    <div class="section-title" style="margin:16px 0 8px">순위 <span class="sub">— 혼합 기대수익 내림차순</span></div>
     <div style="overflow-x:auto"><table class="out-tbl" id="rg-rd-rank"></table></div>
-    <div class="note">롤다운 = 착지커브를 현재커브로 가정(커브를 타고 내려오며 얻는 수익). 커브이동 = 평행 E[Δy]를 전 구간 동일 적용, 성분은 D′(≈잔존만기)에 비례. 듀레이션은 만기 근사(쿠폰 미반영, v1). <b>커브 원본은 저장되지 않으며 새로고침 시 소실됩니다.</b></div>
+    <div class="note">롤다운 = 착지커브를 현재커브로 가정. 커브이동 = w×평행(v1) + (1−w)×내전망(v2), 구간별 E[Δy]에 D′(≈잔존만기) 곱. v2 기본값은 9레짐 조건부 역사 중위 Δ(스프레드 확률 가중)이며, RG-1 스프레드 확률 변경 시 <b>수정 안 한 칸만</b> 실시간 갱신됩니다(수정 칸은 dot 표시·유지). 듀레이션은 만기 근사(쿠폰 미반영). <b>국고 커브(레벨)는 저장되지 않으며 새로고침 시 소실됩니다.</b> v2 전망치(Δbp)는 작업본에 저장됩니다.</div>
   </div>
 
   <!-- 확정 -->

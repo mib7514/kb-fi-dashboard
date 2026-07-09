@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { interp, curveComplete, expectedDyParallel, decompose, rolldownTable, MAT, TENORS } from '../js/rg-rolldown.js';
+import { interp, curveComplete, expectedDyParallel, decompose, rolldownTable, MAT, TENORS,
+  conditionalDefaultCurves, expectedDyByTenor, mixEDy, TENOR3Y } from '../js/rg-rolldown.js';
 
 const near = (a, b, tol = 0.01) => assert.ok(Math.abs(a - b) <= tol, `${a} ≉ ${b} (±${tol})`);
 
@@ -76,4 +77,54 @@ test('rolldownTable — 순위 내림차순 + top', () => {
   assert.equal(rows.length, 8);
   for (let i = 1; i < ranked.length; i++) assert.ok(ranked[i - 1]._total >= ranked[i]._total);
   assert.equal(top.tenor, ranked[0].tenor);
+});
+
+// ── v2 시나리오 + 혼합 ──
+test('conditionalDefaultCurves — 3시나리오 각 8구간, 하락<0·상승>0(3Y)', () => {
+  const def = conditionalDefaultCurves(SPREADP, MC);
+  assert.ok(def.down.length === 8 && def.flat.length === 8 && def.up.length === 8);
+  assert.ok(def.down[TENOR3Y] < 0, `하락 3Y ${def.down[TENOR3Y]} <0`);
+  assert.ok(def.up[TENOR3Y] > 0, `상승 3Y ${def.up[TENOR3Y]} >0`);
+  // 세 시나리오 커브가 서로 다른 모양(실측 반영)
+  assert.notDeepEqual(def.down, def.flat);
+  assert.notDeepEqual(def.flat, def.up);
+});
+test('conditionalDefaultCurves — 스프레드 합0 → null', () => {
+  assert.equal(conditionalDefaultCurves([0, 0, 0], MC), null);
+});
+
+test('expectedDyByTenor — 금리 확률가중 구간별', () => {
+  const scene = conditionalDefaultCurves(SPREADP, MC);
+  const bt = expectedDyByTenor(RATE, scene);
+  assert.equal(bt.length, 8);
+  // 수동 검산: 3Y = Σi P(rate i)·scene[dir][3Y]
+  const man = (RATE[0] * scene.down[TENOR3Y] + RATE[1] * scene.flat[TENOR3Y] + RATE[2] * scene.up[TENOR3Y]) / 100;
+  near(bt[TENOR3Y], man, 1e-9);
+});
+test('expectedDyByTenor — 금리 합0 → null', () => {
+  const scene = conditionalDefaultCurves(SPREADP, MC);
+  assert.equal(expectedDyByTenor([0, 0, 0], scene), null);
+});
+
+test('mixEDy 등가성 — w=1 이면 평행(v1)과 동일 total (체크리스트 ③)', () => {
+  const par = expectedDyParallel(RATE, SPREADP, MC);
+  const scene = conditionalDefaultCurves(SPREADP, MC);
+  const bt = expectedDyByTenor(RATE, scene);
+  const mix = mixEDy(par, bt, 1);                 // w=100%
+  const v1 = decompose(CURVE, par);
+  const mixed = decompose(CURVE, mix);
+  TENORS.forEach((_, k) => near(mixed[k].total, v1[k].total, 1e-9));
+});
+test('mixEDy 등가성 — w=0 이면 순수 v2와 동일 total (체크리스트 ③)', () => {
+  const par = expectedDyParallel(RATE, SPREADP, MC);
+  const scene = conditionalDefaultCurves(SPREADP, MC);
+  const bt = expectedDyByTenor(RATE, scene);
+  const mix = mixEDy(par, bt, 0);                 // w=0%
+  const v2 = decompose(CURVE, bt);
+  const mixed = decompose(CURVE, mix);
+  TENORS.forEach((_, k) => near(mixed[k].total, v2[k].total, 1e-9));
+});
+test('mixEDy — 확률 미입력(null) → null', () => {
+  assert.equal(mixEDy(null, [1, 2, 3], 0.5), null);
+  assert.equal(mixEDy(1.5, null, 0.5), null);
 });

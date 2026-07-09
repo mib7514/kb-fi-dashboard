@@ -52,10 +52,14 @@ export function expectedDyParallel(rateProbs, spreadProbs, medianCurves, tenorId
   return e;
 }
 
-// 구간별 3성분 분해. eDy(bp) 없으면(null) 커브이동=0 으로 계산.
+// 구간별 3성분 분해. eDy 는 스칼라(평행 v1) 또는 구간별 배열(v2·혼합). null/미완이면 커브이동=0.
 // 반환 행: { tenor, maturity, y0, Dp, carry, rolldown, curveMove, total } (원값 유지; 표시 반올림은 호출자)
 export function decompose(curveY, eDy) {
-  const eff = Number.isFinite(eDy) ? eDy : 0;
+  const isArr = Array.isArray(eDy);
+  const effAt = k => {
+    const e = isArr ? +eDy[k] : eDy;
+    return Number.isFinite(e) ? e : 0;
+  };
   const nz = v => v + 0;                                  // −0 → 0 정규화(표시·엄격비교 안정)
   return TENORS.map((tenor, k) => {
     const T = MAT[k];
@@ -64,9 +68,61 @@ export function decompose(curveY, eDy) {
     const yLand = interp(MAT, curveY, T - HOLD);          // 1개월 후 잔존만기 위치의 현재커브 수익률
     const carry = nz(y0 * 100 / 12);                      // y0(%)×100/12 = 1개월 캐리(bp)
     const rolldown = nz(-Dp * (yLand - y0) * 100);        // 착지커브=현재커브 가정
-    const curveMove = nz(-Dp * eff);                      // 평행이동: 전 구간 동일 eDy
+    const curveMove = nz(-Dp * effAt(k));                 // 구간별 E[Δy] 적용
     return { tenor, maturity: T, y0, Dp, carry, rolldown, curveMove, total: nz(carry + rolldown + curveMove) };
   });
+}
+
+// ── v2: 시나리오별 구간 Δ (24칸) ──
+// 1층 기본값(9레짐 조건부): 시나리오 i(금리방향)의 기본커브[구간] = Σj P(스프레드 j)·medianCurves[i|j].deltaBp[구간].
+// 반환 { down:[8], flat:[8], up:[8] } Δbp. calib 미로드/스프레드 합0 → null.
+export function conditionalDefaultCurves(spreadProbs, medianCurves) {
+  if (!medianCurves || !medianCurves.cells) return null;
+  const sp = spreadProbs.map(v => (Number.isFinite(+v) ? +v : 0));
+  const ssum = sp.reduce((a, b) => a + b, 0);
+  if (ssum <= 0) return null;
+  const out = {};
+  for (const rd of RATE) {
+    const arr = [];
+    for (let k = 0; k < TENORS.length; k++) {
+      let e = 0;
+      for (let j = 0; j < SPREAD.length; j++) {
+        const cell = medianCurves.cells[`${rd}|${SPREAD[j]}`];
+        if (!cell || !Array.isArray(cell.deltaBp)) return null;
+        e += (sp[j] / ssum) * cell.deltaBp[k];
+      }
+      arr.push(e);
+    }
+    out[rd] = arr;
+  }
+  return out;
+}
+
+// v2 구간별 기대 Δy(bp) 배열: E[Δy_구간] = Σi P(금리 i)·sceneCurves[dir i][구간].
+// sceneCurves = { down:[8], flat:[8], up:[8] }(현재 24칸 값). 금리 합0/미제공 → null.
+export function expectedDyByTenor(rateProbs, sceneCurves) {
+  if (!sceneCurves) return null;
+  const rp = rateProbs.map(v => (Number.isFinite(+v) ? +v : 0));
+  const rsum = rp.reduce((a, b) => a + b, 0);
+  if (rsum <= 0) return null;
+  const out = [];
+  for (let k = 0; k < TENORS.length; k++) {
+    let e = 0;
+    for (let i = 0; i < RATE.length; i++) {
+      const arr = sceneCurves[RATE[i]];
+      if (!arr) return null;
+      const v = +arr[k];
+      e += (rp[i] / rsum) * (Number.isFinite(v) ? v : 0);
+    }
+    out.push(e);
+  }
+  return out;
+}
+
+// 혼합 구간별 eDy: w×평행(스칼라) + (1−w)×v2(구간별). wFrac ∈ [0,1]. 한쪽이라도 null → null.
+export function mixEDy(parallel, byTenor, wFrac) {
+  if (parallel == null || byTenor == null) return null;
+  return byTenor.map(b => wFrac * parallel + (1 - wFrac) * b);
 }
 
 // 표시용: 분해 + 반올림(0.1bp) + 기대수익 내림차순 순위. top = 최고 기대수익 구간.

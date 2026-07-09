@@ -5,15 +5,19 @@
 // 순수 계산은 combine()/argmaxCell()/isoWeek(), 나머지는 상태·localStorage·DOM.
 
 import { probStatus, normalized, normalizeInPlace } from './prob-normalize.js';
-import { TENORS as RD_TENORS, curveComplete, expectedDyParallel, rolldownTable } from './rg-rolldown.js';
+import {
+  TENORS as RD_TENORS, TENOR3Y, curveComplete, expectedDyParallel, rolldownTable, decompose,
+  conditionalDefaultCurves, expectedDyByTenor, mixEDy,
+} from './rg-rolldown.js';
 
 const $ = id => document.getElementById(id);
 const LS_DRAFT = 'rg:draft';
 const LS_EXPLAIN = 'rg-explainer-open';
 
-// RG-2 커브 입력 — 세션 전용(메모리만). state 와 분리 → localStorage 에 절대 포함되지 않음(§0.3).
+// RG-2 커브(레벨 수익률) 입력 — 세션 전용(메모리만). state 와 분리 → localStorage 미포함(§0.3).
 let curveY = RD_TENORS.map(() => '');
-let lastRg2 = null; // { complete, eDy, top } — 확정 스니펫 반영용(파생값만)
+let lastRg2 = null;         // 확정 스니펫 반영용(파생값만)
+let lastV2Defaults = null;  // 최근 1층 기본커브 { down:[8], flat:[8], up:[8] } — dot 툴팁·리셋 참조
 
 const RATE_KEYS = ['down', 'flat', 'up'];        // 하락/보합/상승
 const SPREAD_KEYS = ['narrow', 'flat', 'wide'];  // 축소/보합/확대
@@ -36,9 +40,15 @@ const PHASES = {
 };
 const STANCE = { fav: { label: '우호 (리스크 확장)', cls: 'st-fav' }, neu: { label: '중립 (선별 대응)', cls: 'st-neu' }, def: { label: '방어 (리스크 축소)', cls: 'st-def' } };
 
+// v2 24칸 스켈레톤: 각 칸 { v:Δbp|'', source:'default'|'user' }. 값은 파생 Δbp → 작업본 저장 허용(§0.3 OK).
+function freshV2() {
+  const mk = () => Array.from({ length: RD_TENORS.length }, () => ({ v: '', source: 'default' }));
+  return { cells: { down: mk(), flat: mk(), up: mk() }, w: 100 };  // w=100 → 평행(v1) 출발
+}
+
 // 기본값 = 합계 100 인 중립 prior(즉시 유효 히트맵 + OK 뱃지)
-const DEFAULTS = { rate: { down: 33, flat: 34, up: 33 }, spread: { narrow: 33, flat: 34, wide: 33 }, date: '' };
-const state = { rate: {}, spread: {}, date: '' };
+const DEFAULTS = { rate: { down: 33, flat: 34, up: 33 }, spread: { narrow: 33, flat: 34, wide: 33 }, date: '', v2: freshV2() };
+const state = { rate: {}, spread: {}, date: '', v2: freshV2() };
 
 const round1 = v => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 const fmtP = v => (Number.isFinite(v) ? v.toFixed(1) : '—');
@@ -82,7 +92,50 @@ function load() {
     RATE_KEYS.forEach(k => { if (Number.isFinite(+s.rate[k])) state.rate[k] = +s.rate[k]; });
     SPREAD_KEYS.forEach(k => { if (Number.isFinite(+s.spread[k])) state.spread[k] = +s.spread[k]; });
     if (typeof s.date === 'string') state.date = s.date;
+    const v2 = validV2(s.v2);
+    if (v2) state.v2 = v2;                    // ⑥ 작업본(24칸+w) 복원 — 우선
+  } else {
+    const carry = ledgerCarryV2();            // 2층: 전주 확정 rg2v2 이월(작업본 없을 때만)
+    if (carry) state.v2 = carry;
   }
+}
+
+// 저장/이월 v2 형태 검증 → 정규화. 실패 시 null.
+function validV2(v2) {
+  if (!v2 || !v2.cells) return null;
+  const out = freshV2();
+  out.w = Number.isFinite(+v2.w) ? +v2.w : 100;
+  for (const dir of RATE_KEYS) {
+    const arr = v2.cells[dir];
+    if (!Array.isArray(arr) || arr.length !== RD_TENORS.length) return null;
+    out.cells[dir] = arr.map(c => ({
+      v: (c && Number.isFinite(+c.v)) ? +c.v : '',
+      source: (c && c.source === 'user') ? 'user' : 'default',
+    }));
+  }
+  return out;
+}
+
+// 원장 최신 주차 rg2v2 → v2 시작값(2층 이월). 없으면 null.
+function ledgerCarryV2() {
+  const j = (window.RG_LEDGER && window.RG_LEDGER.judgments) || {};
+  const weeks = Object.keys(j).sort();
+  for (let i = weeks.length - 1; i >= 0; i--) {
+    const r = j[weeks[i]] && j[weeks[i]].rg2v2;
+    if (r && r.curves) {
+      const out = freshV2();
+      out.w = Number.isFinite(+r.w) ? +r.w : 100;
+      for (const dir of RATE_KEYS) {
+        const cur = r.curves[dir] || [], src = (r.sources && r.sources[dir]) || [];
+        out.cells[dir] = RD_TENORS.map((_, k) => ({
+          v: Number.isFinite(+cur[k]) ? +cur[k] : '',
+          source: src[k] === 'user' ? 'user' : 'default',
+        }));
+      }
+      return out;
+    }
+  }
+  return null;
 }
 
 // ── 밴드 가이드(rg-calib) ──
@@ -117,6 +170,28 @@ function buildCurveInputs() {
     <div class="cv-cell">
       <label>${t}</label>
       <input type="number" step="0.001" inputmode="decimal" class="cv-num" data-idx="${i}" placeholder="—">
+    </div>`).join('');
+}
+
+// RG-2 v2: 시나리오 3개 × 구간 8개 블록(세로 전개). 숫자+슬라이더, user 칸 dot. 1회 생성.
+const V2_DIRLABEL = { down: '하락 ↓', flat: '보합 →', up: '상승 ↑' };
+function buildV2Blocks() {
+  $('rg-v2-blocks').innerHTML = RATE_KEYS.map(dir => `
+    <div class="v2-block">
+      <div class="v2-head">
+        <span class="v2-title">${V2_DIRLABEL[dir]} 시나리오</span>
+        <span class="v2-prob" id="rg-v2p-${dir}">P —</span>
+        <span class="v2-src">9레짐 조건부 · 스프레드 확률 가중</span>
+        <button class="btn sm" data-reset="${dir}">기본값 리셋</button>
+      </div>
+      <div class="v2-cells">
+        ${RD_TENORS.map((t, k) => `
+          <div class="v2-cell">
+            <label>${t} <span class="v2-dot" id="rg-v2dot-${dir}-${k}" style="display:none" title="">●</span></label>
+            <input type="number" step="0.1" class="v2-num" id="rg-v2-${dir}-${k}" data-dir="${dir}" data-k="${k}">
+            <input type="range" min="-60" max="60" step="0.5" class="v2-range" id="rg-v2s-${dir}-${k}" data-dir="${dir}" data-k="${k}">
+          </div>`).join('')}
+      </div>
     </div>`).join('');
 }
 
@@ -157,36 +232,91 @@ function renderOutputs() {
   save();
 }
 
-// ── RG-2 v1: 커브이동 E[Δy](평행) + 3성분 분해 막대 + 순위 ──
+// ── RG-2: 커브이동 E[Δy](평행 v1 + 시나리오 v2 혼합) + 3성분 분해 막대 + 순위 ──
 function medianCurves() { const c = window.RG_CALIB; return c && c.medianCurves ? c.medianCurves : null; }
+function rateArr() { return RATE_KEYS.map(k => state.rate[k]); }
+function spreadArr() { return SPREAD_KEYS.map(k => state.spread[k]); }
+function wFrac() { const w = +state.v2.w; return (Number.isFinite(w) ? w : 100) / 100; }
+function sceneCurves() { const o = {}; for (const d of RATE_KEYS) o[d] = state.v2.cells[d].map(c => (Number.isFinite(+c.v) ? +c.v : 0)); return o; }
+
+// 1층 기본커브 재산출 → source='default' 칸 값 갱신(user 칸 유지)
+function refreshV2Defaults() {
+  lastV2Defaults = conditionalDefaultCurves(normalized(spreadArr()), medianCurves());
+  for (const dir of RATE_KEYS) for (let k = 0; k < RD_TENORS.length; k++) {
+    const cell = state.v2.cells[dir][k];
+    if (cell.source === 'default') cell.v = lastV2Defaults ? round1(lastV2Defaults[dir][k]) : '';
+  }
+}
+function dotTitle(dir, k) {
+  const d = lastV2Defaults ? round1(lastV2Defaults[dir][k]) : null;
+  const v = state.v2.cells[dir][k].v;
+  return d == null ? '내 전망(user)' : `기본값 ${fmtP(d)} → 내전망 ${fmtP(+v)} (Δ ${fmtP(+v - d)})bp`;
+}
+// v2 셀 DOM 동기: 값은 전 칸 기록(포커스 칸 제외 → 커서 보존), dot 은 전 칸 갱신
+function syncV2Dom() {
+  const active = (typeof document !== 'undefined') ? document.activeElement : null;
+  for (const dir of RATE_KEYS) for (let k = 0; k < RD_TENORS.length; k++) {
+    const cell = state.v2.cells[dir][k];
+    const num = $(`rg-v2-${dir}-${k}`), rng = $(`rg-v2s-${dir}-${k}`), dot = $(`rg-v2dot-${dir}-${k}`);
+    if (num && num !== active) num.value = cell.v;
+    if (rng && rng !== active) rng.value = Number.isFinite(+cell.v) ? +cell.v : 0;
+    if (dot) { dot.style.display = cell.source === 'user' ? '' : 'none'; dot.title = cell.source === 'user' ? dotTitle(dir, k) : ''; }
+  }
+}
+function renderV2ProbMirror() {
+  const rN = normalized(rateArr());
+  RATE_KEYS.forEach((k, i) => { const el = $(`rg-v2p-${k}`); if (el) el.textContent = `P(${RATE_LABEL[k]}) ${fmtP(rN[i])}%`; });
+}
 
 function renderRolldown() {
   if (!$('rg-rd-bars')) return;
   const mc = medianCurves();
-  const eDy = expectedDyParallel(RATE_KEYS.map(k => state.rate[k]), SPREAD_KEYS.map(k => state.spread[k]), mc);
 
-  // E[Δy] 표시 + 평행 가정 뱃지
+  // 1층 기본값 실시간 갱신 + DOM 동기 + 확률 미러
+  refreshV2Defaults();
+  syncV2Dom();
+  renderV2ProbMirror();
+
+  const parallel = expectedDyParallel(rateArr(), spreadArr(), mc);   // 스칼라(3Y 기준)
+  const byTenor = expectedDyByTenor(rateArr(), sceneCurves());       // 구간별 배열
+  const mixed = mixEDy(parallel, byTenor, wFrac());                  // 구간별 배열 | null
+
+  // E[Δy] 3Y 비교 요약
   const edEl = $('rg-edy');
-  if (eDy == null) {
+  if (parallel == null) {
     edEl.innerHTML = mc
       ? `<span class="warn-text">확률 미입력 — 커브이동 0 처리.</span> 두 축 확률을 입력하면 반영됩니다.`
       : `<span class="warn-text">rg-calib medianCurves 로드 실패.</span>`;
   } else {
-    edEl.innerHTML = `E[Δy] = <b>${fmtP(eDy)}bp</b> <span class="rd-note">(9셀 확률가중 3Y 중위 Δ · 전 구간 동일 적용)</span>`;
+    edEl.innerHTML = `E[Δy] 3Y — 평행(v1) <b>${fmtP(parallel)}</b> · 내전망(v2) <b>${byTenor ? fmtP(byTenor[TENOR3Y]) : '—'}</b> · `
+      + `혼합(w=${state.v2.w}%) <b>${mixed ? fmtP(mixed[TENOR3Y]) : '—'}</b> bp `
+      + `<span class="rd-note">(커브이동 = −D′×E[Δy], 구간별)</span>`;
   }
 
   const complete = curveComplete(curveY);
-  lastRg2 = { complete, eDy: eDy == null ? null : round1(eDy), top: null };
+  lastRg2 = { complete, w: state.v2.w, top: null, eDy3Y: mixed ? round1(mixed[TENOR3Y]) : null };
 
   if (!complete) {
-    $('rg-rd-bars').innerHTML = '<div class="empty">8구간 수익률(%)을 모두 입력하면 구간별 기대수익이 계산됩니다. (세션 전용 · 저장되지 않음)</div>';
+    $('rg-rd-bars').innerHTML = '<div class="empty">위 국고 커브 8구간 수익률(%)을 모두 입력하면 구간별 기대수익이 계산됩니다. (세션 전용 · 저장되지 않음)</div>';
     $('rg-rd-rank').innerHTML = '';
+    $('rg-rd-compare').innerHTML = '';
     return;
   }
-  const { rows, ranked, top } = rolldownTable(curveY, eDy);
+  const { rows, ranked, top } = rolldownTable(curveY, mixed);   // 혼합 기준
   lastRg2.top = top;
   renderRdBars(rows, top);
   renderRdRank(ranked, top);
+  renderCompare(decompose(curveY, parallel), decompose(curveY, byTenor), decompose(curveY, mixed));
+}
+
+// v1 / v2 / 혼합 total 비교 소표
+function renderCompare(v1, v2, mx) {
+  $('rg-rd-compare').innerHTML =
+    `<thead><tr><th class="l">구간</th><th>v1 평행</th><th>v2 내전망</th><th>혼합(w=${state.v2.w}%)</th></tr></thead>
+     <tbody>${RD_TENORS.map((t, k) => `<tr>
+       <td class="l">${t}</td>
+       <td>${fmtP(v1[k].total)}</td><td>${fmtP(v2[k].total)}</td><td>${fmtP(mx[k].total)}</td>
+     </tr>`).join('')}</tbody>`;
 }
 
 function renderRdBars(rows, top) {
@@ -318,11 +448,22 @@ function buildSnippet() {
     baseline: { bandKtb3yBp: b.ktb3y, bandRepSpreadBp: b.repSpread, calib: b.period },
     confirmedAt: new Date().toISOString(),
   };
-  // RG-2 파생값만 포함(커브 원본 미포함, §0.3). 커브 미완이면 rg2 생략.
-  const eDy = expectedDyParallel(rateN, spreadN, medianCurves());
+  // RG-2 v2 파생값(24칸 Δbp + 소스 + w) — 커브 원본(레벨) 미포함(§0.3).
+  const curves = {}, sources = {};
+  for (const dir of RATE_KEYS) {
+    curves[dir] = state.v2.cells[dir].map(c => (Number.isFinite(+c.v) ? round1(+c.v) : null));
+    sources[dir] = state.v2.cells[dir].map(c => c.source);
+  }
+  rec.rg2v2 = { curves, sources, w: state.v2.w };
+
+  // RG-2 헤드라인(혼합 기준 최상위 구간). 커브(레벨) 미완이면 생략.
+  const parallel = expectedDyParallel(rateN, spreadN, medianCurves());
+  const byTenor = expectedDyByTenor(rateN, sceneCurves());
+  const mixed = mixEDy(parallel, byTenor, wFrac());
   if (curveComplete(curveY)) {
-    const { top } = rolldownTable(curveY, eDy);
-    rec.rg2 = { version: 'v1-parallel', topTenor: top ? top.tenor : null, topReturnBp: top ? top.total : null, eDyBp: eDy == null ? null : round1(eDy) };
+    const { top } = rolldownTable(curveY, mixed);
+    const version = state.v2.w === 100 ? 'v1-parallel' : state.v2.w === 0 ? 'v2-scenario' : 'mixed';
+    rec.rg2 = { version, topTenor: top ? top.tenor : null, topReturnBp: top ? top.total : null, w: state.v2.w, eDy3YBp: mixed ? round1(mixed[TENOR3Y]) : null };
   }
   return { week, text: `window.RG_LEDGER.judgments[${JSON.stringify(week)}] = ${JSON.stringify(rec, null, 2)};\n` };
 }
@@ -358,7 +499,9 @@ export function initRg() {
   $('rg-rate-inputs').innerHTML = buildInputs('rate', RATE_KEYS, RATE_LABEL);
   $('rg-spread-inputs').innerHTML = buildInputs('spread', SPREAD_KEYS, SPREAD_LABEL);
   buildCurveInputs();
+  buildV2Blocks();
   const dateEl = $('rg-date'); if (dateEl) dateEl.value = state.date;
+  const wEl = $('rg-w'); if (wEl) { wEl.value = state.v2.w; const wv = $('rg-w-val'); if (wv) wv.textContent = state.v2.w + '%'; }
   writeInputs();
 
   renderGuide();
@@ -380,11 +523,42 @@ export function initRg() {
   $('rg-rate-inputs').addEventListener('input', onInput);
   $('rg-spread-inputs').addEventListener('input', onInput);
 
-  // 커브 입력(세션 전용, 비저장) — 값만 갱신 후 RG-2 재계산
+  // 커브(레벨) 입력(세션 전용, 비저장) — 값만 갱신 후 RG-2 재계산
   $('rg-curve-inputs').addEventListener('input', (e) => {
     const el = e.target.closest('[data-idx]'); if (!el) return;
     curveY[+el.dataset.idx] = el.value;   // 문자열 그대로(빈칸 유지), 저장하지 않음
     renderRolldown();
+  });
+
+  // v2 24칸 입력(숫자↔슬라이더 동기, 편집 시 source='user' + dot) — 파생 Δbp 라 작업본 저장
+  $('rg-v2-blocks').addEventListener('input', (e) => {
+    const el = e.target.closest('[data-dir][data-k]'); if (!el) return;
+    const dir = el.dataset.dir, k = +el.dataset.k;
+    let v = +el.value; if (!Number.isFinite(v)) v = 0; v = Math.max(-60, Math.min(60, v));
+    const cell = state.v2.cells[dir][k];
+    cell.v = v; cell.source = 'user';
+    const num = $(`rg-v2-${dir}-${k}`), rng = $(`rg-v2s-${dir}-${k}`);
+    if (el === rng && num) num.value = v; else if (el === num && rng) rng.value = v;
+    renderRolldown(); save();
+  });
+  // 시나리오별 "기본값 리셋" — 해당 시나리오 전 칸 source='default' 로 되돌리고 1층 재계산
+  $('rg-v2-blocks').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-reset]'); if (!b) return;
+    const dir = b.dataset.reset;
+    state.v2.cells[dir].forEach(c => { c.source = 'default'; });
+    renderRolldown(); save();
+  });
+  // 전체 리셋 — 24칸 전부 기본값
+  const resetAll = $('rg-v2-reset-all');
+  if (resetAll) resetAll.addEventListener('click', () => {
+    for (const dir of RATE_KEYS) state.v2.cells[dir].forEach(c => { c.source = 'default'; });
+    renderRolldown(); save();
+  });
+  // 혼합 w 슬라이더(0~100%) — 작업본 저장
+  if (wEl) wEl.addEventListener('input', () => {
+    let w = +wEl.value; if (!Number.isFinite(w)) w = 100; state.v2.w = Math.max(0, Math.min(100, w));
+    const wv = $('rg-w-val'); if (wv) wv.textContent = state.v2.w + '%';
+    renderRolldown(); save();
   });
 
   // 정규화 버튼(원클릭 파괴적 재기입)
@@ -400,11 +574,12 @@ export function initRg() {
   // 판단일
   if (dateEl) dateEl.addEventListener('input', () => { state.date = dateEl.value; save(); renderConfirmed(); });
 
-  // 초기화(기본값 복원)
+  // 초기화(기본값 복원) — 확률·판단일·v2(24칸+w) 전부 기본값
   $('rg-reset').addEventListener('click', () => {
     Object.assign(state, structuredClone(DEFAULTS));
     if (!state.date) { try { state.date = new Date().toISOString().slice(0, 10); } catch { state.date = ''; } }
     if (dateEl) dateEl.value = state.date;
+    if (wEl) { wEl.value = state.v2.w; const wv = $('rg-w-val'); if (wv) wv.textContent = state.v2.w + '%'; }
     writeInputs(); renderOutputs();
   });
 
