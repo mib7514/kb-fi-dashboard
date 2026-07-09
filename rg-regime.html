@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>레짐 판단 — 전향적 레짐 히트맵 + 플레이북 | FI Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --forecast: #f0883e;
+    --ok: #3fb950; --ext: #f85149;
+    --fav: 63,185,80; --neu: 88,166,255; --def: 248,81,73;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+
+  /* 해설 (On/Off·CB 패턴) */
+  .oo-explainer { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin: 0 0 18px; }
+  .oo-explainer > summary { cursor: pointer; padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--accent); list-style: none; user-select: none; }
+  .oo-explainer > summary::-webkit-details-marker { display: none; }
+  .oo-explainer > summary::before { content: "▸ "; color: var(--muted); }
+  .oo-explainer[open] > summary::before { content: "▾ "; }
+  .oo-explainer[open] > summary { border-bottom: 1px solid var(--border); }
+  .ex-body { padding: 14px 18px 18px; font-size: 13px; line-height: 1.75; max-width: 880px; }
+  .ex-body h4 { font-size: 12px; font-weight: 700; color: var(--text); margin: 16px 0 6px; }
+  .ex-body h4:first-child { margin-top: 0; }
+  .ex-body p { margin: 0 0 8px; }
+  .ex-body ul { margin: 6px 0 8px; padding-left: 20px; }
+  .ex-warn { border-left: 3px solid var(--forecast); background: #f0883e11; padding: 8px 12px; border-radius: 0 6px 6px 0; }
+
+  .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0 10px; }
+  .section-title .sub { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 16px; }
+  .note { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.7; }
+  .note b { color: var(--text); }
+  .empty { color: var(--muted); font-size: 13px; padding: 14px; text-align: center; }
+  .warn-text { color: var(--forecast); }
+
+  .badge { font-size: 11px; font-family: var(--mono); padding: 3px 9px; border-radius: 5px; border: 1px solid var(--border-2); }
+  .badge.ok { color: var(--ok); border-color: #3fb95055; background: #3fb95011; }
+  .badge.warn { color: var(--forecast); border-color: #f0883e55; background: #f0883e11; }
+  .btn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--text); font-size: 12px; padding: 7px 13px; border-radius: 7px; cursor: pointer; font-family: var(--sans); font-weight: 600; }
+  .btn:hover:not(:disabled) { border-color: var(--accent); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn.sm { padding: 6px 11px; font-size: 11.5px; }
+  .btn.accent { background: var(--accent); color: #08111f; border-color: var(--accent); }
+  .status { margin-top: 10px; font-size: 12px; font-family: var(--mono); color: var(--muted); min-height: 16px; }
+  .status.ok { color: var(--ok); } .status.bad { color: var(--ext); }
+
+  /* 입력 가이드 */
+  .guide { font-size: 12px; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 13px; margin-bottom: 6px; }
+  .guide b { color: var(--accent); }
+  .guide .guide-src { color: var(--muted); font-size: 11px; }
+
+  /* 확률 입력 축 */
+  .axes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .axes { grid-template-columns: 1fr; } }
+  .axis-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .axis-title { font-size: 13px; font-weight: 600; }
+  .axis-ctrl { display: flex; align-items: center; gap: 7px; }
+  .p-cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .p-cell { background: var(--bg); border: 1px solid var(--border-2); border-radius: 8px; padding: 9px 10px; }
+  .p-cell-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 8px; }
+  .p-dir { font-size: 12px; color: var(--muted); }
+  .p-num { width: 62px; background: var(--panel-2); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 5px 7px; font-family: var(--mono); font-size: 13px; text-align: right; }
+  .p-num:focus { outline: none; border-color: var(--accent); }
+  .p-range { width: 100%; accent-color: var(--accent); }
+
+  /* 히트맵 */
+  .hm { display: grid; grid-template-columns: 128px repeat(3, 1fr); gap: 6px; }
+  .hm-corner { }
+  .hm-head { font-size: 11px; color: var(--muted); text-align: center; align-self: end; padding-bottom: 4px; font-weight: 600; }
+  .hm-rowhead { font-size: 12px; color: var(--muted); display: flex; align-items: center; font-weight: 600; }
+  .hm-cell { position: relative; border: 1px solid var(--border-2); border-radius: 8px; padding: 12px 10px; min-height: 78px;
+    background: rgba(var(--rgb), var(--a)); display: flex; flex-direction: column; justify-content: center; gap: 3px; }
+  .hm-cell.st-fav { --rgb: var(--fav); } .hm-cell.st-neu { --rgb: var(--neu); } .hm-cell.st-def { --rgb: var(--def); }
+  .hm-cell.hm-mode { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .hm-p { font-family: var(--mono); font-size: 18px; font-weight: 700; }
+  .hm-name { font-size: 11px; color: var(--text); opacity: 0.92; }
+  .hm-tag { position: absolute; top: 6px; right: 7px; font-size: 9px; padding: 1px 5px; border-radius: 4px; background: var(--accent); color: #08111f; font-weight: 700; }
+
+  .mode-line { display: flex; align-items: baseline; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  .mode-name { font-size: 18px; font-weight: 700; padding: 2px 10px; border-radius: 6px; }
+  .mode-name.st-fav { background: rgba(var(--fav), 0.18); color: var(--ok); }
+  .mode-name.st-neu { background: rgba(var(--neu), 0.18); color: var(--accent); }
+  .mode-name.st-def { background: rgba(var(--def), 0.18); color: var(--ext); }
+  .mode-nums { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+
+  /* 플레이북 */
+  .pb-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .pb-tbl th { text-align: left; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; padding: 6px 10px; font-weight: 600; border-bottom: 1px solid var(--border); }
+  .pb-tbl td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .pb-tbl tr { border-left: 3px solid transparent; }
+  .pb-tbl tr.st-fav { border-left-color: var(--ok); background: rgba(var(--fav), 0.05); }
+  .pb-tbl tr.st-neu { border-left-color: var(--accent); background: rgba(var(--neu), 0.04); }
+  .pb-tbl tr.st-def { border-left-color: var(--ext); background: rgba(var(--def), 0.05); }
+  .pb-cell { font-family: var(--mono); color: var(--muted); white-space: nowrap; }
+  .pb-name { font-weight: 700; }
+  .pb-play { color: var(--text); opacity: 0.9; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 2px 0; font-size: 11.5px; color: var(--muted); }
+  .lg { display: inline-flex; align-items: center; gap: 6px; }
+  .lg-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .lg.st-fav .lg-dot { background: var(--ok); } .lg.st-neu .lg-dot { background: var(--accent); } .lg.st-def .lg-dot { background: var(--ext); }
+
+  /* 확정 */
+  .cf { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .cf.latest { border-color: var(--accent); }
+  .cf-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-bottom: 4px; }
+  .cf-body { font-size: 12.5px; }
+  .cmt-tag { font-size: 9px; padding: 1px 6px; border-radius: 4px; background: var(--accent); color: #08111f; font-weight: 700; margin-left: 4px; }
+  .date-in { background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 7px; padding: 7px 9px; font-family: var(--mono); font-size: 13px; }
+  .date-in:focus { outline: none; border-color: var(--accent); }
+  textarea { width: 100%; background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 7px; padding: 9px 11px; font-family: var(--mono); font-size: 12px; resize: vertical; margin-top: 8px; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">
+    <span class="step">RG-1</span>
+    <span class="ctx">전향적 레짐 히트맵 · 확률 입력형 · 근거 미기록(숫자만)</span>
+  </div>
+  <h1>전향적 레짐 판단</h1>
+  <p class="tagline">금리·스프레드 방향 확률 → 9셀 결합확률 히트맵으로 향후 1개월 레짐을 전향적으로 판단합니다. 근거(why)는 기록하지 않고 무엇을(what) 예상하는가만 — 주간 확정 후 1개월 뒤 실현값과 대조(채점은 RG-4).</p>
+
+  <!-- 해설 -->
+  <details class="oo-explainer" id="rg-explainer">
+    <summary>❓ 이 화면 읽는 법 — 9셀 히트맵이 뭔가요?</summary>
+    <div class="ex-body">
+      <h4>무엇을 입력하나</h4>
+      <p>향후 1개월 <b>금리 방향</b> 확률 3개(하락/보합/상승, 국고 3Y 기준)와 <b>스프레드 방향</b> 확률 3개(축소/보합/확대, 회사채 AA- 3Y − 국고 3Y 기준). 각 축 합계는 100%가 되어야 확정할 수 있습니다. 슬라이더를 움직여도 다른 칸은 자동으로 바뀌지 않습니다(수동 입력).</p>
+      <h4>어떻게 판단으로 바뀌나</h4>
+      <p>9셀 결합확률 = P(금리 i) × P(스프레드 j). 확률이 가장 높은 셀이 <b>최빈 레짐</b>이며, 하단 플레이북에 국면별 정석 대응이 상시 표시됩니다.</p>
+      <h4>보합 기준</h4>
+      <p>"보합"은 1개월 변화의 절댓값이 캘리브레이션 보합밴드보다 작은 경우입니다(입력 가이드 참조). 입력 시와 채점 시 동일 밴드를 씁니다.</p>
+      <h4>주의</h4>
+      <p class="ex-warn">두 축은 <b>독립</b>으로 곱합니다(v1 단순화). 실제로 금리와 스프레드는 상관될 수 있으며, 조건부 확률은 후속 버전 검토 항목입니다.</p>
+    </div>
+  </details>
+
+  <!-- 입력 가이드 -->
+  <div class="guide" id="rg-guide"></div>
+
+  <!-- 입력 -->
+  <div class="section-title">확률 입력 <span class="sub">— 각 축 합계 100% (수동 · 자동조정 없음)</span></div>
+  <div class="card">
+    <div class="axes">
+      <div>
+        <div class="axis-head">
+          <span class="axis-title">금리 방향 <span style="color:var(--muted);font-weight:400">· 국고 3Y</span></span>
+          <div class="axis-ctrl"><span class="badge" id="rg-rate-sum">합계 —</span><button class="btn sm" id="rg-rate-norm">정규화</button></div>
+        </div>
+        <div class="p-cells" id="rg-rate-inputs"></div>
+      </div>
+      <div>
+        <div class="axis-head">
+          <span class="axis-title">스프레드 방향 <span style="color:var(--muted);font-weight:400">· 회사채 AA- 3Y</span></span>
+          <div class="axis-ctrl"><span class="badge" id="rg-spread-sum">합계 —</span><button class="btn sm" id="rg-spread-norm">정규화</button></div>
+        </div>
+        <div class="p-cells" id="rg-spread-inputs"></div>
+      </div>
+    </div>
+    <div class="row-between" style="margin-top:14px">
+      <span class="note" style="margin:0">정규화 버튼은 입력값 자체를 합계 100%로 재기입합니다(비례 배분). 정규화 전에는 확정 불가.</span>
+      <button class="btn sm" id="rg-reset">기본값 복원</button>
+    </div>
+  </div>
+
+  <!-- 히트맵 -->
+  <div class="section-title">9셀 결합확률 히트맵 <span class="sub">— P(금리)×P(스프레드), 색 농도=확률, 최빈 셀 강조</span></div>
+  <div class="card">
+    <div class="hm" id="rg-heatmap"></div>
+    <div class="mode-line" id="rg-mode"></div>
+    <div class="note">9셀 결합확률은 두 축의 <b>독립 곱</b>입니다(v1 명시적 한계). 셀 색은 국면 성격(우호/중립/방어), 농도는 확률입니다.</div>
+  </div>
+
+  <!-- 플레이북 -->
+  <div class="section-title">플레이북 전문 <span class="sub">— 9국면 정석 대응 (상시 표시)</span></div>
+  <div class="card" style="overflow-x:auto">
+    <table class="pb-tbl" id="rg-playbook"></table>
+    <div class="legend" id="rg-legend"></div>
+    <div class="note">이론·교과서적 정석입니다. 특정 배분 테이블·레버리지 가이드는 포함하지 않습니다.</div>
+  </div>
+
+  <!-- 확정 -->
+  <div class="section-title">주간 판단 확정 <span class="sub">— data/rg-ledger.js 원장 append</span></div>
+  <div class="card">
+    <div class="row-between">
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:12px;color:var(--muted)">판단일</label>
+        <input type="date" class="date-in" id="rg-date">
+        <button class="btn accent" id="rg-confirm">확정 → 스니펫 생성</button>
+      </div>
+      <span class="note" id="rg-confirm-hint" style="margin:0"></span>
+    </div>
+    <div id="rg-snippet-wrap" style="display:none">
+      <textarea id="rg-snippet" rows="9" readonly></textarea>
+      <div class="row-between" style="margin-top:8px">
+        <button class="btn sm" id="rg-snippet-copy">복사</button>
+        <span class="note" style="margin:0">복사 → data/rg-ledger.js 끝에 붙여넣기 → 커밋 → 재로드 시 아래 확정본에 표시.</span>
+      </div>
+    </div>
+    <div class="status" id="rg-confirm-status"></div>
+  </div>
+
+  <div class="section-title">확정본 <span class="sub">— data/rg-ledger.js 로드분</span></div>
+  <div class="card"><div id="rg-confirmed"></div></div>
+</div>
+
+<!-- 데이터: 캘리브레이션(밴드) + 확정 원장 -->
+<script src="data/rg-calib.js"></script>
+<script src="data/rg-ledger.js"></script>
+<!-- 공통 내비게이션 -->
+<script type="module" src="js/nav.js"></script>
+<!-- app -->
+<script type="module">
+  import { initRg } from './js/rg-ui.js';
+  initRg();
+</script>
+</body>
+</html>
