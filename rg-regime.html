@@ -164,6 +164,27 @@
   .v2-mix-row .btn { margin-left: auto; }
   .rd-edy { margin-top: 14px; }
 
+  /* RG-3 섹터 보드 */
+  .sec-row { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 9px; background: var(--panel-2); }
+  .sec-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .sec-name { font-size: 13px; font-weight: 700; }
+  .sec-share { color: var(--forecast); font-weight: 700; }
+  .sec-note { font-size: 11px; color: var(--muted); }
+  .sec-band { font-size: 11px; color: var(--accent); font-family: var(--mono); }
+  .sec-head .badge { margin-left: auto; }
+  .sec-inputs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
+  .sec-cell { display: flex; flex-direction: column; gap: 4px; }
+  .sec-dir { font-size: 11px; color: var(--muted); }
+  .sec-num { width: 100%; background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 5px 7px; font-family: var(--mono); font-size: 12.5px; text-align: right; }
+  .sec-num:focus { outline: none; border-color: var(--accent); }
+  .sec-range { width: 100%; accent-color: var(--accent); }
+  .sec-outrow { display: flex; align-items: center; gap: 12px; }
+  .sec-bar { flex: 1; height: 14px; border-radius: 4px; overflow: hidden; display: flex; border: 1px solid var(--border-2); }
+  .sec-bar .sb { height: 100%; display: inline-block; }
+  .sec-bar .sb.narrow { background: var(--ok); } .sec-bar .sb.flat { background: var(--border-2); } .sec-bar .sb.wide { background: var(--ext); }
+  .sec-eds { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 130px; text-align: right; }
+  .sec-eds b.pos { color: var(--ok); } .sec-eds b.neg { color: var(--ext); }
+
   /* 확정 */
   .cf { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   .cf.latest { border-color: var(--accent); }
@@ -281,6 +302,16 @@
     <div class="section-title" style="margin:16px 0 8px">순위 <span class="sub">— 혼합 기대수익 내림차순</span></div>
     <div style="overflow-x:auto"><table class="out-tbl" id="rg-rd-rank"></table></div>
     <div class="note">롤다운 = 착지커브를 현재커브로 가정. 커브이동 = w×평행(v1) + (1−w)×내전망(v2), 구간별 E[Δy]에 D′(≈잔존만기) 곱. v2 기본값은 9레짐 조건부 역사 중위 Δ(스프레드 확률 가중)이며, RG-1 스프레드 확률 변경 시 <b>수정 안 한 칸만</b> 실시간 갱신됩니다(수정 칸은 dot 표시·유지). 듀레이션은 만기 근사(쿠폰 미반영). <b>국고 커브(레벨)는 저장되지 않으며 새로고침 시 소실됩니다.</b> v2 전망치(Δbp)는 작업본에 저장됩니다.</div>
+  </div>
+
+  <!-- RG-3 섹터 스프레드 보드 -->
+  <div class="section-title">섹터 스프레드 보드 <span class="sub">— RG-3 · 6섹터 방향 확률(축소/보합/확대) → 기대 Δs 순위</span></div>
+  <div class="card">
+    <div class="note" style="margin:0 0 12px">각 섹터 방향 확률을 입력하면 기대 스프레드 변화 E[Δs] = δ×(P확대 − P축소)로 매력 순위를 냅니다(δ = 섹터 보합밴드). <b>축소 기대(음수)일수록 매력 상위.</b> <span class="sec-share">⇄</span> 표시된 <b>국고채·회사채 행은 RG-1 축과 동일 입력</b>(국고채=금리 축, 회사채=스프레드 축)이라 어느 쪽에서 고쳐도 즉시 양쪽에 반영됩니다.</div>
+    <div id="rg-sec-rows"></div>
+    <div class="section-title" style="margin:16px 0 8px">매력 순위 <span class="sub">— 기대 Δs 오름차순(축소 기대 상위)</span></div>
+    <div style="overflow-x:auto"><table class="out-tbl" id="rg-sec-rank"></table></div>
+    <div class="note">국고채 밴드(±4.6bp)는 금리축(국고 3Y 수익률 변화)과 동일 계열입니다 — 국고 행은 RG-1 금리 축과 같은 입력이며 <b>하락=축소 열, 상승=확대 열</b>로 매핑됩니다("축소/확대"는 수익률 방향). 확률은 각 섹터 합계 100%여야 확정됩니다.</div>
   </div>
 
   <!-- 확정 -->

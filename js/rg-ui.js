@@ -9,6 +9,10 @@ import {
   TENORS as RD_TENORS, TENOR3Y, curveComplete, expectedDyParallel, rolldownTable, decompose,
   conditionalDefaultCurves, expectedDyByTenor, mixEDy,
 } from './rg-rolldown.js';
+import {
+  SECTORS, SECTOR_DIRS, SECTOR_DIR_LABEL, sectorProbs, setSectorProb, sectorBandBp, expectedDs,
+  buildSectorRows, rankByAttractiveness,
+} from './rg-sector.js';
 
 const $ = id => document.getElementById(id);
 const LS_DRAFT = 'rg:draft';
@@ -46,9 +50,13 @@ function freshV2() {
   return { cells: { down: mk(), flat: mk(), up: mk() }, w: 100 };  // w=100 → 평행(v1) 출발
 }
 
+// RG-3 섹터 상태: 국고채→state.rate, 회사채→state.spread 공유 → state.sectors 엔 비공유 4섹터만.
+const NONSHARED_SECTORS = SECTORS.filter(s => !s.share).map(s => s.key);
+function freshSectors() { const o = {}; for (const k of NONSHARED_SECTORS) o[k] = { narrow: 33, flat: 34, wide: 33 }; return o; }
+
 // 기본값 = 합계 100 인 중립 prior(즉시 유효 히트맵 + OK 뱃지)
-const DEFAULTS = { rate: { down: 33, flat: 34, up: 33 }, spread: { narrow: 33, flat: 34, wide: 33 }, date: '', v2: freshV2() };
-const state = { rate: {}, spread: {}, date: '', v2: freshV2() };
+const DEFAULTS = { rate: { down: 33, flat: 34, up: 33 }, spread: { narrow: 33, flat: 34, wide: 33 }, date: '', v2: freshV2(), sectors: freshSectors() };
+const state = { rate: {}, spread: {}, date: '', v2: freshV2(), sectors: freshSectors() };
 
 const round1 = v => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 const fmtP = v => (Number.isFinite(v) ? v.toFixed(1) : '—');
@@ -94,6 +102,8 @@ function load() {
     if (typeof s.date === 'string') state.date = s.date;
     const v2 = validV2(s.v2);
     if (v2) state.v2 = v2;                    // ⑥ 작업본(24칸+w) 복원 — 우선
+    const sec = validSectors(s.sectors);
+    if (sec) state.sectors = sec;             // RG-3 섹터 작업본 복원
   } else {
     const carry = ledgerCarryV2();            // 2층: 전주 확정 rg2v2 이월(작업본 없을 때만)
     if (carry) state.v2 = carry;
@@ -112,6 +122,17 @@ function validV2(v2) {
       v: (c && Number.isFinite(+c.v)) ? +c.v : '',
       source: (c && c.source === 'user') ? 'user' : 'default',
     }));
+  }
+  return out;
+}
+
+// 저장 sectors 검증 → 정규화(비공유 5섹터, 각 narrow/flat/wide 수치). 실패 시 null.
+function validSectors(sec) {
+  if (!sec || typeof sec !== 'object') return null;
+  const out = freshSectors();
+  for (const k of NONSHARED_SECTORS) {
+    const o = sec[k];
+    if (o && SECTOR_DIRS.every(d => Number.isFinite(+o[d]))) out[k] = { narrow: +o.narrow, flat: +o.flat, wide: +o.wide };
   }
   return out;
 }
@@ -195,6 +216,84 @@ function buildV2Blocks() {
     </div>`).join('');
 }
 
+// ── RG-3 섹터 보드 ──
+function calibBandsObj() { return window.RG_CALIB && window.RG_CALIB.bands ? window.RG_CALIB.bands : null; }
+
+// 섹터 6행(1회 생성). 회사채 행은 스프레드 축 공유(⇄ 표기). 입력=지속 요소, 출력(바·E[Δs])=갱신.
+function buildSectorRowsDom() {
+  $('rg-sec-rows').innerHTML = SECTORS.map((s, si) => {
+    const cells = SECTOR_DIRS.map(dir => `
+      <div class="sec-cell">
+        <span class="sec-dir">${SECTOR_DIR_LABEL[dir]}</span>
+        <input type="number" min="0" max="100" step="1" class="sec-num" id="rg-sec-${si}-${dir}" data-si="${si}" data-dir="${dir}">
+        <input type="range" min="0" max="100" step="0.5" class="sec-range" id="rg-secs-${si}-${dir}" data-si="${si}" data-dir="${dir}">
+      </div>`).join('');
+    return `<div class="sec-row" data-si="${si}">
+      <div class="sec-head">
+        <span class="sec-name">${s.key}${s.share ? ' <span class="sec-share">⇄</span>' : ''}</span>
+        ${s.note ? `<span class="sec-note">${s.note}</span>` : ''}
+        <span class="sec-band" id="rg-sec-band-${si}"></span>
+        <span class="badge" id="rg-sec-sum-${si}">합계 —</span>
+        <button class="btn sm" id="rg-sec-norm-${si}" data-si="${si}">정규화</button>
+      </div>
+      <div class="sec-inputs">${cells}</div>
+      <div class="sec-outrow"><div class="sec-bar" id="rg-sec-bar-${si}"></div><span class="sec-eds" id="rg-sec-eds-${si}"></span></div>
+    </div>`;
+  }).join('');
+}
+
+// 입력 값 DOM 동기(포커스 칸 제외 → 커서 보존). 회사채 행은 state.spread 를 읽으므로 양방향 미러가 됨.
+function writeSectorInputs() {
+  const active = (typeof document !== 'undefined') ? document.activeElement : null;
+  SECTORS.forEach((s, si) => {
+    const probs = sectorProbs(s.key, state);
+    SECTOR_DIRS.forEach(dir => {
+      const num = $(`rg-sec-${si}-${dir}`), rng = $(`rg-secs-${si}-${dir}`);
+      if (num && num !== active) num.value = probs[dir];
+      if (rng && rng !== active) rng.value = Number.isFinite(+probs[dir]) ? +probs[dir] : 0;
+    });
+  });
+}
+
+function renderSecBar(si, probs) {
+  const s = (+probs.narrow || 0) + (+probs.flat || 0) + (+probs.wide || 0);
+  const pct = v => (s > 0 ? (v / s * 100) : 0);
+  $(`rg-sec-bar-${si}`).innerHTML =
+    `<span class="sb narrow" style="width:${pct(+probs.narrow || 0).toFixed(1)}%" title="축소 ${fmtP(pct(+probs.narrow || 0))}%"></span>`
+    + `<span class="sb flat" style="width:${pct(+probs.flat || 0).toFixed(1)}%" title="보합 ${fmtP(pct(+probs.flat || 0))}%"></span>`
+    + `<span class="sb wide" style="width:${pct(+probs.wide || 0).toFixed(1)}%" title="확대 ${fmtP(pct(+probs.wide || 0))}%"></span>`;
+}
+
+function renderSectorsDisplay() {
+  const bands = calibBandsObj();
+  SECTORS.forEach((s, si) => {
+    const probs = sectorProbs(s.key, state);
+    const st = probStatus([probs.narrow, probs.flat, probs.wide]);
+    setBadge(`rg-sec-sum-${si}`, st);
+    const nb = $(`rg-sec-norm-${si}`); if (nb) nb.disabled = !st.needNorm;
+    const bandBp = sectorBandBp(s.key, bands);
+    $(`rg-sec-band-${si}`).innerHTML = bandBp != null ? `밴드 ±${bandBp}bp` : '밴드 —';
+    renderSecBar(si, probs);
+    const eDs = expectedDs(probs, bandBp);
+    // 축소(음수)=매력 → pos(초록), 확대(양수)=neg(빨강)
+    $(`rg-sec-eds-${si}`).innerHTML = eDs == null ? 'E[Δs] —'
+      : `E[Δs] <b class="${eDs < 0 ? 'pos' : eDs > 0 ? 'neg' : ''}">${fmtP(eDs)}bp</b>`;
+  });
+  // 순위표(매력=축소 기대 상위) — 순수 buildSectorRows(state,bands) 재사용
+  const ranked = rankByAttractiveness(buildSectorRows(state, bands));
+  $('rg-sec-rank').innerHTML =
+    `<thead><tr><th class="l">순위</th><th class="l">섹터</th><th>축소</th><th>보합</th><th>확대</th><th>E[Δs]</th></tr></thead>
+     <tbody>${ranked.map(r => {
+      const p = r.probs, s = (+p.narrow || 0) + (+p.flat || 0) + (+p.wide || 0);
+      const pc = v => (s > 0 ? fmtP(v / s * 100) : '—');
+      return `<tr><td class="l">${r.rank}</td><td class="l">${r.key}${r.shared ? ' <span class="sec-share">⇄</span>' : ''}</td>
+        <td>${pc(+p.narrow || 0)}</td><td>${pc(+p.flat || 0)}</td><td>${pc(+p.wide || 0)}</td>
+        <td class="${r.eDs < 0 ? 'pos' : r.eDs > 0 ? 'neg' : ''}">${fmtP(r.eDsR)}</td></tr>`;
+    }).join('')}</tbody>`;
+}
+
+function renderSectors() { writeSectorInputs(); renderSectorsDisplay(); }
+
 // ── 렌더: 뱃지 + 히트맵 + 최빈 + 확정 가능여부 ──
 function renderOutputs() {
   const rateArr = RATE_KEYS.map(k => state.rate[k]);
@@ -221,15 +320,23 @@ function renderOutputs() {
        <span class="mode-nums">최빈 셀 ${fmtP(mode.p)}% · 상위 2셀 합 ${fmtP(top2Sum(cells))}%</span>`
     : '—';
 
-  // 확정 가능: 양 축 합계 OK
-  const canConfirm = rSt.ok && sSt.ok;
-  $('rg-confirm').disabled = !canConfirm;
-  $('rg-confirm-hint').textContent = canConfirm
-    ? '두 축 합계 100% — 확정 가능.'
-    : '두 축 합계가 각각 100%가 되어야 확정할 수 있습니다(정규화 버튼 사용).';
-
-  renderRolldown();  // RG-1 확률 변경 → 커브이동 성분 실시간 갱신
+  refreshConfirmGate();       // 금리·스프레드 축 + 6섹터 합계 OK 여야 확정
+  renderRolldown();           // RG-1 확률 변경 → 커브이동 성분 실시간 갱신
+  renderSectors();            // 회사채 행 = 스프레드 축 미러 → 즉시 갱신
   save();
+}
+
+// 확정 가능 = 금리·스프레드 축 + 비공유 5섹터 모두 합계 100%(회사채는 스프레드 축과 동일)
+function allSectorsOk() {
+  return NONSHARED_SECTORS.every(k => probStatus([state.sectors[k].narrow, state.sectors[k].flat, state.sectors[k].wide]).ok);
+}
+function refreshConfirmGate() {
+  const rSt = probStatus(rateArr()), sSt = probStatus(spreadArr());
+  const ok = rSt.ok && sSt.ok && allSectorsOk();
+  $('rg-confirm').disabled = !ok;
+  $('rg-confirm-hint').textContent = ok
+    ? '금리·스프레드 축 + 6섹터 합계 100% — 확정 가능.'
+    : '금리·스프레드 축과 6섹터가 각각 합계 100%가 되어야 확정할 수 있습니다(정규화 버튼).';
 }
 
 // ── RG-2: 커브이동 E[Δy](평행 v1 + 시나리오 v2 혼합) + 3성분 분해 막대 + 순위 ──
@@ -448,6 +555,16 @@ function buildSnippet() {
     baseline: { bandKtb3yBp: b.ktb3y, bandRepSpreadBp: b.repSpread, calib: b.period },
     confirmedAt: new Date().toISOString(),
   };
+  // RG-3 섹터: 정규화 확률 + 기대 Δs(bp). 회사채는 스프레드 축과 동일(shared 표기).
+  const bands = calibBandsObj();
+  rec.sectors = {};
+  for (const s of SECTORS) {
+    const p = sectorProbs(s.key, state);
+    const arr = normalizeInPlace([p.narrow, p.flat, p.wide]);
+    const nobj = { narrow: arr[0], flat: arr[1], wide: arr[2] };
+    rec.sectors[s.key] = { probs: nobj, eDsBp: round1(expectedDs(nobj, sectorBandBp(s.key, bands))), shared: s.share ? true : undefined, sharedWith: s.share || undefined };
+  }
+
   // RG-2 v2 파생값(24칸 Δbp + 소스 + w) — 커브 원본(레벨) 미포함(§0.3).
   const curves = {}, sources = {};
   for (const dir of RATE_KEYS) {
@@ -500,6 +617,7 @@ export function initRg() {
   $('rg-spread-inputs').innerHTML = buildInputs('spread', SPREAD_KEYS, SPREAD_LABEL);
   buildCurveInputs();
   buildV2Blocks();
+  buildSectorRowsDom();
   const dateEl = $('rg-date'); if (dateEl) dateEl.value = state.date;
   const wEl = $('rg-w'); if (wEl) { wEl.value = state.v2.w; const wv = $('rg-w-val'); if (wv) wv.textContent = state.v2.w + '%'; }
   writeInputs();
@@ -559,6 +677,28 @@ export function initRg() {
     let w = +wEl.value; if (!Number.isFinite(w)) w = 100; state.v2.w = Math.max(0, Math.min(100, w));
     const wv = $('rg-w-val'); if (wv) wv.textContent = state.v2.w + '%';
     renderRolldown(); save();
+  });
+
+  // RG-3 섹터 입력(숫자↔슬라이더 동기). 공유 섹터(국고→금리축, 회사→스프레드축) → RG-1/RG-2 전체 재계산.
+  $('rg-sec-rows').addEventListener('input', (e) => {
+    const el = e.target.closest('[data-si][data-dir]'); if (!el) return;
+    const si = +el.dataset.si, dir = el.dataset.dir, s = SECTORS[si];
+    let v = +el.value; if (!Number.isFinite(v)) v = 0; v = Math.max(0, Math.min(100, v));
+    setSectorProb(s.key, dir, v, state);                      // 공유면 state.rate/spread, 아니면 state.sectors
+    const num = $(`rg-sec-${si}-${dir}`), rng = $(`rg-secs-${si}-${dir}`);
+    if (el === rng && num) num.value = v; else if (el === num && rng) rng.value = v;
+    if (s.share) { writeInputs(); renderOutputs(); }          // ⇄ RG-1 축 동기 + 히트맵·커브이동 갱신
+    else { renderSectors(); refreshConfirmGate(); save(); }
+  });
+  // 섹터별 정규화 버튼
+  $('rg-sec-rows').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-si]'); if (!b) return;
+    const si = +b.dataset.si, s = SECTORS[si];
+    const p = sectorProbs(s.key, state);
+    const out = normalizeInPlace([p.narrow, p.flat, p.wide]);
+    SECTOR_DIRS.forEach((dir, i) => { setSectorProb(s.key, dir, out[i], state); });
+    if (s.share) { writeInputs(); renderOutputs(); }
+    else { writeSectorInputs(); renderSectors(); refreshConfirmGate(); save(); }
   });
 
   // 정규화 버튼(원클릭 파괴적 재기입)
