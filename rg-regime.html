@@ -113,6 +113,34 @@
   .lg-dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
   .lg.st-fav .lg-dot { background: var(--ok); } .lg.st-neu .lg-dot { background: var(--accent); } .lg.st-def .lg-dot { background: var(--ext); }
 
+  /* RG-2 롤다운 */
+  .cv-cells { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+  @media (max-width: 720px) { .cv-cells { grid-template-columns: repeat(4, 1fr); } }
+  .cv-cell { display: flex; flex-direction: column; gap: 4px; }
+  .cv-cell label { font-size: 11px; color: var(--muted); font-family: var(--mono); text-align: center; }
+  .cv-num { width: 100%; background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 6px 6px; font-family: var(--mono); font-size: 12.5px; text-align: right; }
+  .cv-num:focus { outline: none; border-color: var(--accent); }
+  .rd-edy { margin-top: 12px; font-size: 13px; font-family: var(--mono); color: var(--text); }
+  .rd-edy b { color: var(--accent); } .rd-edy .rd-note { color: var(--muted); font-size: 11px; font-family: var(--sans); }
+  .rd-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-bottom: 8px; }
+  .rd-row { display: grid; grid-template-columns: 54px 1fr 62px; align-items: center; gap: 10px; padding: 3px 0; }
+  .rd-row.top { background: rgba(88,166,255,0.07); border-radius: 6px; }
+  .rd-label { font-family: var(--mono); font-size: 12px; color: var(--text); }
+  .rd-tag { font-size: 9px; padding: 1px 5px; border-radius: 4px; background: var(--accent); color: #08111f; font-weight: 700; }
+  .rd-track { display: flex; height: 22px; border-left: 1px solid var(--border-2); }
+  .rd-neg { width: 50%; display: flex; flex-direction: row-reverse; justify-content: flex-start; overflow: hidden; }
+  .rd-pos { width: 50%; display: flex; overflow: hidden; }
+  .rd-seg { height: 100%; display: inline-block; }
+  .rd-seg.seg-carry { background: var(--accent); } .rd-seg.seg-roll { background: var(--ok); } .rd-seg.seg-move { background: var(--forecast); }
+  .rd-seg.neg { opacity: 0.5; background-image: repeating-linear-gradient(45deg, rgba(0,0,0,0.35) 0 3px, transparent 3px 6px); }
+  .rd-total { font-family: var(--mono); font-size: 12.5px; text-align: right; }
+  .out-tbl { width: 100%; border-collapse: collapse; }
+  .out-tbl th, .out-tbl td { padding: 7px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12.5px; text-align: right; }
+  .out-tbl th { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600; }
+  .out-tbl th.l, .out-tbl td.l { text-align: left; }
+  .out-tbl tr.top td { background: rgba(88,166,255,0.08); }
+  .out-tbl .pos { color: var(--ok); } .out-tbl .neg { color: var(--ext); }
+
   /* 확정 */
   .cf { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
   .cf.latest { border-color: var(--accent); }
@@ -192,6 +220,28 @@
     <table class="pb-tbl" id="rg-playbook"></table>
     <div class="legend" id="rg-legend"></div>
     <div class="note">이론·교과서적 정석입니다. 특정 배분 테이블·레버리지 가이드는 포함하지 않습니다.</div>
+  </div>
+
+  <!-- RG-2 롤다운 탐색기 -->
+  <div class="section-title">롤다운 탐색기 <span class="sub">— RG-2 v1 · 1개월 보유 구간별 기대수익(bp) = 캐리 + 롤다운 + 커브이동</span></div>
+  <div class="card">
+    <div class="row-between" style="margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600">국고 커브 입력 <span style="color:var(--muted);font-weight:400">· 구간별 민평 수익률(%)</span></span>
+      <span class="badge warn" title="§0.3 라이선스 원칙">세션 전용 · 저장되지 않음</span>
+    </div>
+    <div class="cv-cells" id="rg-curve-inputs"></div>
+    <div class="rd-edy"><span id="rg-edy"></span> <span class="badge ok" style="margin-left:8px">평행이동 가정 (v1)</span></div>
+    <div class="section-title" style="margin:18px 0 8px">구간별 기대수익 <span class="sub">— 캐리 / 롤다운 / 커브이동 3성분 (좌=음수, 우=양수)</span></div>
+    <div class="rd-legend">
+      <span class="lg"><span class="lg-dot" style="background:var(--accent)"></span>캐리</span>
+      <span class="lg"><span class="lg-dot" style="background:var(--ok)"></span>롤다운</span>
+      <span class="lg"><span class="lg-dot" style="background:var(--forecast)"></span>커브이동</span>
+      <span class="lg" style="color:var(--muted)">· 좌측(빗금)=음수 성분</span>
+    </div>
+    <div id="rg-rd-bars"></div>
+    <div class="section-title" style="margin:16px 0 8px">순위 <span class="sub">— 기대수익 내림차순</span></div>
+    <div style="overflow-x:auto"><table class="out-tbl" id="rg-rd-rank"></table></div>
+    <div class="note">롤다운 = 착지커브를 현재커브로 가정(커브를 타고 내려오며 얻는 수익). 커브이동 = 평행 E[Δy]를 전 구간 동일 적용, 성분은 D′(≈잔존만기)에 비례. 듀레이션은 만기 근사(쿠폰 미반영, v1). <b>커브 원본은 저장되지 않으며 새로고침 시 소실됩니다.</b></div>
   </div>
 
   <!-- 확정 -->
