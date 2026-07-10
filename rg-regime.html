@@ -156,6 +156,22 @@
   .v2-num { width: 100%; background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 5px 5px; font-family: var(--mono); font-size: 12px; text-align: right; }
   .v2-num:focus { outline: none; border-color: var(--accent); }
   .v2-range { width: 100%; accent-color: var(--forecast); }
+  .v2-num:disabled, .v2-range:disabled { opacity: 0.5; cursor: default; }
+
+  /* v2 모드 토글 + 앵커 착지금리 입력 */
+  .v2-modebar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+  .v2-toggle { font-size: 12.5px; color: var(--text); display: inline-flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; }
+  .v2-toggle input { accent-color: var(--accent); }
+  .v2-toggle-sub { color: var(--muted); font-weight: 400; }
+  .v2-method { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+  .v2-anchors { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; padding: 4px 0 12px; margin-bottom: 10px; border-bottom: 1px dashed var(--border); }
+  .v2-anc-cell { display: flex; flex-direction: column; gap: 4px; }
+  .v2-anc-cell label { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .v2-anc-num { width: 118px; background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 6px 8px; font-family: var(--mono); font-size: 13px; text-align: right; }
+  .v2-anc-num:focus { outline: none; border-color: var(--accent); }
+  .v2-anc-num:disabled { opacity: 0.45; cursor: not-allowed; }
+  .v2-anc-delta { font-size: 11px; color: var(--forecast); font-family: var(--mono); }
+  .v2-anchors .btn { margin-left: auto; align-self: center; }
   .v2-mix { margin-top: 12px; padding: 10px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
   .v2-mix-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
   .v2-mix-row label { color: var(--muted); } .v2-mix-row b { color: var(--accent); }
@@ -297,8 +313,12 @@
     </div>
     <div class="cv-cells" id="rg-curve-inputs"></div>
 
-    <!-- v2 시나리오별 커브이동 (24칸) -->
-    <div class="section-title" style="margin:18px 0 8px">시나리오별 커브이동 (v2) <span class="sub">— 9레짐 조건부 기본값(스프레드 확률 가중) · 내 전망 덮어쓰기 · 단위 Δbp</span></div>
+    <!-- v2 시나리오별 커브이동 (앵커 모드 기본 · 상세 모드 24칸) -->
+    <div class="section-title" style="margin:18px 0 8px">시나리오별 커브이동 (v2) <span class="sub">— 앵커 모드: 3M·3Y 착지금리 2점 → 9레짐 조건부 모양으로 나머지 자동 산출 · 단위 Δbp</span></div>
+    <div class="v2-modebar">
+      <label class="v2-toggle"><input type="checkbox" id="rg-v2-detail"> 상세 모드 <span class="v2-toggle-sub">24칸 직접 편집</span></label>
+      <span class="v2-method" id="rg-v2-method"></span>
+    </div>
     <div id="rg-v2-blocks"></div>
     <div class="v2-mix">
       <div class="v2-mix-row">
@@ -323,7 +343,7 @@
     <div style="overflow-x:auto"><table class="out-tbl" id="rg-rd-compare"></table></div>
     <div class="section-title" style="margin:16px 0 8px">순위 <span class="sub">— 혼합 기대수익 내림차순</span></div>
     <div style="overflow-x:auto"><table class="out-tbl" id="rg-rd-rank"></table></div>
-    <div class="note">롤다운 = 착지커브를 현재커브로 가정. 커브이동 = w×평행(v1) + (1−w)×내전망(v2), 구간별 E[Δy]에 D′(≈잔존만기) 곱. v2 기본값은 9레짐 조건부 역사 중위 Δ(스프레드 확률 가중)이며, RG-1 스프레드 확률 변경 시 <b>수정 안 한 칸만</b> 실시간 갱신됩니다(수정 칸은 dot 표시·유지). 듀레이션은 만기 근사(쿠폰 미반영). <b>국고 커브(레벨)는 저장되지 않으며 새로고침 시 소실됩니다.</b> v2 전망치(Δbp)는 작업본에 저장됩니다.</div>
+    <div class="note">롤다운 = 착지커브를 현재커브로 가정. 커브이동 = w×평행(v1) + (1−w)×내전망(v2), 구간별 E[Δy]에 D′(≈잔존만기) 곱. <b>앵커 모드(기본)</b>: 시나리오별 3M·3Y 착지금리 2점만 입력하면 9레짐 조건부 모양에 affine 보정(a·shape+b)해 나머지 6구간을 자동 산출합니다(앵커 2점은 정확 일치, 중간은 기본커브 곡률 보존). RG-1 스프레드 확률을 바꾸면 모양(shape)이 바뀌어 파생 커브가 갱신되지만 <b>앵커 2점은 고정</b>됩니다. <b>상세 모드</b>로 전환하면 24칸을 직접 편집할 수 있습니다(기존 방식). 듀레이션은 만기 근사(쿠폰 미반영). <b>국고 커브·착지금리(레벨 %)는 저장되지 않으며</b> 새로고침 시 소실됩니다(앵커 Δbp만 작업본에 저장 — §0.3).</div>
   </div>
 
   <!-- RG-3 섹터 스프레드 보드 -->

@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { interp, curveComplete, expectedDyParallel, decompose, rolldownTable, MAT, TENORS,
-  conditionalDefaultCurves, expectedDyByTenor, mixEDy, TENOR3Y } from '../js/rg-rolldown.js';
+  conditionalDefaultCurves, expectedDyByTenor, mixEDy, TENOR3Y,
+  anchorFitCurve, IDX_3M, IDX_3Y } from '../js/rg-rolldown.js';
 
 const near = (a, b, tol = 0.01) => assert.ok(Math.abs(a - b) <= tol, `${a} ≉ ${b} (±${tol})`);
 
@@ -127,4 +128,72 @@ test('mixEDy 등가성 — w=0 이면 순수 v2와 동일 total (체크리스트
 test('mixEDy — 확률 미입력(null) → null', () => {
   assert.equal(mixEDy(null, [1, 2, 3], 0.5), null);
   assert.equal(mixEDy(1.5, null, 0.5), null);
+});
+
+// ── 앵커 모드: anchorFitCurve ──
+// 곡률 있는 shape(3M≠3Y): affine 보정으로 앵커 정확 일치 + 중간 shape 모양 보존
+const SHAPE = [10, 12, 15, 17, 18, 19, 20, 25];   // 8구간 Δbp, s3M=10 s3Y=20
+
+test('anchorFitCurve — 앵커 3M·3Y 정확 일치 (affine)', () => {
+  const fit = anchorFitCurve({ d3M: 0, d3Y: 5 }, SHAPE);
+  assert.equal(fit.method, 'affine');
+  near(fit.curve[IDX_3M], 0, 1e-12);
+  near(fit.curve[IDX_3Y], 5, 1e-12);
+  // a=(5−0)/(20−10)=0.5, b=0−0.5·10=−5 → curve[k]=0.5·shape[k]−5
+  near(fit.a, 0.5, 1e-12); near(fit.b, -5, 1e-12);
+  TENORS.forEach((_, k) => near(fit.curve[k], 0.5 * SHAPE[k] - 5, 1e-9));
+});
+
+test('anchorFitCurve — 모양 보존: 중간 구간이 앵커 직선이 아니라 shape 곡률을 따름', () => {
+  const fit = anchorFitCurve({ d3M: 0, d3Y: 5 }, SHAPE);
+  // 앵커 두 점을 만기로 이은 직선(3M~3Y): 곡률 없으면 이 값과 같아야 함
+  const slope = (5 - 0) / (MAT[IDX_3Y] - MAT[IDX_3M]);
+  const lineAt = k => 0 + slope * (MAT[k] - MAT[IDX_3M]);
+  // 2Y(k=4): 직선값 vs affine값이 달라야(모양 보존) — shape 가 직선이 아니므로
+  assert.ok(Math.abs(fit.curve[4] - lineAt(4)) > 0.1, `2Y affine ${fit.curve[4]} 는 앵커직선 ${lineAt(4)} 와 달라야`);
+  // 2차차분 비율 보존: affine 은 shape 의 곡률 부호를 유지
+  const secDiff = (a, i) => a[i + 1] - 2 * a[i] + a[i - 1];
+  assert.ok(Math.sign(secDiff(fit.curve, 3)) === Math.sign(secDiff(SHAPE, 3)));
+});
+
+test('anchorFitCurve — 퇴화(shape 3M=3Y) → 선형 폴백 + 5Y 기울기 연장', () => {
+  const flat = [10, 10, 10, 10, 10, 10, 10, 10];    // s3M=s3Y → a 불능
+  const fit = anchorFitCurve({ d3M: 0, d3Y: 5 }, flat);
+  assert.equal(fit.method, 'linear');
+  near(fit.curve[IDX_3M], 0, 1e-12);
+  near(fit.curve[IDX_3Y], 5, 1e-12);
+  const slope = (5 - 0) / (MAT[IDX_3Y] - MAT[IDX_3M]);  // per year
+  // 만기선형보간: 각 구간 = slope·(T−0.25)
+  TENORS.forEach((_, k) => near(fit.curve[k], slope * (MAT[k] - MAT[IDX_3M]), 1e-9));
+  // 5Y(k=7) 는 3Y 기울기로 연장 → 3Y 값보다 큼
+  near(fit.curve[7], 5 + slope * (MAT[7] - MAT[IDX_3Y]), 1e-9);
+  assert.ok(fit.curve[7] > fit.curve[IDX_3Y]);
+});
+
+test('anchorFitCurve — shape 미제공도 선형 폴백으로 앵커 일치', () => {
+  const fit = anchorFitCurve({ d3M: -2, d3Y: 8 }, null);
+  assert.equal(fit.method, 'linear');
+  near(fit.curve[IDX_3M], -2, 1e-12);
+  near(fit.curve[IDX_3Y], 8, 1e-12);
+});
+
+test('anchorFitCurve — 앵커 비유한 → null', () => {
+  assert.equal(anchorFitCurve({ d3M: 0 }, SHAPE), null);          // d3Y 없음
+  assert.equal(anchorFitCurve({ d3M: NaN, d3Y: 5 }, SHAPE), null);
+  assert.equal(anchorFitCurve(null, SHAPE), null);
+});
+
+test('anchorFitCurve — 실제 조건부 기본커브로 파생 → expectedDyByTenor 로 흐름(계산경로)', () => {
+  const def = conditionalDefaultCurves(SPREADP, MC);
+  // 각 시나리오 앵커 = 기본커브의 3M·3Y → affine a=1,b=0 → 기본커브 재현
+  const scene = {};
+  for (const dir of ['down', 'flat', 'up']) {
+    const fit = anchorFitCurve({ d3M: def[dir][IDX_3M], d3Y: def[dir][IDX_3Y] }, def[dir]);
+    assert.equal(fit.method, 'affine');
+    scene[dir] = fit.curve;
+    TENORS.forEach((_, k) => near(scene[dir][k], def[dir][k], 1e-9));  // 기본 앵커 → 기본커브
+  }
+  // 파생 24칸이 그대로 구간별 기대 Δy 계산에 흘러감
+  const bt = expectedDyByTenor(RATE, scene);
+  assert.equal(bt.length, 8);
 });

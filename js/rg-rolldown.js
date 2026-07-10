@@ -98,6 +98,40 @@ export function conditionalDefaultCurves(spreadProbs, medianCurves) {
   return out;
 }
 
+// ── v2 앵커 모드: 시나리오별 앵커 2점(3M·3Y Δbp)으로 8구간 커브 복원 ──
+// 입력: anchorDeltas {d3M,d3Y}(앵커 Δbp) + shapeCurve(레짐 조건부 기본커브 8구간 Δbp).
+// affine 보정: adjusted[t]=a·shape[t]+b 가 3M·3Y 에서 앵커와 정확히 일치하도록 두 점에서 a,b 해를 구해
+//   전 구간 적용 → 중간 구간은 shape 곡률을 스케일·평행이동해 보존. a=(d3Y−d3M)/(s3Y−s3M), b=d3M−a·s3M.
+// 퇴화(shape 3M=3Y → 기울기 0, a 불능): 두 앵커 만기선형보간 + 5Y 는 그 기울기로 연장(method='linear').
+// shape 미제공/불완전도 동일 선형 폴백. 앵커 비유한 → null. 반환 { curve:[8], method, a, b }.
+export const IDX_3M = 0;
+export const IDX_3Y = TENOR3Y;              // 6 (3Y 인덱스)
+const AFFINE_EPS = 1e-9;
+
+export function anchorFitCurve(anchorDeltas, shapeCurve) {
+  const d3M = anchorDeltas ? +anchorDeltas.d3M : NaN;
+  const d3Y = anchorDeltas ? +anchorDeltas.d3Y : NaN;
+  if (!Number.isFinite(d3M) || !Number.isFinite(d3Y)) return null;
+
+  const shapeOk = Array.isArray(shapeCurve) && shapeCurve.length === TENORS.length
+    && shapeCurve.every(v => Number.isFinite(+v));
+  const s3M = shapeOk ? +shapeCurve[IDX_3M] : NaN;
+  const s3Y = shapeOk ? +shapeCurve[IDX_3Y] : NaN;
+
+  if (shapeOk && Math.abs(s3Y - s3M) > AFFINE_EPS) {
+    const a = (d3Y - d3M) / (s3Y - s3M);
+    const b = d3M - a * s3M;
+    const curve = shapeCurve.map(v => a * (+v) + b);
+    curve[IDX_3M] = d3M; curve[IDX_3Y] = d3Y;   // 부동소수 오차 제거 → 앵커 정확 일치
+    return { curve, method: 'affine', a, b };
+  }
+  // 폴백: 두 앵커 만기선형보간(3M~3Y) + 5Y 기울기 연장
+  const slope = (d3Y - d3M) / (MAT[IDX_3Y] - MAT[IDX_3M]);
+  const curve = MAT.map(T => d3M + slope * (T - MAT[IDX_3M]));
+  curve[IDX_3M] = d3M; curve[IDX_3Y] = d3Y;
+  return { curve, method: 'linear', a: null, b: null };
+}
+
 // v2 구간별 기대 Δy(bp) 배열: E[Δy_구간] = Σi P(금리 i)·sceneCurves[dir i][구간].
 // sceneCurves = { down:[8], flat:[8], up:[8] }(현재 24칸 값). 금리 합0/미제공 → null.
 export function expectedDyByTenor(rateProbs, sceneCurves) {

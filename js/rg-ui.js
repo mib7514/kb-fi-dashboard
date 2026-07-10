@@ -8,6 +8,7 @@ import { probStatus, normalized, normalizeInPlace } from './prob-normalize.js';
 import {
   TENORS as RD_TENORS, TENOR3Y, curveComplete, expectedDyParallel, rolldownTable, decompose,
   conditionalDefaultCurves, expectedDyByTenor, mixEDy,
+  anchorFitCurve, IDX_3M, IDX_3Y,
 } from './rg-rolldown.js';
 import {
   SECTORS, SECTOR_DIRS, SECTOR_DIR_LABEL, sectorProbs, setSectorProb, sectorBandBp, expectedDs,
@@ -22,7 +23,9 @@ const LS_EXPLAIN = 'rg-explainer-open';
 // RG-2 커브(레벨 수익률) 입력 — 세션 전용(메모리만). state 와 분리 → localStorage 미포함(§0.3).
 let curveY = RD_TENORS.map(() => '');
 let lastRg2 = null;         // 확정 스니펫 반영용(파생값만)
-let lastV2Defaults = null;  // 최근 1층 기본커브 { down:[8], flat:[8], up:[8] } — dot 툴팁·리셋 참조
+let lastV2Defaults = null;  // 최근 1층 기본커브 { down:[8], flat:[8], up:[8] } — dot 툴팁·리셋·앵커 seed·shape 참조
+let v2Method = {};          // 앵커 모드 시나리오별 보정 방식 { down:'affine'|'linear', ... }
+let v2DetailDirty = false;  // 상세 모드 진입 후 24칸을 실제 수정했는가(→앵커 복귀 경고 조건)
 
 const RATE_KEYS = ['down', 'flat', 'up'];        // 하락/보합/상승
 const SPREAD_KEYS = ['narrow', 'flat', 'wide'];  // 축소/보합/확대
@@ -45,10 +48,14 @@ const PHASES = {
 };
 const STANCE = { fav: { label: '우호 (리스크 확장)', cls: 'st-fav' }, neu: { label: '중립 (선별 대응)', cls: 'st-neu' }, def: { label: '방어 (리스크 축소)', cls: 'st-def' } };
 
-// v2 24칸 스켈레톤: 각 칸 { v:Δbp|'', source:'default'|'user' }. 값은 파생 Δbp → 작업본 저장 허용(§0.3 OK).
+// v2 스켈레톤. mode: 'anchor'(기본) 시나리오별 앵커 2점(3M·3Y Δbp)만 입력→나머지 자동 산출 |
+//   'detail' 24칸 직접 편집. anchors[dir]={d3M,d3Y}(Δbp, null=미설정→기본커브에서 seed).
+//   cells 24칸 { v:Δbp|'', source:'default'|'user' } = 파생/편집 결과(계산 경로 입력·작업본 저장 허용, §0.3).
+//   착지금리(레벨 %)는 어디에도 담지 않는다 — Δbp 만(현재커브 복원 우회 방지, §0.3).
 function freshV2() {
   const mk = () => Array.from({ length: RD_TENORS.length }, () => ({ v: '', source: 'default' }));
-  return { cells: { down: mk(), flat: mk(), up: mk() }, w: 100 };  // w=100 → 평행(v1) 출발
+  const anc = () => ({ d3M: null, d3Y: null });
+  return { mode: 'anchor', anchors: { down: anc(), flat: anc(), up: anc() }, cells: { down: mk(), flat: mk(), up: mk() }, w: 100 };
 }
 
 // RG-3 섹터 상태: 국고채→state.rate, 회사채→state.spread 공유 → state.sectors 엔 비공유 4섹터만.
@@ -93,7 +100,15 @@ function isoWeek(iso) {
 }
 
 // ── 상태 저장/로드 ──
-function save() { try { localStorage.setItem(LS_DRAFT, JSON.stringify(state)); } catch { /* noop */ } }
+// 저장: 앵커 모드는 mode+anchors(Δbp 6)+w 만(24칸은 파생 → 미저장). 상세 모드는 24칸 포함.
+// 착지 레벨(%)은 state 에 존재하지 않으므로 어느 모드든 덤프에 부재(§0.3).
+function save() {
+  try {
+    const persist = structuredClone(state);
+    if (persist.v2 && persist.v2.mode !== 'detail') delete persist.v2.cells;
+    localStorage.setItem(LS_DRAFT, JSON.stringify(persist));
+  } catch { /* noop */ }
+}
 function load() {
   let s = null; try { s = JSON.parse(localStorage.getItem(LS_DRAFT) || 'null'); } catch { s = null; }
   Object.assign(state, structuredClone(DEFAULTS));
@@ -111,19 +126,36 @@ function load() {
   }
 }
 
-// 저장/이월 v2 형태 검증 → 정규화. 실패 시 null.
+// 저장/이월 v2 형태 검증 → 정규화. 앵커 모드는 cells 없이 저장될 수 있음(파생 재산출). 실패 시 null.
 function validV2(v2) {
-  if (!v2 || !v2.cells) return null;
+  if (!v2 || typeof v2 !== 'object') return null;
   const out = freshV2();
   out.w = Number.isFinite(+v2.w) ? +v2.w : 100;
-  for (const dir of RATE_KEYS) {
-    const arr = v2.cells[dir];
-    if (!Array.isArray(arr) || arr.length !== RD_TENORS.length) return null;
-    out.cells[dir] = arr.map(c => ({
-      v: (c && Number.isFinite(+c.v)) ? +c.v : '',
-      source: (c && c.source === 'user') ? 'user' : 'default',
-    }));
+  const modeOk = v2.mode === 'detail' || v2.mode === 'anchor' ? v2.mode : null;
+  // 앵커 Δbp 복원(레벨 % 는 저장 안 됨 → 없음)
+  if (v2.anchors && typeof v2.anchors === 'object') {
+    for (const dir of RATE_KEYS) {
+      const a = v2.anchors[dir];
+      if (a) out.anchors[dir] = {
+        d3M: Number.isFinite(a.d3M) ? +a.d3M : null,     // null → null(+null=0 함정 회피)
+        d3Y: Number.isFinite(a.d3Y) ? +a.d3Y : null,
+      };
+    }
   }
+  // 24칸(상세 모드·구버전 저장). 앵커 모드 저장본엔 없을 수 있음 → fresh 유지 후 파생 재산출.
+  if (v2.cells) {
+    for (const dir of RATE_KEYS) {
+      const arr = v2.cells[dir];
+      if (Array.isArray(arr) && arr.length === RD_TENORS.length) {
+        out.cells[dir] = arr.map(c => ({
+          v: (c && Number.isFinite(+c.v)) ? +c.v : '',
+          source: (c && c.source === 'user') ? 'user' : 'default',
+        }));
+      }
+    }
+  }
+  // 구버전(모드 필드 없음): cells 가 있으면 상세 모드로 이관(기존 편집 보존), 없으면 앵커.
+  out.mode = modeOk || (v2.cells ? 'detail' : 'anchor');
   return out;
 }
 
@@ -147,6 +179,14 @@ function ledgerCarryV2() {
     if (r && r.curves) {
       const out = freshV2();
       out.w = Number.isFinite(+r.w) ? +r.w : 100;
+      out.mode = r.mode === 'detail' ? 'detail' : 'anchor';
+      if (r.anchors) for (const dir of RATE_KEYS) {
+        const a = r.anchors[dir];
+        if (a) out.anchors[dir] = {
+          d3M: Number.isFinite(a.d3M) ? +a.d3M : null,
+          d3Y: Number.isFinite(a.d3Y) ? +a.d3Y : null,
+        };
+      }
       for (const dir of RATE_KEYS) {
         const cur = r.curves[dir] || [], src = (r.sources && r.sources[dir]) || [];
         out.cells[dir] = RD_TENORS.map((_, k) => ({
@@ -196,7 +236,10 @@ function buildCurveInputs() {
 }
 
 // RG-2 v2: 시나리오 3개 × 구간 8개 블록(세로 전개). 숫자+슬라이더, user 칸 dot. 1회 생성.
+// 앵커 모드(기본): 각 블록에 3M·3Y 착지금리(%) 2칸 + 자동 Δbp 병기. 24칸은 파생 표시(disabled).
+// 상세 모드: 24칸 직접 편집(앵커 행 숨김). 표시 전환은 renderV2Ui 가 담당.
 const V2_DIRLABEL = { down: '하락 ↓', flat: '보합 →', up: '상승 ↑' };
+const ANCHOR_PTS = [{ key: '3M', dk: 'd3M', idx: IDX_3M }, { key: '3Y', dk: 'd3Y', idx: IDX_3Y }];
 function buildV2Blocks() {
   $('rg-v2-blocks').innerHTML = RATE_KEYS.map(dir => `
     <div class="v2-block">
@@ -204,7 +247,16 @@ function buildV2Blocks() {
         <span class="v2-title">${V2_DIRLABEL[dir]} 시나리오</span>
         <span class="v2-prob" id="rg-v2p-${dir}">P —</span>
         <span class="v2-src">9레짐 조건부 · 스프레드 확률 가중</span>
-        <button class="btn sm" data-reset="${dir}">기본값 리셋</button>
+        <button class="btn sm v2-detail-reset" data-reset="${dir}" style="display:none">기본값 리셋</button>
+      </div>
+      <div class="v2-anchors" id="rg-v2anc-${dir}">
+        ${ANCHOR_PTS.map(pt => `
+          <div class="v2-anc-cell">
+            <label>${pt.key} 착지금리(%)</label>
+            <input type="number" step="0.001" inputmode="decimal" class="v2-anc-num" id="rg-anc-${dir}-${pt.key}" data-dir="${dir}" data-pt="${pt.key}" placeholder="—">
+            <span class="v2-anc-delta" id="rg-ancd-${dir}-${pt.key}">Δ —</span>
+          </div>`).join('')}
+        <button class="btn sm v2-anc-reset" data-ancreset="${dir}">앵커 리셋</button>
       </div>
       <div class="v2-cells">
         ${RD_TENORS.map((t, k) => `
@@ -347,12 +399,48 @@ function spreadArr() { return SPREAD_KEYS.map(k => state.spread[k]); }
 function wFrac() { const w = +state.v2.w; return (Number.isFinite(w) ? w : 100) / 100; }
 function sceneCurves() { const o = {}; for (const d of RATE_KEYS) o[d] = state.v2.cells[d].map(c => (Number.isFinite(+c.v) ? +c.v : 0)); return o; }
 
-// 1층 기본커브 재산출 → source='default' 칸 값 갱신(user 칸 유지)
-function refreshV2Defaults() {
+// 현재 국고 커브의 구간 레벨(%) — 앵커 착지금리↔Δbp 환산 기준(세션 전용). 미입력 → null.
+function curveLevelAt(idx) {
+  const raw = curveY[idx];
+  if (raw === '' || raw == null) return null;
+  const v = +raw;
+  return Number.isFinite(v) ? v : null;
+}
+const fmtSigned = v => (Number.isFinite(v) ? (v > 0 ? '+' : '') + v.toFixed(1) : '—');
+
+// 미설정(null) 앵커를 현재 조건부 기본커브의 3M·3Y 값으로 seed(최초 1회·리셋 후). 이미 값 있으면 유지(고정).
+function seedAnchors() {
+  if (!lastV2Defaults) return;
+  for (const dir of RATE_KEYS) {
+    const a = state.v2.anchors[dir];
+    if (!Number.isFinite(a.d3M)) a.d3M = round1(lastV2Defaults[dir][IDX_3M]);   // null(+null=0 함정 회피) → seed
+    if (!Number.isFinite(a.d3Y)) a.d3Y = round1(lastV2Defaults[dir][IDX_3Y]);
+  }
+}
+
+// v2 모델 재산출: 1층 기본커브 갱신 → 모드별로 24칸(state.v2.cells) 채움(계산 경로 입력).
+//   detail: source='default' 칸만 기본값 갱신(user 칸 유지) — 기존 동작 그대로.
+//   anchor: 시나리오별 anchorFitCurve(anchors, shape) 로 8구간 전부 파생(앵커 2점 정확 일치).
+function refreshV2Model() {
   lastV2Defaults = conditionalDefaultCurves(normalized(spreadArr()), medianCurves());
-  for (const dir of RATE_KEYS) for (let k = 0; k < RD_TENORS.length; k++) {
-    const cell = state.v2.cells[dir][k];
-    if (cell.source === 'default') cell.v = lastV2Defaults ? round1(lastV2Defaults[dir][k]) : '';
+  seedAnchors();
+  v2Method = {};
+  if (state.v2.mode === 'detail') {
+    for (const dir of RATE_KEYS) for (let k = 0; k < RD_TENORS.length; k++) {
+      const cell = state.v2.cells[dir][k];
+      if (cell.source === 'default') cell.v = lastV2Defaults ? round1(lastV2Defaults[dir][k]) : '';
+    }
+    return;
+  }
+  for (const dir of RATE_KEYS) {
+    const shape = lastV2Defaults ? lastV2Defaults[dir] : null;
+    const fit = anchorFitCurve(state.v2.anchors[dir], shape);
+    if (fit) v2Method[dir] = fit.method;
+    for (let k = 0; k < RD_TENORS.length; k++) {
+      const cell = state.v2.cells[dir][k];
+      cell.source = 'default';
+      cell.v = fit ? round1(fit.curve[k]) : (shape ? round1(shape[k]) : '');
+    }
   }
 }
 function dotTitle(dir, k) {
@@ -360,16 +448,60 @@ function dotTitle(dir, k) {
   const v = state.v2.cells[dir][k].v;
   return d == null ? '내 전망(user)' : `기본값 ${fmtP(d)} → 내전망 ${fmtP(+v)} (Δ ${fmtP(+v - d)})bp`;
 }
-// v2 셀 DOM 동기: 값은 전 칸 기록(포커스 칸 제외 → 커서 보존), dot 은 전 칸 갱신
-function syncV2Dom() {
+
+// v2 DOM 동기(모드 반영): 24칸 값/disabled/dot + 앵커 착지금리·Δ + 모드 토글·보정방식 안내.
+// 값은 포커스 칸 제외 기록(커서 보존).
+function renderV2Ui() {
   const active = (typeof document !== 'undefined') ? document.activeElement : null;
+  const isDetail = state.v2.mode === 'detail';
+  const lvl = { '3M': curveLevelAt(IDX_3M), '3Y': curveLevelAt(IDX_3Y) };
+  const curveHasAnchors = lvl['3M'] != null && lvl['3Y'] != null;
+
+  // 24칸(파생/편집): 앵커 모드는 disabled 읽기전용, dot 은 상세 모드 user 칸만
   for (const dir of RATE_KEYS) for (let k = 0; k < RD_TENORS.length; k++) {
     const cell = state.v2.cells[dir][k];
     const num = $(`rg-v2-${dir}-${k}`), rng = $(`rg-v2s-${dir}-${k}`), dot = $(`rg-v2dot-${dir}-${k}`);
-    if (num && num !== active) num.value = cell.v;
-    if (rng && rng !== active) rng.value = Number.isFinite(+cell.v) ? +cell.v : 0;
-    if (dot) { dot.style.display = cell.source === 'user' ? '' : 'none'; dot.title = cell.source === 'user' ? dotTitle(dir, k) : ''; }
+    if (num) { if (num !== active) num.value = cell.v; num.disabled = !isDetail; }
+    if (rng) { if (rng !== active) rng.value = Number.isFinite(+cell.v) ? +cell.v : 0; rng.disabled = !isDetail; }
+    if (dot) {
+      const show = isDetail && cell.source === 'user';
+      dot.style.display = show ? '' : 'none';
+      dot.title = show ? dotTitle(dir, k) : '';
+    }
   }
+
+  // 앵커 행 + 상세 리셋 버튼 표시 전환
+  for (const dir of RATE_KEYS) {
+    const ancWrap = $(`rg-v2anc-${dir}`);
+    if (ancWrap) ancWrap.style.display = isDetail ? 'none' : '';
+    const detReset = document.querySelector(`.v2-detail-reset[data-reset="${dir}"]`);
+    if (detReset) detReset.style.display = isDetail ? '' : 'none';
+    for (const pt of ANCHOR_PTS) {
+      const num = $(`rg-anc-${dir}-${pt.key}`), badge = $(`rg-ancd-${dir}-${pt.key}`);
+      const d = state.v2.anchors[dir][pt.dk];
+      if (badge) badge.textContent = Number.isFinite(d) ? `Δ ${fmtSigned(d)}bp` : 'Δ —';
+      if (num) {
+        num.disabled = isDetail || !curveHasAnchors;                       // 현재커브 없으면 착지금리 입력 비활성
+        if (num !== active) num.value = (curveHasAnchors && Number.isFinite(d)) ? (lvl[pt.key] + d / 100).toFixed(3) : '';
+        num.placeholder = curveHasAnchors ? '—' : '현재 커브 필요';
+      }
+    }
+  }
+
+  // 보정 방식·안내
+  const methodEl = $('rg-v2-method');
+  if (methodEl) {
+    if (isDetail) methodEl.textContent = '상세 모드 — 24칸 직접 편집 (앵커 무시)';
+    else if (!curveHasAnchors) methodEl.innerHTML = '<span class="warn-text">착지금리 입력은 위 국고 커브의 3M·3Y 입력 후 가능합니다.</span> 기본 앵커 Δ로 파생 커브 표시 중.';
+    else {
+      const fb = RATE_KEYS.filter(dir => v2Method[dir] === 'linear');
+      methodEl.textContent = fb.length
+        ? `앵커 보정 affine — 일부 선형 폴백(${fb.map(dir => RATE_LABEL[dir]).join('·')}: 기본커브 3M=3Y)`
+        : '앵커 보정 affine — 기본커브 모양 보존, 3M·3Y 앵커 정확 일치';
+    }
+  }
+  const detToggle = $('rg-v2-detail');
+  if (detToggle) detToggle.checked = isDetail;
 }
 function renderV2ProbMirror() {
   const rN = normalized(rateArr());
@@ -380,9 +512,9 @@ function renderRolldown() {
   if (!$('rg-rd-bars')) return;
   const mc = medianCurves();
 
-  // 1층 기본값 실시간 갱신 + DOM 동기 + 확률 미러
-  refreshV2Defaults();
-  syncV2Dom();
+  // v2 모델(앵커 파생/기본값) 실시간 갱신 + DOM 동기 + 확률 미러
+  refreshV2Model();
+  renderV2Ui();
   renderV2ProbMirror();
 
   const parallel = expectedDyParallel(rateArr(), spreadArr(), mc);   // 스칼라(3Y 기준)
@@ -567,13 +699,16 @@ function buildSnippet() {
     rec.sectors[s.key] = { probs: nobj, eDsBp: round1(expectedDs(nobj, sectorBandBp(s.key, bands))), shared: s.share ? true : undefined, sharedWith: s.share || undefined };
   }
 
-  // RG-2 v2 파생값(24칸 Δbp + 소스 + w) — 커브 원본(레벨) 미포함(§0.3).
-  const curves = {}, sources = {};
+  // RG-2 v2 파생값(mode + 앵커 Δbp 6 + 24칸 Δbp + 소스 + w) — 재현 가능하게 앵커·커브 둘 다 기록.
+  //   커브 원본(레벨 %)은 미포함(§0.3). 앵커도 Δbp(레벨 아님).
+  const curves = {}, sources = {}, anchors = {};
   for (const dir of RATE_KEYS) {
     curves[dir] = state.v2.cells[dir].map(c => (Number.isFinite(+c.v) ? round1(+c.v) : null));
     sources[dir] = state.v2.cells[dir].map(c => c.source);
+    const a = state.v2.anchors[dir];
+    anchors[dir] = { d3M: Number.isFinite(a.d3M) ? round1(+a.d3M) : null, d3Y: Number.isFinite(a.d3Y) ? round1(+a.d3Y) : null };
   }
-  rec.rg2v2 = { curves, sources, w: state.v2.w };
+  rec.rg2v2 = { mode: state.v2.mode, anchors, curves, sources, w: state.v2.w };
 
   // RG-2 헤드라인(혼합 기준 최상위 구간). 커브(레벨) 미완이면 생략.
   const parallel = expectedDyParallel(rateN, spreadN, medianCurves());
@@ -790,28 +925,80 @@ export function initRg() {
     renderRolldown();
   });
 
-  // v2 24칸 입력(숫자↔슬라이더 동기, 편집 시 source='user' + dot) — 파생 Δbp 라 작업본 저장
+  // v2 입력: 앵커 착지금리(%) 또는 24칸(상세 모드) — 위임 분기.
   $('rg-v2-blocks').addEventListener('input', (e) => {
+    // (1) 앵커 착지금리(%) → Δbp 환산·저장. 현재 커브 없으면 무시(입력도 비활성).
+    const anc = e.target.closest('[data-dir][data-pt]');
+    if (anc) {
+      if (state.v2.mode !== 'anchor') return;
+      const dir = anc.dataset.dir, ptKey = anc.dataset.pt;
+      const idx = ptKey === '3M' ? IDX_3M : IDX_3Y, dk = ptKey === '3M' ? 'd3M' : 'd3Y';
+      const lvl = curveLevelAt(idx);
+      if (lvl == null) return;                       // 현재 커브 미입력 → 환산 불가
+      const landing = +anc.value;
+      if (Number.isFinite(landing)) state.v2.anchors[dir][dk] = round1((landing - lvl) * 100);
+      renderRolldown(); save();
+      return;
+    }
+    // (2) 24칸 직접 편집 — 상세 모드에서만(앵커 모드는 disabled)
     const el = e.target.closest('[data-dir][data-k]'); if (!el) return;
+    if (state.v2.mode !== 'detail') return;
     const dir = el.dataset.dir, k = +el.dataset.k;
     let v = +el.value; if (!Number.isFinite(v)) v = 0; v = Math.max(-60, Math.min(60, v));
     const cell = state.v2.cells[dir][k];
-    cell.v = v; cell.source = 'user';
+    cell.v = v; cell.source = 'user'; v2DetailDirty = true;
     const num = $(`rg-v2-${dir}-${k}`), rng = $(`rg-v2s-${dir}-${k}`);
     if (el === rng && num) num.value = v; else if (el === num && rng) rng.value = v;
     renderRolldown(); save();
   });
-  // 시나리오별 "기본값 리셋" — 해당 시나리오 전 칸 source='default' 로 되돌리고 1층 재계산
+  // 리셋 버튼 위임: 앵커 리셋(기본커브 3M·3Y로 재seed) | 상세 기본값 리셋(해당 시나리오 24칸 default)
   $('rg-v2-blocks').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-reset]'); if (!b) return;
-    const dir = b.dataset.reset;
-    state.v2.cells[dir].forEach(c => { c.source = 'default'; });
-    renderRolldown(); save();
+    const ar = e.target.closest('[data-ancreset]');
+    if (ar) {
+      const dir = ar.dataset.ancreset;
+      state.v2.anchors[dir] = { d3M: null, d3Y: null };   // → refreshV2Model 이 기본커브에서 재seed
+      renderRolldown(); save();
+      return;
+    }
+    const b = e.target.closest('[data-reset]');
+    if (b) {
+      const dir = b.dataset.reset;
+      state.v2.cells[dir].forEach(c => { c.source = 'default'; });
+      renderRolldown(); save();
+    }
   });
-  // 전체 리셋 — 24칸 전부 기본값
+  // 상세 모드 토글 — 앵커↔상세 전환(앵커→상세: 파생 24칸을 편집 시작값으로 동결 / 상세→앵커: 수정 소실 경고)
+  const detToggle = $('rg-v2-detail');
+  if (detToggle) detToggle.addEventListener('change', () => {
+    if (detToggle.checked) {
+      state.v2.mode = 'detail';
+      // 현재 파생값을 편집 시작값으로: 기본커브와 다른 칸은 user 로 동결(기본값 갱신에 덮이지 않도록)
+      for (const dir of RATE_KEYS) for (let k = 0; k < RD_TENORS.length; k++) {
+        const cell = state.v2.cells[dir][k];
+        const dv = lastV2Defaults ? round1(lastV2Defaults[dir][k]) : null;
+        cell.source = (Number.isFinite(+cell.v) && (dv == null || Math.abs(+cell.v - dv) > 1e-9)) ? 'user' : 'default';
+      }
+      v2DetailDirty = false;
+      renderRolldown(); save();
+    } else {
+      if (v2DetailDirty && !confirm('상세 모드에서 수정한 24칸이 앵커 파생값으로 대체됩니다. 계속할까요?')) {
+        detToggle.checked = true;   // 되돌림
+        return;
+      }
+      state.v2.mode = 'anchor';
+      v2DetailDirty = false;
+      renderRolldown(); save();
+    }
+  });
+  // 전체 리셋 — 모드별: 앵커 전부 재seed | 상세 24칸 전부 기본값
   const resetAll = $('rg-v2-reset-all');
   if (resetAll) resetAll.addEventListener('click', () => {
-    for (const dir of RATE_KEYS) state.v2.cells[dir].forEach(c => { c.source = 'default'; });
+    if (state.v2.mode === 'detail') {
+      for (const dir of RATE_KEYS) state.v2.cells[dir].forEach(c => { c.source = 'default'; });
+      v2DetailDirty = false;
+    } else {
+      for (const dir of RATE_KEYS) state.v2.anchors[dir] = { d3M: null, d3Y: null };
+    }
     renderRolldown(); save();
   });
   // 혼합 w 슬라이더(0~100%) — 작업본 저장
@@ -856,9 +1043,10 @@ export function initRg() {
   // 판단일
   if (dateEl) dateEl.addEventListener('input', () => { state.date = dateEl.value; save(); renderConfirmed(); });
 
-  // 초기화(기본값 복원) — 확률·판단일·v2(24칸+w) 전부 기본값
+  // 초기화(기본값 복원) — 확률·판단일·v2(앵커 모드+앵커 재seed+w) 전부 기본값
   $('rg-reset').addEventListener('click', () => {
     Object.assign(state, structuredClone(DEFAULTS));
+    v2DetailDirty = false;
     if (!state.date) { try { state.date = new Date().toISOString().slice(0, 10); } catch { state.date = ''; } }
     if (dateEl) dateEl.value = state.date;
     if (wEl) { wEl.value = state.v2.w; const wv = $('rg-w-val'); if (wv) wv.textContent = state.v2.w + '%'; }
