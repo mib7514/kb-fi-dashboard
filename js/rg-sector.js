@@ -39,6 +39,7 @@ export function expectedDs(probs, bandBp) {
 
 // 섹터 방향 확률 {narrow,flat,wide} 조회. 공유 섹터는 RG-1 축을 매핑해 돌려준다.
 //   회사채 → state.spread (동일 참조). 국고채 → state.rate 를 축소/보합/확대로 매핑한 뷰(복사).
+//   비공유 섹터: mode==='follow' 면 RG-1 스프레드 축을 실시간 미러(저장값 무시), 그 외(custom·레거시)는 저장값.
 export function sectorProbs(key, state) {
   const m = SECTOR_META[key];
   if (m && m.share === 'spread') return state.spread;
@@ -46,15 +47,26 @@ export function sectorProbs(key, state) {
     const r = state.rate || {};
     return { narrow: r.down, flat: r.flat, wide: r.up };
   }
-  return state.sectors ? state.sectors[key] : null;
+  const sec = state.sectors ? state.sectors[key] : null;
+  if (!sec) return null;
+  if (sec.mode === 'follow') return state.spread;                     // RG-1 스프레드 축 상속
+  return { narrow: sec.narrow, flat: sec.flat, wide: sec.wide };
 }
 
 // 섹터 한 방향 확률 쓰기(단일 상태에 반영). 공유 섹터는 RG-1 축 필드로 되돌려 쓴다.
+//   비공유 follow 섹터를 처음 수정하면 현재 스프레드 미러값으로 동결한 뒤 custom 으로 전환(그 후 미추종).
 export function setSectorProb(key, dir, value, state) {
   const m = SECTOR_META[key];
   if (m && m.share === 'spread') { state.spread[dir] = value; return; }
   if (m && m.share === 'rate') { state.rate[RATE_DIR_OF[dir]] = value; return; }
-  if (state.sectors && state.sectors[key]) state.sectors[key][dir] = value;
+  const sec = state.sectors && state.sectors[key];
+  if (!sec) return;
+  if (sec.mode === 'follow') {                    // 첫 수정 → 현재 스프레드로 동결 후 custom
+    const base = state.spread || {};
+    sec.narrow = base.narrow; sec.flat = base.flat; sec.wide = base.wide;
+    sec.mode = 'custom';
+  }
+  sec[dir] = value;
 }
 
 // 섹터 밴드(bp) 조회

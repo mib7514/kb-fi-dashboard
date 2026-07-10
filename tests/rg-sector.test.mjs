@@ -68,6 +68,39 @@ test('buildSectorRows — 6행, 공유 섹터 매핑, 밴드 매핑', () => {
   near(kb.eDs, 4.6 * ((20 - 50) / 100), 1e-9);        // (up−down)/합 × 4.6 = 음수(축소 우세)
 });
 
+// ── 비공유 섹터 follow/custom 상속(RG-1 스프레드 축) ──
+test('sectorProbs — follow 모드는 RG-1 스프레드 축을 미러(저장값 무시)', () => {
+  const state = { spread: { narrow: 10, flat: 20, wide: 70 }, sectors: { 카드채: { mode: 'follow', narrow: 33, flat: 34, wide: 33 } } };
+  assert.deepEqual(sectorProbs('카드채', state), { narrow: 10, flat: 20, wide: 70 });
+});
+test('setSectorProb — follow 섹터 첫 수정 시 현재 스프레드로 동결 후 custom 전환·미추종', () => {
+  const state = { spread: { narrow: 10, flat: 20, wide: 70 }, sectors: { 카드채: { mode: 'follow', narrow: 33, flat: 34, wide: 33 } } };
+  setSectorProb('카드채', 'wide', 50, state);
+  assert.equal(state.sectors.카드채.mode, 'custom');
+  // 동결: narrow/flat 은 스프레드(10/20), wide 는 수정값 50
+  assert.deepEqual(sectorProbs('카드채', state), { narrow: 10, flat: 20, wide: 50 });
+  // 이후 스프레드 변경에 미추종
+  state.spread.wide = 90; state.spread.narrow = 5;
+  assert.deepEqual(sectorProbs('카드채', state), { narrow: 10, flat: 20, wide: 50 });
+});
+test('sectorProbs — custom 은 저장값, follow 복귀(리셋) 시 다시 미러', () => {
+  const state = { spread: { narrow: 5, flat: 5, wide: 90 }, sectors: { 여전채: { mode: 'custom', narrow: 40, flat: 40, wide: 20 } } };
+  assert.deepEqual(sectorProbs('여전채', state), { narrow: 40, flat: 40, wide: 20 });
+  state.sectors.여전채.mode = 'follow';                   // "RG-1 값으로 리셋"
+  assert.deepEqual(sectorProbs('여전채', state), { narrow: 5, flat: 5, wide: 90 });
+});
+test('buildSectorRows — follow 섹터는 스프레드 축과 동일 eDs(band 는 섹터 고유)', () => {
+  const state = {
+    rate: { down: 33, flat: 34, up: 33 }, spread: { narrow: 20, flat: 30, wide: 50 },
+    sectors: { 공사채: { mode: 'follow' }, 은행채: { mode: 'follow' }, 카드채: { mode: 'custom', narrow: 80, flat: 10, wide: 10 }, 여전채: { mode: 'follow' } },
+  };
+  const rows = buildSectorRows(state, BANDS);
+  const gs = rows.find(r => r.key === '공사채');
+  near(gs.eDs, sectorBandBp('공사채', BANDS) * ((50 - 20) / 100), 1e-9);   // 스프레드 비율 × 공사채 밴드
+  const cd = rows.find(r => r.key === '카드채');
+  near(cd.eDs, sectorBandBp('카드채', BANDS) * ((10 - 80) / 100), 1e-9);   // custom 저장값
+});
+
 test('rankByAttractiveness — 축소 기대(더 음수) 상위', () => {
   const state = {
     rate: { down: 80, flat: 10, up: 10 },            // 국고: 하락(축소) 강 → 매우 음수

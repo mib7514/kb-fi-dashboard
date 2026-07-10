@@ -187,6 +187,10 @@
   .sec-share { color: var(--forecast); font-weight: 700; }
   .sec-note { font-size: 11px; color: var(--muted); }
   .sec-band { font-size: 11px; color: var(--accent); font-family: var(--mono); }
+  .sec-status { font-size: 11px; font-family: var(--mono); }
+  .sec-mode { padding: 2px 8px; border-radius: 5px; font-size: 10.5px; font-weight: 600; }
+  .sec-mode.follow { color: var(--accent); background: rgba(88,166,255,0.12); border: 1px solid #58a6ff44; }
+  .sec-mode.custom { color: var(--forecast); background: #f0883e14; border: 1px solid #f0883e55; }
   .sec-head .badge { margin-left: auto; }
   .sec-inputs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 8px; }
   .sec-cell { display: flex; flex-direction: column; gap: 4px; }
@@ -349,7 +353,7 @@
   <!-- RG-3 섹터 스프레드 보드 -->
   <div class="section-title">섹터 스프레드 보드 <span class="sub">— RG-3 · 6섹터 방향 확률(축소/보합/확대) → 기대 Δs 순위</span></div>
   <div class="card">
-    <div class="note" style="margin:0 0 12px">각 섹터 방향 확률을 입력하면 기대 스프레드 변화 E[Δs] = δ×(P확대 − P축소)로 매력 순위를 냅니다(δ = 섹터 보합밴드). <b>축소 기대(음수)일수록 매력 상위.</b> <span class="sec-share">⇄</span> 표시된 <b>국고채·회사채 행은 RG-1 축과 동일 입력</b>(국고채=금리 축, 회사채=스프레드 축)이라 어느 쪽에서 고쳐도 즉시 양쪽에 반영됩니다.</div>
+    <div class="note" style="margin:0 0 12px">각 섹터 방향 확률을 입력하면 기대 스프레드 변화 E[Δs] = δ×(P확대 − P축소)로 매력 순위를 냅니다(δ = 섹터 보합밴드). <b>축소 기대(음수)일수록 매력 상위.</b> <span class="sec-share">⇄</span> 표시된 <b>국고채·회사채 행은 RG-1 축과 동일 입력</b>(국고채=금리 축, 회사채=스프레드 축)이라 어느 쪽에서 고쳐도 즉시 양쪽에 반영됩니다. <b>공사·은행·카드·여전채</b>는 기본적으로 <b>RG-1 스프레드 축을 상속</b>(<span class="sec-mode follow">RG-1 따름</span>)하여 대표 스프레드 뷰에서 출발하고, 어느 칸이든 수정하면 그 섹터만 <span class="sec-mode custom">개별 조정</span>으로 전환·동결됩니다("RG-1 값으로 리셋"으로 복귀). follow 섹터는 스프레드 축이 정규화돼 있으면 별도 정규화가 필요 없습니다.</div>
     <div id="rg-sec-rows"></div>
     <div class="section-title" style="margin:16px 0 8px">매력 순위 <span class="sub">— 기대 Δs 오름차순(축소 기대 상위)</span></div>
     <div style="overflow-x:auto"><table class="out-tbl" id="rg-sec-rank"></table></div>

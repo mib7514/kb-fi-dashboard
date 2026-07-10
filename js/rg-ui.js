@@ -59,8 +59,10 @@ function freshV2() {
 }
 
 // RG-3 섹터 상태: 국고채→state.rate, 회사채→state.spread 공유 → state.sectors 엔 비공유 4섹터만.
+// 비공유 섹터 { mode:'follow'|'custom', narrow, flat, wide }. follow(기본)=RG-1 스프레드 축 상속(미러),
+//   custom=사용자 개별 조정(동결). narrow/flat/wide 는 custom 일 때만 유효(follow 는 스프레드에서 파생).
 const NONSHARED_SECTORS = SECTORS.filter(s => !s.share).map(s => s.key);
-function freshSectors() { const o = {}; for (const k of NONSHARED_SECTORS) o[k] = { narrow: 33, flat: 34, wide: 33 }; return o; }
+function freshSectors() { const o = {}; for (const k of NONSHARED_SECTORS) o[k] = { mode: 'follow', narrow: 33, flat: 34, wide: 33 }; return o; }
 
 // 기본값 = 합계 100 인 중립 prior(즉시 유효 히트맵 + OK 뱃지)
 const DEFAULTS = { rate: { down: 33, flat: 34, up: 33 }, spread: { narrow: 33, flat: 34, wide: 33 }, date: '', v2: freshV2(), sectors: freshSectors() };
@@ -106,6 +108,11 @@ function save() {
   try {
     const persist = structuredClone(state);
     if (persist.v2 && persist.v2.mode !== 'detail') delete persist.v2.cells;
+    // follow 섹터는 스프레드 축에서 파생 → 확률 미저장(플래그만). custom 만 확률 저장.
+    if (persist.sectors) for (const k of NONSHARED_SECTORS) {
+      const sec = persist.sectors[k];
+      if (sec && sec.mode !== 'custom') { delete sec.narrow; delete sec.flat; delete sec.wide; }
+    }
     localStorage.setItem(LS_DRAFT, JSON.stringify(persist));
   } catch { /* noop */ }
 }
@@ -159,13 +166,18 @@ function validV2(v2) {
   return out;
 }
 
-// 저장 sectors 검증 → 정규화(비공유 5섹터, 각 narrow/flat/wide 수치). 실패 시 null.
+// 저장 sectors 검증 → 정규화. custom 섹터만 확률 저장·복원, follow 섹터는 스프레드 축에서 파생(미저장).
+//   레거시(모드 필드 없음): follow 로 이관(신규 기본 동작). 실패 시 null.
 function validSectors(sec) {
   if (!sec || typeof sec !== 'object') return null;
   const out = freshSectors();
   for (const k of NONSHARED_SECTORS) {
     const o = sec[k];
-    if (o && SECTOR_DIRS.every(d => Number.isFinite(+o[d]))) out[k] = { narrow: +o.narrow, flat: +o.flat, wide: +o.wide };
+    if (o && o.mode === 'custom' && SECTOR_DIRS.every(d => Number.isFinite(+o[d]))) {
+      out[k] = { mode: 'custom', narrow: +o.narrow, flat: +o.flat, wide: +o.wide };
+    } else {
+      out[k] = { mode: 'follow', narrow: 33, flat: 34, wide: 33 };
+    }
   }
   return out;
 }
@@ -281,12 +293,15 @@ function buildSectorRowsDom() {
         <input type="number" min="0" max="100" step="1" class="sec-num" id="rg-sec-${si}-${dir}" data-si="${si}" data-dir="${dir}">
         <input type="range" min="0" max="100" step="0.5" class="sec-range" id="rg-secs-${si}-${dir}" data-si="${si}" data-dir="${dir}">
       </div>`).join('');
+    const nonShared = !s.share;
     return `<div class="sec-row" data-si="${si}">
       <div class="sec-head">
         <span class="sec-name">${s.key}${s.share ? ' <span class="sec-share">⇄</span>' : ''}</span>
         ${s.note ? `<span class="sec-note">${s.note}</span>` : ''}
+        ${nonShared ? `<span class="sec-status" id="rg-sec-status-${si}"></span>` : ''}
         <span class="sec-band" id="rg-sec-band-${si}"></span>
         <span class="badge" id="rg-sec-sum-${si}">합계 —</span>
+        ${nonShared ? `<button class="btn sm" id="rg-sec-reset-${si}" data-reset-si="${si}">RG-1 값으로 리셋</button>` : ''}
         <button class="btn sm" id="rg-sec-norm-${si}" data-si="${si}">정규화</button>
       </div>
       <div class="sec-inputs">${cells}</div>
@@ -322,8 +337,21 @@ function renderSectorsDisplay() {
   SECTORS.forEach((s, si) => {
     const probs = sectorProbs(s.key, state);
     const st = probStatus([probs.narrow, probs.flat, probs.wide]);
+    const nonShared = !s.share;
+    const sec = nonShared ? state.sectors[s.key] : null;
+    const isCustom = !!(sec && sec.mode === 'custom');
     setBadge(`rg-sec-sum-${si}`, st);
-    const nb = $(`rg-sec-norm-${si}`); if (nb) nb.disabled = !st.needNorm;
+    // 비공유 섹터: follow=RG-1 따름(정규화 불요·리셋 비활성), custom=개별 조정(정규화·리셋 활성)
+    const statusEl = $(`rg-sec-status-${si}`);
+    if (statusEl) statusEl.innerHTML = isCustom
+      ? '<span class="sec-mode custom">개별 조정</span>'
+      : '<span class="sec-mode follow">RG-1 따름</span>';
+    const rb = $(`rg-sec-reset-${si}`); if (rb) rb.disabled = !isCustom;
+    const nb = $(`rg-sec-norm-${si}`);
+    if (nb) {
+      if (nonShared && !isCustom) { nb.style.display = 'none'; nb.disabled = true; }   // follow → 스프레드 축에서 정규화
+      else { nb.style.display = ''; nb.disabled = !st.needNorm; }
+    }
     const bandBp = sectorBandBp(s.key, bands);
     $(`rg-sec-band-${si}`).innerHTML = bandBp != null ? `밴드 ±${bandBp}bp` : '밴드 —';
     renderSecBar(si, probs);
@@ -379,17 +407,22 @@ function renderOutputs() {
   save();
 }
 
-// 확정 가능 = 금리·스프레드 축 + 비공유 5섹터 모두 합계 100%(회사채는 스프레드 축과 동일)
+// 확정 가능 = 금리·스프레드 축 정규화 + custom 섹터만 개별 합계 100%.
+//   follow 섹터는 스프레드 축을 상속하므로 sSt.ok 로 자동 충족(별도 정규화 불요).
 function allSectorsOk() {
-  return NONSHARED_SECTORS.every(k => probStatus([state.sectors[k].narrow, state.sectors[k].flat, state.sectors[k].wide]).ok);
+  return NONSHARED_SECTORS.every(k => {
+    const sec = state.sectors[k];
+    if (!sec || sec.mode !== 'custom') return true;
+    return probStatus([sec.narrow, sec.flat, sec.wide]).ok;
+  });
 }
 function refreshConfirmGate() {
   const rSt = probStatus(rateArr()), sSt = probStatus(spreadArr());
   const ok = rSt.ok && sSt.ok && allSectorsOk();
   $('rg-confirm').disabled = !ok;
   $('rg-confirm-hint').textContent = ok
-    ? '금리·스프레드 축 + 6섹터 합계 100% — 확정 가능.'
-    : '금리·스프레드 축과 6섹터가 각각 합계 100%가 되어야 확정할 수 있습니다(정규화 버튼).';
+    ? '금리·스프레드 축 + 개별 조정 섹터 합계 100% — 확정 가능.'
+    : '금리·스프레드 축과 개별 조정(custom) 섹터가 각각 합계 100%가 되어야 확정할 수 있습니다(정규화 버튼).';
 }
 
 // ── RG-2: 커브이동 E[Δy](평행 v1 + 시나리오 v2 혼합) + 3성분 분해 막대 + 순위 ──
@@ -689,14 +722,18 @@ function buildSnippet() {
     baseline: { bandKtb3yBp: b.ktb3y, bandRepSpreadBp: b.repSpread, calib: b.period },
     confirmedAt: new Date().toISOString(),
   };
-  // RG-3 섹터: 정규화 확률 + 기대 Δs(bp). 회사채는 스프레드 축과 동일(shared 표기).
+  // RG-3 섹터: 6섹터 전부 정규화 확률 기록(재현성) + mode 플래그.
+  //   shared-rate(국고)·shared-spread(회사)=RG-1 축 공유, follow=스프레드 상속, custom=개별 조정.
   const bands = calibBandsObj();
   rec.sectors = {};
   for (const s of SECTORS) {
     const p = sectorProbs(s.key, state);
     const arr = normalizeInPlace([p.narrow, p.flat, p.wide]);
     const nobj = { narrow: arr[0], flat: arr[1], wide: arr[2] };
-    rec.sectors[s.key] = { probs: nobj, eDsBp: round1(expectedDs(nobj, sectorBandBp(s.key, bands))), shared: s.share ? true : undefined, sharedWith: s.share || undefined };
+    const mode = s.share === 'rate' ? 'shared-rate'
+      : s.share === 'spread' ? 'shared-spread'
+      : (state.sectors[s.key] && state.sectors[s.key].mode === 'custom') ? 'custom' : 'follow';
+    rec.sectors[s.key] = { probs: nobj, mode, eDsBp: round1(expectedDs(nobj, sectorBandBp(s.key, bands))), shared: s.share ? true : undefined, sharedWith: s.share || undefined };
   }
 
   // RG-2 v2 파생값(mode + 앵커 Δbp 6 + 24칸 Δbp + 소스 + w) — 재현 가능하게 앵커·커브 둘 다 기록.
@@ -1019,8 +1056,15 @@ export function initRg() {
     if (s.share) { writeInputs(); renderOutputs(); }          // ⇄ RG-1 축 동기 + 히트맵·커브이동 갱신
     else { renderSectors(); refreshConfirmGate(); save(); }
   });
-  // 섹터별 정규화 버튼
+  // 섹터 버튼 위임: "RG-1 값으로 리셋"(follow 복귀) | 정규화
   $('rg-sec-rows').addEventListener('click', (e) => {
+    const rb = e.target.closest('[data-reset-si]');
+    if (rb) {
+      const s = SECTORS[+rb.dataset.resetSi];
+      if (state.sectors[s.key]) state.sectors[s.key].mode = 'follow';   // 스프레드 축 상속 복귀
+      renderSectors(); refreshConfirmGate(); save();
+      return;
+    }
     const b = e.target.closest('button[data-si]'); if (!b) return;
     const si = +b.dataset.si, s = SECTORS[si];
     const p = sectorProbs(s.key, state);
