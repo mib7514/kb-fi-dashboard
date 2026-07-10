@@ -12,8 +12,8 @@ import {
 } from './rg-rolldown.js';
 import {
   SECTORS, SECTOR_DIRS, SECTOR_DIR_LABEL, sectorProbs, setSectorProb, sectorBandBp, expectedDs,
-  buildSectorRows, rankByAttractiveness,
 } from './rg-sector.js';
+import { matrixReturns, MATRIX_SECTORS, MATRIX_SPREAD_SERIES } from './rg-matrix.js';
 import { scoreJudgment, maturityOf, ddayTo } from './rg-score.js';
 
 const $ = id => document.getElementById(id);
@@ -64,9 +64,24 @@ function freshV2() {
 const NONSHARED_SECTORS = SECTORS.filter(s => !s.share).map(s => s.key);
 function freshSectors() { const o = {}; for (const k of NONSHARED_SECTORS) o[k] = { mode: 'follow', narrow: 33, flat: 34, wide: 33 }; return o; }
 
+// 매트릭스 섹터 스프레드(bp) — credit-spread.js 최신일 값 기본 로드(공개 파생 데이터라 저장 제약 없음).
+//   국고=0 고정(스프레드 없음). 수익률 레벨(%)은 이 상태에 없음 — 매트릭스는 세션에서 파생 계산만.
+function creditSpreadLatest() {
+  const s = window.FENRIR_SERIES && window.FENRIR_SERIES['credit-spread'];
+  if (!s || !s.series || !Array.isArray(s.dates) || !s.dates.length) return null;
+  const last = s.dates.length - 1;
+  const spreads = {};
+  for (const [sec, key] of Object.entries(MATRIX_SPREAD_SERIES)) {
+    const arr = s.series[key];
+    spreads[sec] = (arr && Number.isFinite(+arr[last])) ? Math.round(+arr[last] * 1000) / 10 : null;   // % → bp, 0.1bp
+  }
+  return { spreads, basisDate: (s.meta && s.meta.last_updated) || s.dates[last] };
+}
+function freshMatrix() { const cs = creditSpreadLatest(); return { spreads: cs ? cs.spreads : {}, basisDate: cs ? cs.basisDate : null }; }
+
 // 기본값 = 합계 100 인 중립 prior(즉시 유효 히트맵 + OK 뱃지)
-const DEFAULTS = { rate: { down: 33, flat: 34, up: 33 }, spread: { narrow: 33, flat: 34, wide: 33 }, date: '', v2: freshV2(), sectors: freshSectors() };
-const state = { rate: {}, spread: {}, date: '', v2: freshV2(), sectors: freshSectors() };
+const DEFAULTS = { rate: { down: 33, flat: 34, up: 33 }, spread: { narrow: 33, flat: 34, wide: 33 }, date: '', v2: freshV2(), sectors: freshSectors(), matrix: freshMatrix() };
+const state = { rate: {}, spread: {}, date: '', v2: freshV2(), sectors: freshSectors(), matrix: freshMatrix() };
 
 const round1 = v => (Number.isFinite(v) ? Math.round(v * 10) / 10 : null);
 const fmtP = v => (Number.isFinite(v) ? v.toFixed(1) : '—');
@@ -127,6 +142,10 @@ function load() {
     if (v2) state.v2 = v2;                    // ⑥ 작업본(24칸+w) 복원 — 우선
     const sec = validSectors(s.sectors);
     if (sec) state.sectors = sec;             // RG-3 섹터 작업본 복원
+    // 매트릭스 스프레드(bp) 사용자 수정분 복원(basisDate 는 현재 파일 최신 유지). 수익률 레벨은 저장 안 됨.
+    if (s.matrix && s.matrix.spreads) for (const sk of Object.keys(MATRIX_SPREAD_SERIES)) {
+      if (Number.isFinite(+s.matrix.spreads[sk])) state.matrix.spreads[sk] = +s.matrix.spreads[sk];
+    }
   } else {
     const carry = ledgerCarryV2();            // 2층: 전주 확정 rg2v2 이월(작업본 없을 때만)
     if (carry) state.v2 = carry;
@@ -360,20 +379,87 @@ function renderSectorsDisplay() {
     $(`rg-sec-eds-${si}`).innerHTML = eDs == null ? 'E[Δs] —'
       : `E[Δs] <b class="${eDs < 0 ? 'pos' : eDs > 0 ? 'neg' : ''}">${fmtP(eDs)}bp</b>`;
   });
-  // 순위표(매력=축소 기대 상위) — 순수 buildSectorRows(state,bands) 재사용
-  const ranked = rankByAttractiveness(buildSectorRows(state, bands));
-  $('rg-sec-rank').innerHTML =
-    `<thead><tr><th class="l">순위</th><th class="l">섹터</th><th>축소</th><th>보합</th><th>확대</th><th>E[Δs]</th></tr></thead>
-     <tbody>${ranked.map(r => {
-      const p = r.probs, s = (+p.narrow || 0) + (+p.flat || 0) + (+p.wide || 0);
-      const pc = v => (s > 0 ? fmtP(v / s * 100) : '—');
-      return `<tr><td class="l">${r.rank}</td><td class="l">${r.key}${r.shared ? ' <span class="sec-share">⇄</span>' : ''}</td>
-        <td>${pc(+p.narrow || 0)}</td><td>${pc(+p.flat || 0)}</td><td>${pc(+p.wide || 0)}</td>
-        <td class="${r.eDs < 0 ? 'pos' : r.eDs > 0 ? 'neg' : ''}">${fmtP(r.eDsR)}</td></tr>`;
-    }).join('')}</tbody>`;
+  renderMatrix();   // 섹터 E[Δs] 변경 → 매트릭스 즉시 갱신(순위표는 매트릭스로 대체됨)
 }
 
 function renderSectors() { writeSectorInputs(); renderSectorsDisplay(); }
+
+// ── 섹터×구간 매력도 매트릭스 (RG-2 커브이동 × RG-3 스프레드) ──
+const fmtPct3 = v => (Number.isFinite(v) ? v.toFixed(3) : '—');
+// 매트릭스 섹터별 E[Δs](bp): 신용 5섹터는 자기 확률×밴드, 국고는 매트릭스가 0 처리.
+function matrixEDsBySector() {
+  const bands = calibBandsObj();
+  const out = {};
+  for (const key of ['공사채', '은행채', '회사채', '카드채', '여전채']) out[key] = expectedDs(sectorProbs(key, state), sectorBandBp(key, bands));
+  return out;
+}
+// 매트릭스 계산(순수 조합): 국고 커브(세션) + 스프레드(bp) + 혼합 E[Δy] + 섹터 E[Δs]. 커브 미완 → null.
+function computeMatrix() {
+  if (!curveComplete(curveY)) return null;
+  const mc = medianCurves();
+  const parallel = expectedDyParallel(rateArr(), spreadArr(), mc);
+  const byTenor = expectedDyByTenor(rateArr(), sceneCurves());
+  const mixed = mixEDy(parallel, byTenor, wFrac());                 // RG-2 와 동일 소스(w 혼합)
+  const eDy = (Array.isArray(mixed) && mixed.length === RD_TENORS.length) ? mixed : new Array(RD_TENORS.length).fill(0);
+  return matrixReturns(curveY, state.matrix.spreads, eDy, matrixEDsBySector());
+}
+// 스프레드 입력 6칸(1회 생성). 국고=0 disabled.
+function buildMatrixSpreads() {
+  if (!$('rg-mtx-spreads')) return;
+  $('rg-mtx-spreads').innerHTML = MATRIX_SECTORS.map((s, i) => {
+    const isKtb = s === '국고채';
+    return `<div class="mtx-scell"><label>${s}</label>
+      <input type="number" step="0.1" inputmode="decimal" id="rg-mtx-sp-${i}" data-mtxsec="${s}" ${isKtb ? 'disabled value="0"' : ''}></div>`;
+  }).join('');
+}
+function writeMatrixSpreads() {
+  const active = (typeof document !== 'undefined') ? document.activeElement : null;
+  MATRIX_SECTORS.forEach((s, i) => {
+    const el = $(`rg-mtx-sp-${i}`); if (!el) return;
+    if (s === '국고채') { el.value = 0; return; }
+    if (el !== active) el.value = Number.isFinite(+state.matrix.spreads[s]) ? state.matrix.spreads[s] : '';
+  });
+  const b = $('rg-mtx-basis');
+  if (b) b.textContent = state.matrix.basisDate ? `기본값 기준일 ${state.matrix.basisDate} · credit-spread.js` : '';
+}
+function renderMtxTable(id, m, field, kind) {
+  const data = m[field];
+  const head = `<thead><tr><th class="l">섹터＼구간</th>${m.tenors.map(t => `<th>${t}</th>`).join('')}</tr></thead>`;
+  const body = m.sectors.map(s => {
+    const best = m.bestTenorBySector[s];
+    const cells = m.tenors.map((t, k) => {
+      const v = data[s][k];
+      let cls = '';
+      if (kind === 'bp') {
+        cls = v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+        if (t === best) cls += ' best';
+        if (m.topCell && m.topCell.sector === s && m.topCell.tenor === t) cls += ' topcell';
+      }
+      return `<td class="${cls.trim()}">${kind === 'pct' ? fmtPct3(v) : fmtP(round1(v))}</td>`;
+    }).join('');
+    return `<tr class="${s === '국고채' ? 'ktb' : ''}"><td class="sec">${s}</td>${cells}</tr>`;
+  }).join('');
+  $(id).innerHTML = head + `<tbody>${body}</tbody>`;
+}
+function renderMatrix() {
+  if (!$('rg-mtx-attract')) return;
+  writeMatrixSpreads();
+  const m = computeMatrix();
+  if (!m) {
+    $('rg-mtx-now').innerHTML = '';
+    $('rg-mtx-land').innerHTML = '';
+    $('rg-mtx-attract').innerHTML = '<tbody><tr><td class="mtx-empty">위 RG-2의 국고 커브 8구간을 입력하면 섹터×구간 매트릭스가 계산됩니다. (수익률 레벨은 세션 전용 · 저장 안 함)</td></tr></tbody>';
+    return;
+  }
+  renderMtxTable('rg-mtx-now', m, 'nowPct', 'pct');
+  renderMtxTable('rg-mtx-land', m, 'landingPct', 'pct');
+  renderMtxTable('rg-mtx-attract', m, 'returnsBp', 'bp');
+  const note = $('rg-mtx-note');
+  if (note && m.topCell) {
+    const tc = m.topCell;
+    note.dataset.top = `${tc.sector} ${tc.tenor} ${round1(tc.bp)}bp`;
+  }
+}
 
 // ── 렌더: 뱃지 + 히트맵 + 최빈 + 확정 가능여부 ──
 function renderOutputs() {
@@ -549,6 +635,7 @@ function renderRolldown() {
   refreshV2Model();
   renderV2Ui();
   renderV2ProbMirror();
+  renderMatrix();   // 커브·w·v2·확률 변경 시 섹터×구간 매트릭스 즉시 갱신(checklist ④)
 
   const parallel = expectedDyParallel(rateArr(), spreadArr(), mc);   // 스칼라(3Y 기준)
   const byTenor = expectedDyByTenor(rateArr(), sceneCurves());       // 구간별 배열
@@ -761,6 +848,23 @@ function buildSnippet() {
       carryRollBp: rows.map(r => round1(r.carry + r.rolldown)),
     };
   }
+
+  // RG 매트릭스(섹터×구간 총 기대수익). 전부 파생 bp — 수익률 레벨(%)은 미포함(§0.3). 커브 미완이면 생략.
+  const matrix = computeMatrix();
+  if (matrix) {
+    const returnsBp = {}, carryRollBp = {}, spreadsUsed = {};
+    for (const s of MATRIX_SECTORS) {
+      returnsBp[s] = matrix.returnsBp[s].map(round1);
+      carryRollBp[s] = matrix.carryRollBp[s].map(round1);
+      spreadsUsed[s] = s === '국고채' ? 0 : (Number.isFinite(+state.matrix.spreads[s]) ? round1(+state.matrix.spreads[s]) : null);
+    }
+    rec.matrix = {
+      returnsBp, carryRollBp,
+      topCell: { sector: matrix.topCell.sector, tenor: matrix.topCell.tenor, bp: round1(matrix.topCell.bp) },
+      spreadsUsed, basisDate: state.matrix.basisDate || null,
+    };
+  }
+
   return { week, text: `window.RG_LEDGER.judgments[${JSON.stringify(week)}] = ${JSON.stringify(rec, null, 2)};\n` };
 }
 
@@ -846,11 +950,13 @@ function onScore() {
   const metrics = scoreJudgment(j, realized, window.RG_CALIB && window.RG_CALIB.bands);
   const sec = metrics.brier.sectors;
   const rg2 = metrics.rg2Rank;
+  const mr = metrics.matrixRank;
   $('rg-score-result').innerHTML = `<div class="sc-res">
     <div>실현 셀 <b>${metrics.realized.cell || '—'}</b> · 최빈 셀 ${yn(metrics.modalHit)}</div>
     <div>축 적중 — 금리 ${yn(metrics.axisHit.rate)} · 스프레드 ${yn(metrics.axisHit.spread)}</div>
     <div>Brier 9셀 <b>${fmtP(metrics.brier.cells9)}</b> · 섹터 신용평균 <b>${fmtP(sec.creditAvg)}</b> (6섹터평균 ${fmtP(sec.allAvg)})</div>
     <div>RG-2 순위 — ${rg2 ? `선택 ${rg2.picked} · 실현최고 ${rg2.realizedTop1} · top1 ${yn(rg2.hitTop1)} / top2 ${yn(rg2.hitTop2)}` : '판단 레코드에 rg2 없음(커브 미입력)'}</div>
+    <div>매트릭스 순위 — ${mr ? `선택 ${mr.picked.sector} ${mr.picked.tenor} · 실현최고 ${mr.realizedTop1.sector} ${mr.realizedTop1.tenor} · top1 ${yn(mr.hitTop1)} / top3 ${yn(mr.hitTop3)}` : '판단 레코드에 matrix 없음(커브 미입력)'}</div>
   </div>`;
   const payload = { realized, metrics, scoredAt: new Date().toISOString() };
   $('rg-score-snippet').value = `window.RG_LEDGER.scores[${JSON.stringify(week)}] = ${JSON.stringify(payload, null, 2)};\n`;
@@ -929,6 +1035,7 @@ export function initRg() {
   buildCurveInputs();
   buildV2Blocks();
   buildSectorRowsDom();
+  buildMatrixSpreads();
   buildScoreInputs();
   const dateEl = $('rg-date'); if (dateEl) dateEl.value = state.date;
   const wEl = $('rg-w'); if (wEl) { wEl.value = state.v2.w; const wv = $('rg-w-val'); if (wv) wv.textContent = state.v2.w + '%'; }
@@ -960,6 +1067,15 @@ export function initRg() {
     const el = e.target.closest('[data-idx]'); if (!el) return;
     curveY[+el.dataset.idx] = curveCell(el.value);   // 순수 함수에 number 만 전달(문자열 concat 버그 방지)
     renderRolldown();
+  });
+
+  // 매트릭스 섹터 스프레드(bp) 입력 — 국고 제외 6칸. 스프레드 레벨(bp)은 저장 가능(공개 파생 데이터).
+  if ($('rg-mtx-spreads')) $('rg-mtx-spreads').addEventListener('input', (e) => {
+    const el = e.target.closest('[data-mtxsec]'); if (!el) return;
+    const secKey = el.dataset.mtxsec; if (secKey === '국고채') return;
+    const v = +el.value;
+    state.matrix.spreads[secKey] = Number.isFinite(v) ? v : null;
+    renderMatrix(); save();
   });
 
   // v2 입력: 앵커 착지금리(%) 또는 24칸(상세 모드) — 위임 분기.

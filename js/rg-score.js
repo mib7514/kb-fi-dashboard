@@ -8,6 +8,7 @@
 //   전부 산출(투명성)하되, 집계 헤드라인은 비공유 신용 4섹터(creditAvg)만 사용해 축과 이중가중을 피한다.
 
 import { TENORS, MAT, HOLD } from './rg-rolldown.js';
+import { scoreMatrixRank } from './rg-matrix.js';
 
 // ── 상수 ──
 export const RATE_LABELS = ['down', 'flat', 'up'];       // 하락/보합/상승
@@ -138,6 +139,8 @@ export function scoreJudgment(judgment, realized, bands) {
 
   // 4) RG-2 순위 적중
   const rg2Rank = scoreRg2Rank(judgment.rg2, realized.curveDeltaBp);
+  // 5) 매트릭스 순위 적중(섹터×구간 topCell 이 실현 최고 셀이었나 top-1/top-3) — judgment.matrix 있을 때만
+  const matrixRank = scoreMatrixRank(judgment.matrix, realized);
 
   return {
     modalHit,
@@ -148,6 +151,7 @@ export function scoreJudgment(judgment, realized, bands) {
       sectors: { perSector, creditAvg: round2(mean(credit)), allAvg: round2(mean(all6)) },
     },
     rg2Rank,
+    matrixRank,
     meta: { bandRate, bandSpread, note: '공유 2행(국고=rate·회사=spread)은 축 채점과 동일 신호 → 섹터 헤드라인은 creditAvg(신용 4섹터)' },
   };
 }

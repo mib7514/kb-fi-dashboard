@@ -205,6 +205,27 @@
   .sec-eds { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 130px; text-align: right; }
   .sec-eds b.pos { color: var(--ok); } .sec-eds b.neg { color: var(--ext); }
 
+  /* 섹터×구간 매트릭스 */
+  .mtx-spreadbar { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .mtx-spread-title { font-size: 12.5px; font-weight: 600; }
+  .mtx-basis { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .mtx-spreads { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 4px; }
+  @media (max-width: 720px) { .mtx-spreads { grid-template-columns: repeat(3, 1fr); } }
+  .mtx-scell { display: flex; flex-direction: column; gap: 3px; }
+  .mtx-scell label { font-size: 10.5px; color: var(--muted); font-family: var(--mono); }
+  .mtx-scell input { width: 100%; background: var(--bg); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 5px 6px; font-family: var(--mono); font-size: 12px; text-align: right; }
+  .mtx-scell input:focus { outline: none; border-color: var(--accent); }
+  .mtx-scell input:disabled { opacity: 0.45; cursor: not-allowed; }
+  .badge.mtx-flat { color: var(--forecast); border-color: #f0883e55; background: #f0883e11; }
+  .mtx-tbl th, .mtx-tbl td { padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+  .mtx-tbl td.sec { text-align: left; font-family: var(--sans); color: var(--text); }
+  .mtx-tbl td.pos { color: var(--ok); } .mtx-tbl td.neg { color: var(--ext); }
+  .mtx-tbl td.best { font-weight: 700; }
+  .mtx-bestc { font-weight: 700; color: var(--text); }
+  .mtx-tbl td.topcell { box-shadow: 0 0 0 2px var(--accent) inset; border-radius: 5px; }
+  .mtx-tbl tr.ktb td { background: rgba(88,166,255,0.05); }
+  .mtx-empty { color: var(--muted); font-size: 13px; padding: 12px; }
+
   /* RG-4 채점 원장 */
   .pend { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 7px; margin-bottom: 6px; background: var(--panel-2); font-size: 12.5px; }
   .pend.mature { border-color: var(--forecast); background: #f0883e11; }
@@ -355,9 +376,29 @@
   <div class="card">
     <div class="note" style="margin:0 0 12px">각 섹터 방향 확률을 입력하면 기대 스프레드 변화 E[Δs] = δ×(P확대 − P축소)로 매력 순위를 냅니다(δ = 섹터 보합밴드). <b>축소 기대(음수)일수록 매력 상위.</b> <span class="sec-share">⇄</span> 표시된 <b>국고채·회사채 행은 RG-1 축과 동일 입력</b>(국고채=금리 축, 회사채=스프레드 축)이라 어느 쪽에서 고쳐도 즉시 양쪽에 반영됩니다. <b>공사·은행·카드·여전채</b>는 기본적으로 <b>RG-1 스프레드 축을 상속</b>(<span class="sec-mode follow">RG-1 따름</span>)하여 대표 스프레드 뷰에서 출발하고, 어느 칸이든 수정하면 그 섹터만 <span class="sec-mode custom">개별 조정</span>으로 전환·동결됩니다("RG-1 값으로 리셋"으로 복귀). follow 섹터는 스프레드 축이 정규화돼 있으면 별도 정규화가 필요 없습니다.</div>
     <div id="rg-sec-rows"></div>
-    <div class="section-title" style="margin:16px 0 8px">매력 순위 <span class="sub">— 기대 Δs 오름차순(축소 기대 상위)</span></div>
-    <div style="overflow-x:auto"><table class="out-tbl" id="rg-sec-rank"></table></div>
     <div class="note">국고채 밴드(±4.6bp)는 금리축(국고 3Y 수익률 변화)과 동일 계열입니다 — 국고 행은 RG-1 금리 축과 같은 입력이며 <b>하락=축소 열, 상승=확대 열</b>로 매핑됩니다("축소/확대"는 수익률 방향). 확률은 각 섹터 합계 100%여야 확정됩니다.</div>
+  </div>
+
+  <!-- 섹터×구간 매력도 매트릭스 (RG-2 커브이동 × RG-3 스프레드 결합) -->
+  <div class="section-title">섹터×구간 매력도 매트릭스 <span class="sub">— 캐리 + 롤다운 + 확률가중 금리·스프레드 이동 = 섹터×구간 총 기대수익(bp)</span></div>
+  <div class="card">
+    <div class="note" style="margin:0 0 12px">각 섹터 현재 커브 = <b>국고 커브 + 섹터 스프레드(만기 평탄 가정)</b>. 총 기대수익 = 캐리(섹터 수익률) + 롤다운(국고 모양) − D′×(E[Δy_구간] + E[Δs_섹터]). E[Δy]는 위 RG-2의 <b>혼합 w 설정</b>을 그대로 씁니다. 국고채 행은 스프레드 0·E[Δs]=0(순수 금리)이라 위 RG-2 순위와 일치합니다. <b>국고 커브 8구간을 입력해야</b> 매트릭스가 계산됩니다.</div>
+
+    <div class="mtx-spreadbar">
+      <span class="mtx-spread-title">섹터 현재 스프레드 <span style="color:var(--muted);font-weight:400">(bp · 국고=0 고정, 수정 가능)</span></span>
+      <span class="mtx-basis" id="rg-mtx-basis"></span>
+    </div>
+    <div class="mtx-spreads" id="rg-mtx-spreads"></div>
+
+    <div class="section-title" style="margin:16px 0 6px">① 현재 금리판 <span class="sub">— 섹터×구간 현재 수익률(%) · 세션 표시만(저장 안 함)</span></div>
+    <div style="overflow-x:auto"><table class="out-tbl mtx-tbl" id="rg-mtx-now"></table></div>
+
+    <div class="section-title" style="margin:16px 0 6px">② 1개월 후 착지판 <span class="sub">— 확률가중 착지 수익률(%) · 세션 표시만</span></div>
+    <div style="overflow-x:auto"><table class="out-tbl mtx-tbl" id="rg-mtx-land"></table></div>
+
+    <div class="section-title" style="margin:16px 0 6px">③ 매력도 비교 <span class="sub">— 섹터×구간 총 기대수익(bp)</span> <span class="badge mtx-flat">스프레드 커브 평탄 가정</span></div>
+    <div style="overflow-x:auto"><table class="out-tbl mtx-tbl" id="rg-mtx-attract"></table></div>
+    <div class="note" id="rg-mtx-note"><b>최고 셀</b>(테두리 강조)이 판단 시점 선택 셀입니다. 섹터별 최고 구간은 <span class="mtx-bestc">굵게</span> 표시됩니다. 스프레드 레벨(bp)은 커밋된 공개 파생 데이터라 저장 가능하나, <b>수익률 레벨(%)은 세션 표시만</b>이며 저장·스니펫에 담지 않습니다(§0.3).</div>
   </div>
 
   <!-- 확정 -->
@@ -416,9 +457,10 @@
   </div>
 </div>
 
-<!-- 데이터: 캘리브레이션(밴드) + 확정 원장 -->
+<!-- 데이터: 캘리브레이션(밴드) + 확정 원장 + 크레딧 스프레드(매트릭스 기본 스프레드) -->
 <script src="data/rg-calib.js"></script>
 <script src="data/rg-ledger.js"></script>
+<script src="data/credit-spread.js"></script>
 <!-- 공통 내비게이션 -->
 <script type="module" src="js/nav.js"></script>
 <!-- app -->
