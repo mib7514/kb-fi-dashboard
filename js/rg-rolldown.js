@@ -29,6 +29,16 @@ export function interp(xs, ys, x) {
   return ys[n - 1];
 }
 
+// 입력 경계 정규화: 커브 셀 원본(input.value=문자열/빈칸)을 계산용 값으로.
+//   빈칸('')·null 은 '' 유지(curveComplete 게이트), 그 외는 Number 강제.
+//   → 순수 interp/decompose 에는 항상 number 만 전달(문자열이면 interp 의 ys 가감이 concat 되어
+//     6M~5Y 롤다운이 NaN→null 로 죽던 버그 방지). 순수 함수는 number 전제(비강제 검사 유지).
+export function curveCell(raw) {
+  if (raw == null) return '';
+  const s = String(raw).trim();
+  return s === '' ? '' : Number(s);
+}
+
 // 커브 8구간 전부 유효 수치인지
 export function curveComplete(curveY) {
   return Array.isArray(curveY) && curveY.length === TENORS.length

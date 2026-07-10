@@ -6,7 +6,7 @@
 
 import { probStatus, normalized, normalizeInPlace } from './prob-normalize.js';
 import {
-  TENORS as RD_TENORS, TENOR3Y, curveComplete, expectedDyParallel, rolldownTable, decompose,
+  TENORS as RD_TENORS, TENOR3Y, curveComplete, curveCell, expectedDyParallel, rolldownTable, decompose,
   conditionalDefaultCurves, expectedDyByTenor, mixEDy,
   anchorFitCurve, IDX_3M, IDX_3Y,
 } from './rg-rolldown.js';
@@ -955,10 +955,10 @@ export function initRg() {
   $('rg-rate-inputs').addEventListener('input', onInput);
   $('rg-spread-inputs').addEventListener('input', onInput);
 
-  // 커브(레벨) 입력(세션 전용, 비저장) — 값만 갱신 후 RG-2 재계산
+  // 커브(레벨) 입력(세션 전용, 비저장) — 경계에서 number 강제(빈칸은 '' 유지), 저장하지 않음
   $('rg-curve-inputs').addEventListener('input', (e) => {
     const el = e.target.closest('[data-idx]'); if (!el) return;
-    curveY[+el.dataset.idx] = el.value;   // 문자열 그대로(빈칸 유지), 저장하지 않음
+    curveY[+el.dataset.idx] = curveCell(el.value);   // 순수 함수에 number 만 전달(문자열 concat 버그 방지)
     renderRolldown();
   });
 

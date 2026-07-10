@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { interp, curveComplete, expectedDyParallel, decompose, rolldownTable, MAT, TENORS,
   conditionalDefaultCurves, expectedDyByTenor, mixEDy, TENOR3Y,
-  anchorFitCurve, IDX_3M, IDX_3Y } from '../js/rg-rolldown.js';
+  anchorFitCurve, IDX_3M, IDX_3Y, curveCell } from '../js/rg-rolldown.js';
 
 const near = (a, b, tol = 0.01) => assert.ok(Math.abs(a - b) <= tol, `${a} ≉ ${b} (±${tol})`);
 
@@ -58,6 +58,38 @@ test('decompose 2Y — 캐리/롤다운/커브이동 앵커', () => {
   near(r.rolldown, 1.59722, 0.001);          // −(2−1/12)×(3.491667−3.50)×100
   near(r.curveMove, -(2 - 1 / 12) * e, 1e-6); // −D'×eDy
   near(r.total, r.carry + r.rolldown + r.curveMove, 1e-9);
+});
+
+// ── 회귀: UI 문자열 커브 입력 → interp 문자열 concat 로 6M~5Y 롤다운 null 되던 버그 ──
+// input.value 는 항상 문자열. interp 의 ys[i-1] + t*(...) 가 문자열이면 concat → NaN → null.
+// 3M 은 x≤xs[0] 단락으로 ys[0] 원문 반환 후 뺄셈 강제 → 0 생존(증상: 3M만 계산, 나머지 null).
+// 수정: 입력 경계 curveCell 로 number 강제. 순수 interp/decompose 는 number 전제(비강제 유지).
+test('curveCell — 빈칸은 유지(게이트), 그 외 number 강제', () => {
+  assert.equal(curveCell(''), '');
+  assert.equal(curveCell('   '), '');
+  assert.equal(curveCell(null), '');
+  assert.equal(curveCell('3.5'), 3.5);
+  assert.equal(curveCell(3.5), 3.5);
+  assert.ok(Number.isNaN(curveCell('abc')));   // 무효 입력 → NaN → curveComplete 가 배제
+});
+test('회귀: 문자열 커브를 그대로 넣으면 3M 외 롤다운 null (버그 특성 문서화)', () => {
+  const raw = ['3.30', '3.35', '3.40', '3.45', '3.50', '3.56', '3.60', '3.75'];  // input.value
+  const { rows } = rolldownTable(raw, 0.9);
+  assert.equal(rows.find(r => r.tenor === '3M').rolldown, 0);      // 단락 경로 생존
+  assert.equal(rows.find(r => r.tenor === '6M').rolldown, null);   // 문자열 concat → null
+  assert.equal(rows.find(r => r.tenor === '5Y').total, null);
+});
+test('회귀: curveCell 경계 변환 후 rolldownTable 전 8구간 유한 산출', () => {
+  const raw = ['3.30', '3.35', '3.40', '3.45', '3.50', '3.56', '3.60', '3.75'];
+  const curve = raw.map(curveCell);
+  assert.equal(curveComplete(curve), true);
+  const { rows } = rolldownTable(curve, 0.9);
+  for (const r of rows) {
+    assert.ok(Number.isFinite(r.rolldown), `${r.tenor} rolldown 유한이어야 (null 아님)`);
+    assert.ok(Number.isFinite(r.total), `${r.tenor} total 유한이어야`);
+  }
+  // 6M 롤다운 손검증: interp(0.4167) = 3.30 + 0.6667×0.05 = 3.3333, −(0.5−1/12)×(3.3333−3.35)×100
+  near(rows.find(r => r.tenor === '6M').rolldown, -(0.5 - 1 / 12) * (3.333333 - 3.35) * 100, 0.01);
 });
 
 test('decompose 3M — 롤다운 0 (평탄 외삽)', () => {
