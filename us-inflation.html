@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>US Inflation Forecast — CPI / PCE | FI Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-2: #1c2128;
+    --border: #21262d;
+    --border-2: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --forecast: #f0883e;
+    --ok: #3fb950;
+    --warn: #d29922;
+    --override: #bc8cff;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+
+  .series-bar {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
+    padding: 12px 16px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 9px; margin-bottom: 14px; font-size: 12px;
+  }
+  .series-bar .sname { font-size: 14px; font-weight: 600; color: var(--text); }
+  .series-bar .meta { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .series-bar .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--border-2); color: var(--muted); }
+
+  /* series selector */
+  .selector { display: inline-flex; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border-2); border-radius: 7px; overflow: hidden; margin-bottom: 18px; }
+  .selector button {
+    background: transparent; border: none; color: var(--muted); font-family: var(--mono);
+    font-size: 12.5px; padding: 8px 16px; cursor: pointer; border-right: 1px solid var(--border);
+  }
+  .selector button:last-child { border-right: none; }
+  .selector button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+  .selector button:hover:not(.active) { background: var(--panel-2); color: var(--text); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 18px; }
+  .ctrl-group { display: flex; align-items: center; gap: 8px; }
+  .ctrl-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--border-2); border-radius: 7px; overflow: hidden; }
+  .seg button {
+    background: transparent; border: none; color: var(--muted); font-family: var(--mono);
+    font-size: 12px; padding: 6px 12px; cursor: pointer; border-right: 1px solid var(--border);
+  }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+  .seg button:hover:not(.active) { background: var(--panel-2); color: var(--text); }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 13px 15px; }
+  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .stat-main { font-size: 22px; font-weight: 600; font-family: var(--mono); letter-spacing: -0.01em; }
+  .stat-unit { font-size: 12px; color: var(--muted); margin-left: 3px; font-weight: 400; }
+  .stat-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
+
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px 4px; }
+  .chart-card.wide { grid-column: 1 / -1; }
+  .chart-box { width: 100%; height: 300px; }
+  .chart-box.tall { height: 340px; }
+
+  .editor { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 16px 18px; }
+  .editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+  .editor-head h2 { font-size: 14px; margin: 0; }
+  .editor-head .desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .editor-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--text); font-size: 11px; padding: 6px 11px; border-radius: 6px; cursor: pointer; font-family: var(--sans); }
+  .btn:hover { border-color: var(--accent); }
+  .btn.accent { background: var(--accent); color: #08111f; border-color: var(--accent); font-weight: 600; }
+
+  .editor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+  .editor-row {
+    display: grid; grid-template-columns: 62px 1fr 70px 66px; align-items: center; gap: 8px;
+    padding: 7px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+    font-size: 11px; font-family: var(--mono);
+  }
+  .editor-row.has-override { border-color: var(--override); }
+  .er-period { color: var(--text); font-weight: 600; }
+  .er-guide { color: var(--muted); font-size: 10px; }
+  .er-input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border-2); color: var(--text);
+    border-radius: 5px; padding: 4px 6px; font-family: var(--mono); font-size: 11px; text-align: right;
+  }
+  .er-input:focus { outline: none; border-color: var(--accent); }
+  .editor-row.has-override .er-input { color: var(--override); }
+  .er-eff { color: var(--forecast); text-align: right; font-size: 10px; }
+
+  .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; line-height: 1.9; }
+  .empty code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
+  .footnote { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.7; }
+  .footnote .k { font-family: var(--mono); color: var(--text); }
+  .footnote .warn { color: var(--warn); margin-bottom: 6px; }
+
+  @media (max-width: 720px) { .chart-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="eyebrow">
+    <span class="step">STEP 1</span>
+    <span class="ctx">시장 인식 · 미국 인플레이션 전망</span>
+  </div>
+  <h1>US Inflation Forecast</h1>
+  <p class="tagline">FRED 지수(SA) → 시즈널 m-m 추정 → 정성 판단 override → y-y 시나리오 · CPI/PCE 헤드라인·근원</p>
+
+  <!-- 시리즈 셀렉터 -->
+  <div class="selector" id="series-selector"></div>
+
+  <!-- 시리즈 헤더 -->
+  <div class="series-bar">
+    <span class="sname" id="series-name">—</span>
+    <span class="tag">SA</span>
+    <span class="tag" id="series-source">—</span>
+    <span class="meta">기간 <span id="series-range">—</span></span>
+    <span class="meta"><span id="series-count">—</span></span>
+    <span class="meta">최신 <span id="series-updated">—</span></span>
+  </div>
+
+  <!-- 컨트롤 -->
+  <div class="controls">
+    <div class="ctrl-group">
+      <span class="ctrl-label">전망 기간</span>
+      <div class="seg">
+        <button data-fcst="6">6M</button>
+        <button data-fcst="12" class="active">12M</button>
+        <button data-fcst="24">24M</button>
+      </div>
+    </div>
+    <div class="ctrl-group">
+      <span class="ctrl-label">y-y 표시</span>
+      <div class="seg">
+        <button data-yy="24">2Y</button>
+        <button data-yy="36">3Y</button>
+        <button data-yy="60" class="active">5Y</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 요약 -->
+  <div class="stats" id="summary"></div>
+
+  <!-- 차트 -->
+  <div class="chart-grid">
+    <div class="chart-card wide">
+      <div class="chart-box tall" id="chart-yoy"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-box" id="chart-index"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-box" id="chart-mm"></div>
+    </div>
+  </div>
+
+  <!-- m-m 편집기 -->
+  <div class="editor">
+    <div class="editor-head">
+      <div>
+        <h2>m-m Override — 전망 월별 상승률 조정</h2>
+        <div class="desc">비워두면 시즈널 가이드값 사용. 값을 넣으면 그 달 m-m을 정성 판단으로 덮어씀. 시리즈별로 따로 저장.</div>
+      </div>
+      <div class="editor-actions">
+        <button class="btn" id="reset-overrides">이 시리즈 초기화</button>
+        <button class="btn" id="import-btn">JSON 가져오기</button>
+        <button class="btn accent" id="export-json">JSON 내보내기</button>
+        <input type="file" id="import-json" accept="application/json,.json" style="display:none" />
+      </div>
+    </div>
+    <div class="editor-grid" id="editor-body"></div>
+    <div class="footnote" id="footnote"></div>
+  </div>
+</div>
+
+<!-- 공통 내비게이션 -->
+<script type="module" src="js/nav.js"></script>
+<!-- vendor -->
+<script src="vendor/plotly.min.js"></script>
+<!-- app (ES module) -->
+<script type="module">
+  import { initUS } from './js/us-inflation-ui.js';
+  initUS();
+</script>
+</body>
+</html>
