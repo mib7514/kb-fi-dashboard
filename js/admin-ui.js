@@ -93,7 +93,7 @@ function renderPreview() {
 
   const cfg = getConfig(state.seriesId) || {};
   const scenario = { series_id: state.seriesId, scenario_id: 'base', label: 'Base', mm_overrides: [], last_edited: new Date().toISOString() };
-  const meta = { series_id: state.seriesId, window_years: 5, notes: '', comparison_label: '' };
+  const meta = { series_id: state.seriesId, window_years: 10, notes: '', comparison_label: '' };
   const result = buildForecast(series, scenario, meta, 12, cfg.value_type || 'index', cfg.frequency || 'monthly');
 
   const lastIdx = result.index_history[result.index_history.length - 1];

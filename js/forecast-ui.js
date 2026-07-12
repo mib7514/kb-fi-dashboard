@@ -10,7 +10,7 @@ const ACTIVE_SERIES_ID = 'kr-cpi-headline';
 
 // ── 상태 ──
 const state = {
-  windowYears: 5,       // 5 | 10 | 15
+  windowYears: 10,      // 5 | 10 | 15 (US 모듈과 통일: 기본 10)
   forecastMonths: 12,   // 전망 개월수
   yyMonths: 60,         // y-y 차트 표시 범위 (최근 N개월)
   overrides: {},        // { 'YYYY-MM': mm(number) }  — 사용자 정성 판단
