@@ -22,9 +22,9 @@ const SERIES = [
   { id: 'us-pce-core',     fred: 'PCEPILFE', display_name: 'US PCE ex Food & Energy (SA)', unit: '2017=100' },
 ];
 
-// 백필: 5년. y/y 산출에는 최전월의 t-12가 필요하므로 base로 1년 더 확보(총 6년) 후 저장.
-const BACKFILL_YEARS = 5;
-const YY_BASE_YEARS = 1;
+// 백필: 2009-01부터 고정(15년+ 확보). 시즈널 윈도우 5/10/15년 토글을 뒷받침한다.
+// 4시리즈 × 월별이라 JSON 크기는 여전히 작다.
+const OBSERVATION_START = '2009-01-01';
 
 const API_KEY = process.env.FRED_API_KEY;
 if (!API_KEY) {
@@ -32,11 +32,8 @@ if (!API_KEY) {
   process.exit(1);
 }
 
-// FRED observation_start: 현재연도 기준 (BACKFILL_YEARS + YY_BASE_YEARS)년 전 1월 1일.
 function observationStart() {
-  const now = new Date();
-  const y = now.getFullYear() - (BACKFILL_YEARS + YY_BASE_YEARS);
-  return `${y}-01-01`;
+  return OBSERVATION_START;
 }
 
 // FRED 날짜('YYYY-MM-01') → 'YYYY-MM'

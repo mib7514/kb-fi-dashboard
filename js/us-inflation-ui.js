@@ -20,8 +20,8 @@ const SERIES_LABEL = {
 const state = {
   activeSeries: 'us-cpi-headline',
   forecastMonths: 12,   // 6 | 12 | 24
-  yyMonths: 60,         // y-y 표시 범위(최근 N개월)
-  windowYears: 5,       // 시즈널 가이드 윈도우(백필 5년 → 고정)
+  yyMonths: 60,         // y-y 표시 범위(최근 N개월) — 적재기간과 별개, 기본 5년
+  windowYears: 10,      // 시즈널 가이드 윈도우 5|10|15년 (적재 2009~ → 15년 지원)
   overridesBySeries: {},// { seriesId: { 'YYYY-MM': mm(number) } }
 };
 
@@ -38,6 +38,7 @@ function persistable() {
     activeSeries: state.activeSeries,
     forecastMonths: state.forecastMonths,
     yyMonths: state.yyMonths,
+    windowYears: state.windowYears,
     overridesBySeries: state.overridesBySeries,
   };
 }
@@ -46,6 +47,7 @@ function applyState(s) {
   if (SERIES_ORDER.includes(s.activeSeries)) state.activeSeries = s.activeSeries;
   if ([6, 12, 24].includes(s.forecastMonths)) state.forecastMonths = s.forecastMonths;
   if (typeof s.yyMonths === 'number') state.yyMonths = s.yyMonths;
+  if ([5, 10, 15].includes(s.windowYears)) state.windowYears = s.windowYears;
   if (s.overridesBySeries && typeof s.overridesBySeries === 'object') {
     // 시리즈별 { period: number }만 취함.
     const clean = {};
@@ -197,11 +199,19 @@ function renderFootnote() {
   el.innerHTML = `
     ${gapLine}
     <div>모든 시리즈는 <span class="k">계절조정(SA)</span> 지수(FRED). 산출 y-y는 SA 기준이라 BLS/BEA 공표 y-y(NSA)와 ±0.1%p 내외 괴리 가능.</div>
-    <div>시즈널 가이드는 각 전망 시점 기준 최근 <span class="k">${state.windowYears}년</span> 같은 달 m-m의 rolling 평균(백필 5년 → 윈도우 5년 고정). 연준 공식 목표는 헤드라인 PCE 2% (근원 PCE는 기조 판단 참고지표); 차트의 2% 수평선은 참고용.</div>`;
+    <div>시즈널 가이드는 각 전망 시점 기준 최근 <span class="k">${state.windowYears}년</span> 같은 달 m-m의 rolling 평균(적재 2009~, 윈도우 5/10/15년 선택 — 표시 구간과 별개). 연준 공식 목표는 헤드라인 PCE 2% (근원 PCE는 기조 판단 참고지표); 차트의 2% 수평선은 참고용.</div>`;
 }
 
 // ── 컨트롤 바인딩 ──
 function bindControls() {
+  document.querySelectorAll('[data-window]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.windowYears = Number(btn.dataset.window);
+      document.querySelectorAll('[data-window]').forEach((b) => b.classList.toggle('active', b === btn));
+      save();
+      renderAll(); // 윈도우 변경 → 시즈널 가이드·전망 기본값 재계산
+    });
+  });
   document.querySelectorAll('[data-fcst]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.forecastMonths = Number(btn.dataset.fcst);
@@ -258,6 +268,7 @@ function bindControls() {
 
 // 세그먼트 버튼 active 상태를 state에 맞춤(가져오기 후).
 function syncControlActive() {
+  document.querySelectorAll('[data-window]').forEach((b) => b.classList.toggle('active', Number(b.dataset.window) === state.windowYears));
   document.querySelectorAll('[data-fcst]').forEach((b) => b.classList.toggle('active', Number(b.dataset.fcst) === state.forecastMonths));
   document.querySelectorAll('[data-yy]').forEach((b) => b.classList.toggle('active', Number(b.dataset.yy) === state.yyMonths));
 }
