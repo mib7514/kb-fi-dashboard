@@ -15,7 +15,7 @@
 //    (키 필요 게이트 — 회사 PC 미저장 원칙. 개인 노트북에서 실행·검증.)
 
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 // 백필 시작: 15년+ 확보 (다른 물가 모듈과 정합). rate 시계열이라 크기 작음.
@@ -23,7 +23,7 @@ const OBSERVATION_START = '2009-01-01';
 
 // 3종 — "가장 많이 오르내린 품목을 잘라내고 남은 몸통 물가".
 // blurb: Phase 2 페이지 카드의 "쉬운 설명 한 줄"로 사용.
-const SERIES = [
+export const SERIES = [
   {
     id: 'trimmed-pce-dallas', fred: 'PCETRIM12M159SFRBDAL',
     display_name: '댈러스 연은 Trimmed Mean PCE (12M)',
@@ -42,12 +42,34 @@ const SERIES = [
 ];
 
 const API_KEY = process.env.FRED_API_KEY;
-if (!API_KEY) {
-  console.error('[trimmed-us] FRED_API_KEY 환경변수가 없습니다.');
-  process.exit(1);
-}
 
 function toPeriod(fredDate) { return fredDate.slice(0, 7); }
+
+// 시리즈 정의 + FRED 메타 + 관측치 → 출력 payload. fetch와 픽스처 생성이 공유하는
+// 단일 직렬화 경로 (스키마 100% 동일 보장).
+export function buildTrimmedPayload(s, fredMeta, data) {
+  const last = data[data.length - 1];
+  return {
+    meta: {
+      series_id: s.id, fred_code: s.fred, display_name: s.display_name,
+      blurb: s.blurb, source: 'fred',
+      fred_title: fredMeta.title, unit: fredMeta.units, unit_short: fredMeta.units_short,
+      value_type: 'rate', frequency: 'monthly',
+      seasonal_adjustment: fredMeta.seasonal_adjustment,
+      last_updated: last.period,
+    },
+    data,
+  };
+}
+
+// key→payload 등록 목록 → 자기등록 JS 본문. globalName으로 실데이터/픽스처 전역 분리.
+export function serializeTrimmed(registrations, banner, globalName = 'FENRIR_SERIES') {
+  let body = banner + `window.${globalName} = window.${globalName} || {};\n`;
+  for (const r of registrations) {
+    body += `window.${globalName}[${JSON.stringify(r.key)}] = ${JSON.stringify(r.payload)};\n`;
+  }
+  return body;
+}
 
 async function fredGet(path, params) {
   const url = new URL(`https://api.stlouisfed.org/fred/${path}`);
@@ -88,6 +110,7 @@ async function fetchObservations(fredCode, start) {
 }
 
 async function main() {
+  if (!API_KEY) { console.error('[trimmed-us] FRED_API_KEY 환경변수가 없습니다.'); process.exit(1); }
   console.error(`[trimmed-us] observation_start=${OBSERVATION_START}, 시리즈 ${SERIES.length}종`);
   const registrations = [];
 
@@ -99,29 +122,12 @@ async function main() {
     console.error(`  ${s.id.padEnd(22)} ${s.fred}`);
     console.error(`      title="${meta.title}"`);
     console.error(`      units="${meta.units}" freq=${meta.frequency} SA=${meta.seasonal_adjustment} · ${data.length}개월 최신 ${last.period}=${last.value}`);
-
-    registrations.push({
-      key: s.id,
-      payload: {
-        meta: {
-          series_id: s.id, fred_code: s.fred, display_name: s.display_name,
-          blurb: s.blurb, source: 'fred',
-          fred_title: meta.title, unit: meta.units, unit_short: meta.units_short,
-          value_type: 'rate', frequency: 'monthly',
-          seasonal_adjustment: meta.seasonal_adjustment,
-          last_updated: last.period,
-        },
-        data,
-      },
-    });
+    registrations.push({ key: s.id, payload: buildTrimmedPayload(s, meta, data) });
   }
 
   const banner = `// data/trimmed-us.js — "튀는 품목을 빼고 본 미국 물가" 3종 (FRED).\n` +
     `// scripts/fetch-trimmed-us.mjs 생성. 자동 생성물 — 직접 편집 금지.\n`;
-  let body = banner + `window.FENRIR_SERIES = window.FENRIR_SERIES || {};\n`;
-  for (const r of registrations) {
-    body += `window.FENRIR_SERIES[${JSON.stringify(r.key)}] = ${JSON.stringify(r.payload)};\n`;
-  }
+  const body = serializeTrimmed(registrations, banner);
 
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const dataDir = join(scriptDir, '..', 'data');
@@ -132,7 +138,10 @@ async function main() {
   console.error(`[trimmed-us] 저장 완료 → ${outPath}`);
 }
 
-main().catch((err) => {
-  console.error(`[trimmed-us] 실패: ${err.message}`);
-  process.exit(1);
-});
+// CLI로 직접 실행할 때만 fetch (테스트·픽스처 생성 시 import는 main 미실행).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(`[trimmed-us] 실패: ${err.message}`);
+    process.exit(1);
+  });
+}

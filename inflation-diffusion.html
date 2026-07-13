@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>물가가 얼마나 넓게 오르나 · FI Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --forecast: #f0883e;
+    --red: #f85149; --red-bg: #2b1416; --yellow: #d29922; --yellow-bg: #2a2113;
+    --green: #3fb950; --green-bg: #12241a;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 20px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+
+  /* 샘플 데이터 배지 — 실데이터 생성 시 자동 숨김 */
+  #sample-badge { display: none; margin: 0 0 16px; padding: 9px 13px; border-radius: 8px;
+    background: var(--yellow-bg); border: 1px solid #46370f; color: #e3b341;
+    font-size: 12.5px; font-weight: 600; }
+  #sample-badge.show { display: block; }
+  #sample-badge .sub { font-weight: 400; color: #c9a227; }
+
+  /* ① 한 줄 결론 + 신호등 */
+  .verdict { display: flex; gap: 16px; align-items: flex-start; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin-bottom: 18px; }
+  .light { flex-shrink: 0; width: 16px; height: 16px; border-radius: 50%; margin-top: 6px; }
+  .light.red { background: var(--red); box-shadow: 0 0 0 4px var(--red-bg); }
+  .light.yellow { background: var(--yellow); box-shadow: 0 0 0 4px var(--yellow-bg); }
+  .light.green { background: var(--green); box-shadow: 0 0 0 4px var(--green-bg); }
+  .verdict .line { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 4px; line-height: 1.4; }
+  .verdict .line b.red { color: var(--red); } .verdict .line b.yellow { color: var(--yellow); } .verdict .line b.green { color: var(--green); }
+  .verdict .sub { font-size: 13px; color: var(--muted); }
+  .verdict .status { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 9px; border-radius: 20px; margin-left: 6px; }
+  .status.red { color: var(--red); background: var(--red-bg); } .status.yellow { color: var(--yellow); background: var(--yellow-bg); } .status.green { color: var(--green); background: var(--green-bg); }
+
+  h2.sec { font-size: 14px; font-weight: 700; color: var(--text); margin: 26px 0 10px; letter-spacing: -0.01em; }
+  h2.sec .q { font-size: 11px; color: var(--muted); font-weight: 400; }
+
+  /* ② 판정표 2×2 */
+  .matrix-wrap { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; }
+  .m-ylabel { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; color: var(--muted); text-align: center; }
+  .matrix { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .m-xlabel { grid-column: 2; font-size: 11px; color: var(--muted); text-align: center; margin-top: 4px; }
+  .cell { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--panel); opacity: 0.5; transition: opacity .15s, border-color .15s; }
+  .cell.on { opacity: 1; border-width: 2px; }
+  .cell.on.red { border-color: var(--red); background: var(--red-bg); }
+  .cell.on.yellow { border-color: var(--yellow); background: var(--yellow-bg); }
+  .cell.on.green { border-color: var(--green); background: var(--green-bg); }
+  .cell .label { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+  .cell .desc { font-size: 11.5px; color: var(--muted); }
+  .cell .axis { font-size: 10px; color: var(--muted); margin-top: 6px; font-family: var(--mono); }
+
+  .chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px 4px; }
+  .chart-box { width: 100%; height: 320px; }
+
+  /* ④ trimmed 미니 패널 */
+  .trim-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .trim-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 15px 8px; }
+  .trim-card .name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+  .trim-card .blurb { font-size: 11.5px; color: var(--muted); min-height: 30px; }
+  .trim-card .val { font-size: 22px; font-weight: 700; margin: 4px 0 0; }
+  .trim-card .cmp { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .trim-spark { width: 100%; height: 46px; margin-top: 4px; }
+
+  /* ⑤ 접이식 상세 */
+  details.detail { margin-top: 22px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); }
+  details.detail > summary { cursor: pointer; padding: 13px 16px; font-size: 13px; font-weight: 600; color: var(--text); list-style: none; }
+  details.detail > summary::-webkit-details-marker { display: none; }
+  details.detail > summary::before { content: '▸ '; color: var(--muted); }
+  details.detail[open] > summary::before { content: '▾ '; }
+  .detail-body { padding: 4px 16px 16px; }
+  .detail-toggle { display: inline-flex; gap: 4px; margin-bottom: 10px; }
+  .detail-toggle button { font-size: 12px; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border-2);
+    background: var(--panel-2); color: var(--muted); cursor: pointer; }
+  .detail-toggle button.active { background: var(--accent); color: #08111f; border-color: var(--accent); font-weight: 600; }
+  .mover-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .mover-cols h3 { font-size: 12px; margin: 0 0 6px; }
+  .mover-cols h3.up { color: var(--red); } .mover-cols h3.down { color: var(--green); }
+  .mrow { display: flex; justify-content: space-between; font-size: 12px; padding: 3px 0; border-bottom: 1px solid var(--border); gap: 10px; }
+  .mrow .nm { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mrow .vv { font-family: var(--mono); flex-shrink: 0; }
+  .mrow .vv.up { color: var(--red); } .mrow .vv.down { color: var(--green); }
+  .mrow .wt { color: var(--muted); font-family: var(--mono); flex-shrink: 0; font-size: 10.5px; }
+
+  .meta-foot { margin-top: 14px; font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .site-foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  @media (max-width: 640px) { .mover-cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">
+    <span class="step">MEASURE</span>
+    <span class="ctx">FI Dashboard · 물가가 얼마나 넓게 오르나 (미국)</span>
+  </div>
+
+  <div id="sample-badge">
+    🧪 샘플 데이터로 표시 중
+    <span class="sub">— 실측 데이터(data/inflation-diffusion-us.js) 생성 전 미리보기입니다. 실데이터가 커밋되면 이 배지는 자동으로 사라집니다.</span>
+  </div>
+
+  <!-- ① 한 줄 결론 + 신호등 -->
+  <div class="verdict" id="verdict">
+    <div class="light" id="v-light"></div>
+    <div>
+      <p class="line" id="v-line">데이터를 불러오는 중…</p>
+      <p class="sub" id="v-sub"></p>
+    </div>
+  </div>
+
+  <!-- ② 오늘의 판정표 -->
+  <h2 class="sec">오늘의 판정표 <span class="q">— 물가 숫자와 "넓이"를 함께 보면</span></h2>
+  <div class="matrix-wrap">
+    <div class="m-ylabel">← 오르는 품목 적음 &nbsp;|&nbsp; 많음 →</div>
+    <div>
+      <div class="matrix" id="matrix"></div>
+      <div class="m-xlabel">← 물가 숫자 낮아짐(전월비) &nbsp;|&nbsp; 높아짐 →</div>
+    </div>
+  </div>
+
+  <!-- ③ 시계열 -->
+  <h2 class="sec">얼마나 넓게 오르고 있나 <span class="q">— 뚜렷이 오르는 품목 비율과 평소(12개월 평균)</span></h2>
+  <div class="chart-card"><div class="chart-box" id="chart-breadth"></div></div>
+
+  <!-- ④ trimmed 미니 패널 -->
+  <h2 class="sec">튀는 품목을 빼고 본 물가 <span class="q">— 몸통 물가 3종</span></h2>
+  <div class="trim-grid" id="trim-grid"></div>
+
+  <!-- ⑤ 접이식 상세 -->
+  <details class="detail">
+    <summary>품목별 상승·하락 상세 보기 (가장 최근 달)</summary>
+    <div class="detail-body">
+      <div class="detail-toggle" id="detail-toggle"></div>
+      <div class="mover-cols">
+        <div><h3 class="up" id="up-head">많이 오른 품목</h3><div id="up-list"></div></div>
+        <div><h3 class="down" id="down-head">내린 품목</h3><div id="down-list"></div></div>
+      </div>
+    </div>
+  </details>
+
+  <div class="meta-foot" id="meta-foot"></div>
+  <footer class="site-foot">bp by bp — 측정은 도구가, 원인 판단은 사람이.</footer>
+</div>
+
+<!-- 공통 내비게이션 -->
+<script type="module" src="js/nav.js"></script>
+<!-- 차트 라이브러리 (기존 재사용) -->
+<script src="vendor/plotly.min.js"></script>
+<!-- 실데이터 (있으면 로드 — 없으면 무해하게 skip) -->
+<script src="data/inflation-diffusion-us.js"></script>
+<script src="data/trimmed-us.js"></script>
+<!-- 픽스처 폴백 (data/ 부재 시에만 사용, window.FENRIR_FIXTURE) -->
+<script src="tests/fixtures/inflation-diffusion-us.fixture.js"></script>
+<script src="tests/fixtures/trimmed-us.fixture.js"></script>
+<!-- 페이지 로직 (외부 import 없음 → file:// 안전, 전역만 소비) -->
+<script type="module">
+  const REAL = window.FENRIR_SERIES || {};
+  const FX = window.FENRIR_FIXTURE || {};
+
+  // 실데이터 우선, 없으면 픽스처 폴백. 하나라도 픽스처면 배지 표시.
+  let usingFixture = false;
+  function get(key) {
+    if (REAL[key]) return REAL[key];
+    if (FX[key]) { usingFixture = true; return FX[key]; }
+    return null;
+  }
+
+  const cpi = get('inflation-diffusion-us-cpi');
+  const pce = get('inflation-diffusion-us-pce');
+  const trimmed = ['trimmed-pce-dallas', 'median-cpi-cleveland', 'trimmed-cpi-cleveland']
+    .map(get).filter(Boolean);
+
+  if (usingFixture) document.getElementById('sample-badge').classList.add('show');
+
+  const fmt = (x, d = 1) => (x == null ? '—' : Number(x).toFixed(d));
+  const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);
+
+  // ── 유틸: breadth = 뚜렷이 오르는 품목 비율(가중 ge2) ──
+  function breadthSeries(p) { return p.series.map((s) => s.weighted.ge2); }
+
+  const C = { // 신호등/셀 색
+    red: 'red', yellow: 'yellow', green: 'green',
+  };
+
+  function renderAll() {
+    const s = cpi.series;
+    const latest = s[s.length - 1];
+    const prev = s[s.length - 2] || latest;
+    const breadth = latest.weighted.ge2;
+    const bs = breadthSeries(cpi);
+    const last12 = bs.slice(-12);
+    const avg12 = mean(last12);
+    const prevBreadth = prev.weighted.ge2;
+    const baselineVert = Math.max(avg12, prevBreadth);
+
+    // ── ① 신호등 + 한 줄 결론 ──
+    const MARGIN = 3; // %p
+    const diff = breadth - avg12;
+    let light, word, statusTxt;
+    if (diff >= MARGIN) { light = C.red; word = '넓게 퍼져'; statusTxt = '넓게 퍼짐'; }
+    else if (diff <= -MARGIN) { light = C.green; word = '좁아져'; statusTxt = '좁음'; }
+    else { light = C.yellow; word = '비슷하게 퍼져'; statusTxt = '애매'; }
+
+    document.getElementById('v-light').className = 'light ' + light;
+    document.getElementById('v-line').innerHTML =
+      `지금 미국 물가는 품목의 <b class="${light}">${fmt(breadth)}%</b>가 뚜렷이 오르는 중 ` +
+      `— 평소(${fmt(avg12)}%)보다 <b class="${light}">${word} 있음</b>` +
+      `<span class="status ${light}">${statusTxt}</span>`;
+    document.getElementById('v-sub').innerHTML =
+      `"뚜렷이 오르는 품목" = 전년보다 2% 넘게 오른 품목이 가계 지출에서 차지하는 비중(가중). ` +
+      `헤드라인 물가 ${fmt(latest.headline_yoy)}% (전월 ${fmt(prev.headline_yoy)}%), 근원 ${fmt(latest.core_yoy)}%. 기준: US-CPI ${latest.period}.`;
+
+    // ── ② 판정표 ──
+    const priceHigh = latest.headline_yoy > prev.headline_yoy;   // 전월 y/y 대비
+    const breadthWide = breadth >= baselineVert;                 // 12m평균·전월 중 큰 쪽 기준
+    renderMatrix(priceHigh, breadthWide, breadth, baselineVert, latest.headline_yoy, prev.headline_yoy);
+
+    // ── ③ 시계열 ──
+    renderBreadthChart();
+
+    // ── ④ trimmed ──
+    renderTrimmed();
+
+    // ── ⑤ 상세 ──
+    setupDetail();
+
+    // ── 메타 ──
+    const m = cpi.meta;
+    document.getElementById('meta-foot').textContent =
+      `US-CPI ${m.item_count}품목·가중커버 ${fmt((m.weight_coverage || 0) * 100)}% · 기준 ${m.last_updated} · ` +
+      `${m.window ? m.window.start + '~' + m.window.end : ''} · ${m.source?.toUpperCase?.() || ''} · ${m.port_ref || ''}` +
+      (usingFixture ? ' · [샘플]' : '');
+  }
+
+  // 2×2: 사분면 정의 (가로=물가 높음/낮음, 세로=품목 많음/적음)
+  function renderMatrix(priceHigh, breadthWide, breadth, baseline, hNow, hPrev) {
+    // key: `${priceHigh?'H':'L'}${breadthWide?'W':'N'}`
+    const cells = [
+      { key: 'LW', label: '속은 아직 뜨겁다', color: C.yellow, desc: '헤드라인은 내렸지만 오르는 품목은 여전히 넓음 — sticky 경계', pos: 'top-left' },
+      { key: 'HW', label: '진짜 뜨겁다', color: C.red, desc: '숫자도 높고 오르는 품목도 넓음 — 광범위한 인플레', pos: 'top-right' },
+      { key: 'LN', label: '진짜 식었다', color: C.green, desc: '숫자도 낮아지고 오르는 품목도 좁아짐 — 정상화', pos: 'bottom-left' },
+      { key: 'HN', label: '겉만 뜨겁다', color: C.yellow, desc: '숫자는 높지만 오르는 품목은 좁음 — 몇몇 품목이 끌어올린 착시', pos: 'bottom-right' },
+    ];
+    const active = `${priceHigh ? 'H' : 'L'}${breadthWide ? 'W' : 'N'}`;
+    // 그리드 순서: 위=품목 많음(W), 아래=품목 적음(N); 좌=물가 낮음(L), 우=물가 높음(H)
+    const order = ['LW', 'HW', 'LN', 'HN'];
+    const xNote = { H: `높아짐 (${fmt(hNow)}% > 전월 ${fmt(hPrev)}%)`, L: `낮아짐 (${fmt(hNow)}% ≤ 전월 ${fmt(hPrev)}%)` };
+    const yNote = { W: `많음 (${fmt(breadth)}% ≥ 기준 ${fmt(baseline)}%)`, N: `적음 (${fmt(breadth)}% < 기준 ${fmt(baseline)}%)` };
+    document.getElementById('matrix').innerHTML = order.map((k) => {
+      const c = cells.find((x) => x.key === k);
+      const on = k === active;
+      const axis = on ? `물가 ${xNote[k[0]]} · 품목 ${yNote[k[1]]}` : '';
+      return `<div class="cell ${on ? 'on ' + c.color : ''}">
+        <div class="label">${c.label}</div>
+        <div class="desc">${c.desc}</div>
+        ${on ? `<div class="axis">▶ ${axis}</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  // 색상 (chart)
+  const COL = { cpi: '#58a6ff', avg: '#8b949e', pce: '#f0883e', base: '#30363d', text: '#c9d1d9', grid: '#21262d', axis: '#484f58' };
+  const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+
+  function rollingAvg(arr, w) {
+    return arr.map((_, i) => {
+      const start = Math.max(0, i - w + 1);
+      const slice = arr.slice(start, i + 1);
+      return slice.reduce((s, x) => s + x, 0) / slice.length;
+    });
+  }
+
+  function renderBreadthChart() {
+    const x = cpi.series.map((s) => s.period);
+    const yCpi = breadthSeries(cpi);
+    const yAvg = rollingAvg(yCpi, 12);
+    const traces = [
+      { x, y: yCpi, name: 'CPI 오르는 품목 비율', mode: 'lines', line: { color: COL.cpi, width: 2 } },
+      { x, y: yAvg, name: '평소 (12개월 평균)', mode: 'lines', line: { color: COL.avg, width: 1.4, dash: 'dot' } },
+    ];
+    if (pce) {
+      traces.push({ x: pce.series.map((s) => s.period), y: breadthSeries(pce),
+        name: 'PCE (참고)', mode: 'lines', line: { color: COL.pce, width: 1.3 }, opacity: 0.7 });
+    }
+    const layout = {
+      paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+      font: { color: COL.text, family: FONT, size: 11 },
+      xaxis: { gridcolor: COL.grid, linecolor: COL.axis, tickfont: { size: 10 } },
+      yaxis: { title: { text: '오르는 품목 비율 (%)', font: { size: 10 } }, range: [0, 100],
+        gridcolor: COL.grid, linecolor: COL.axis, tickfont: { size: 10 } },
+      margin: { l: 54, r: 14, t: 10, b: 34 },
+      legend: { orientation: 'h', y: -0.16, font: { size: 10 } }, hovermode: 'x unified',
+      shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 50, y1: 50, line: { color: COL.base, width: 1, dash: 'dash' } }],
+    };
+    Plotly.react('chart-breadth', traces, layout, { displayModeBar: false, responsive: true });
+  }
+
+  function renderTrimmed() {
+    const grid = document.getElementById('trim-grid');
+    if (!trimmed.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:12px">몸통 물가 데이터 없음</div>'; return; }
+    grid.innerHTML = trimmed.map((t, i) => {
+      const last = t.data[t.data.length - 1];
+      const last12 = t.data.slice(-12).map((d) => d.value);
+      const avg = mean(last12);
+      return `<div class="trim-card">
+        <div class="name">${t.meta.display_name}</div>
+        <div class="blurb">${t.meta.blurb || ''}</div>
+        <div class="val">${fmt(last.value)}%</div>
+        <div class="cmp">최근 ${last.period} · 1년 평균 ${fmt(avg)}%</div>
+        <div class="trim-spark" id="spark-${i}"></div>
+      </div>`;
+    }).join('');
+    trimmed.forEach((t, i) => {
+      const d = t.data.slice(-60);
+      Plotly.react(`spark-${i}`, [{ x: d.map((p) => p.period), y: d.map((p) => p.value),
+        mode: 'lines', line: { color: COL.cpi, width: 1.4 }, hoverinfo: 'y' }], {
+        paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+        xaxis: { visible: false }, yaxis: { visible: false },
+        margin: { l: 2, r: 2, t: 2, b: 2 }, showlegend: false,
+      }, { displayModeBar: false, responsive: true, staticPlot: true });
+    });
+  }
+
+  // ── ⑤ 상세: CPI/PCE 토글, 최근 달 품목 상승·하락 ──
+  let detailSource = 'cpi';
+  function setupDetail() {
+    const toggle = document.getElementById('detail-toggle');
+    const opts = [['cpi', 'CPI (136품목)']];
+    if (pce) opts.push(['pce', 'PCE (176품목)']);
+    toggle.innerHTML = opts.map(([k, lbl]) =>
+      `<button data-k="${k}" class="${k === detailSource ? 'active' : ''}">${lbl}</button>`).join('');
+    toggle.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      detailSource = b.dataset.k;
+      toggle.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+      renderMovers();
+    }));
+    renderMovers();
+  }
+
+  function renderMovers() {
+    const src = detailSource === 'pce' ? pce : cpi;
+    const det = src.detail && src.detail[src.detail.length - 1];
+    const upEl = document.getElementById('up-list'), downEl = document.getElementById('down-list');
+    if (!det) { upEl.innerHTML = downEl.innerHTML = '<div style="color:var(--muted);font-size:12px">상세 없음</div>'; return; }
+    const items = det.items.filter((i) => i.yoy != null);
+    const up = items.filter((i) => i.yoy > 0).sort((a, b) => b.yoy - a.yoy).slice(0, 15);
+    const down = items.filter((i) => i.yoy < 0).sort((a, b) => a.yoy - b.yoy).slice(0, 15);
+    document.getElementById('up-head').textContent = `많이 오른 품목 (${det.period})`;
+    document.getElementById('down-head').textContent = `내린 품목 (${det.period})`;
+    const row = (i, dir) => `<div class="mrow"><span class="nm">${i.name}</span>` +
+      `<span class="vv ${dir}">${i.yoy > 0 ? '+' : ''}${fmt(i.yoy)}%</span>` +
+      `<span class="wt">비중 ${fmt(i.weight, 2)}</span></div>`;
+    upEl.innerHTML = up.map((i) => row(i, 'up')).join('') || '<div style="color:var(--muted);font-size:12px">없음</div>';
+    downEl.innerHTML = down.map((i) => row(i, 'down')).join('') || '<div style="color:var(--muted);font-size:12px">없음</div>';
+  }
+
+  // 모든 선언 이후 진입 (const TDZ 회피).
+  if (!cpi) {
+    document.getElementById('v-line').textContent = '표시할 데이터가 없습니다.';
+  } else {
+    renderAll();
+  }
+</script>
+</body>
+</html>
