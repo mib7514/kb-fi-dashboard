@@ -63,6 +63,22 @@
   .stat-unit { font-size: 12px; color: var(--muted); margin-left: 3px; font-weight: 400; }
   .stat-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
 
+  /* annual y-y summary (전망 경로 기준 연평균) */
+  .annual-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .annual-head h2 { font-size: 14px; margin: 0; }
+  .annual-head .hint { font-size: 11px; color: var(--muted); }
+  .annual { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  .annual-item {
+    background: linear-gradient(180deg, rgba(240,136,62,0.10), var(--panel));
+    border: 1px solid var(--border-2); border-left: 3px solid var(--forecast);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .annual-year { font-size: 12px; color: var(--text); font-family: var(--mono); font-weight: 600; }
+  .annual-unit { color: var(--muted); font-weight: 400; margin-left: 5px; }
+  .annual-gap { color: var(--forecast); font-family: var(--mono); font-size: 10px; margin-left: 6px; }
+  .annual-val { font-size: 27px; font-weight: 700; font-family: var(--mono); color: var(--forecast); letter-spacing: -0.01em; margin-top: 4px; }
+  .annual-parts { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
+
   /* charts */
   .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
   .chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px 4px; }
@@ -152,6 +168,13 @@
       </div>
     </div>
   </div>
+
+  <!-- 연평균 y-y 요약 (전망 경로 기준) -->
+  <div class="annual-head">
+    <h2>연평균 y-y 전망</h2>
+    <span class="hint">전망 경로(입력·시즈널 가이드) 기준 · 익년 12월까지 자동 연장</span>
+  </div>
+  <div class="annual" id="annual-summary"></div>
 
   <!-- 요약 -->
   <div class="stats" id="summary"></div>

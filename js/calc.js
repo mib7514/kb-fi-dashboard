@@ -311,6 +311,85 @@ export function buildForecast(
 }
 
 // ─────────────────────────────────────────────────────────────
+//  연평균 y-y 요약 (당해년도·익년도)
+// ─────────────────────────────────────────────────────────────
+
+// 전망 경로(입력>시즈널 가이드)로 당해년도·익년도 연평균 y-y를 산출.
+// 규약:
+//   · 경로 = 실측 구간은 실측, 전망 구간은 resolved(override 우선, 미입력은 시즈널 가이드).
+//   · 체인 연장: 사용자 입력 지평과 무관하게 익년 12월까지 가이드로 자동 연장(계산 전용).
+//   · 시즈널 가이드는 최종 실측 기준 "고정 윈도우"(seasonalAvgMM) — 차트 전망 경로와 동일 소스
+//     (기본 12M 지평 내에서는 rolling과 표본이 일치, 연장 구간은 고정 윈도우로 확장).
+//   · 연도는 최종 실측 period 기준 동적 산출(하드코딩 없음).
+//   · 연평균 = 해당 연도 가용 월별 y-y의 단순평균. y-y 산출 불가 월(gap)은 제외하고 개월수 함께 반환.
+//   · mmFn: 인덱스→m-m 변환기 주입(공용 computeMM / US gap-aware computeMMGapAware).
+export function annualYoYSummary(index_history, scenario, meta, mmFn = computeMM) {
+  const sorted = sortByPeriod(index_history);
+  if (sorted.length === 0) return { current_year: null, next_year: null, years: [] };
+
+  const lastIndex = sorted[sorted.length - 1];
+  const lastPeriod = lastIndex.period;
+  const currentYear = parsePeriod(lastPeriod).year;
+  const nextYear = currentYear + 1;
+  const endTarget = formatPeriod(nextYear, 12);
+
+  // 연장 전망 시점: 최종 실측 다음 달 ~ 익년 12월 (입력 지평 무관).
+  const periods = [];
+  {
+    let cur = nextPeriod(lastPeriod);
+    while (comparePeriods(cur, endTarget) <= 0) {
+      periods.push(cur);
+      cur = nextPeriod(cur);
+    }
+  }
+
+  const mmHistory = mmFn(sorted);
+  const guide = seasonalAvgMM(mmHistory, meta.window_years, lastPeriod, periods.length);
+  const overrides = new Map(scenario.mm_overrides.map((o) => [o.period, o.mm]));
+
+  // 성분 출처: 실측 / 입력(override) / 가이드.
+  const source = new Map();
+  for (const p of sorted) source.set(p.period, 'actual');
+  const resolvedMM = guide.map((g) => {
+    const has = overrides.has(g.period);
+    source.set(g.period, has ? 'input' : 'guide');
+    return { period: g.period, value: has ? overrides.get(g.period) : g.value };
+  });
+
+  const indexForecast = projectIndex(lastIndex, resolvedMM);
+  const yoyMap = new Map(
+    computeYY([...sorted, ...indexForecast]).map((p) => [p.period, p.value]),
+  );
+
+  const years = [currentYear, nextYear].map((year) => summarizeYear(year, yoyMap, source));
+  return { current_year: currentYear, next_year: nextYear, years };
+}
+
+// 한 해 12개월 중 y-y 가용 월만 단순평균 + 성분 개월수 집계(gap 월 제외).
+function summarizeYear(year, yoyMap, source) {
+  let sum = 0, months = 0, actual = 0, input = 0, guide = 0;
+  for (let m = 1; m <= 12; m++) {
+    const period = formatPeriod(year, m);
+    if (!yoyMap.has(period)) continue; // y-y 산출 불가 월(예: base 결측) 제외
+    sum += yoyMap.get(period);
+    months += 1;
+    const s = source.get(period);
+    if (s === 'actual') actual += 1;
+    else if (s === 'input') input += 1;
+    else guide += 1;
+  }
+  return {
+    year,
+    avg: months > 0 ? sum / months : null,
+    months,
+    complete: months === 12,
+    actual,
+    input,
+    guide,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
 //  내부 유틸
 // ─────────────────────────────────────────────────────────────
 

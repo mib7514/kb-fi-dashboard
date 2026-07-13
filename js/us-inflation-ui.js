@@ -3,7 +3,7 @@
 // 데이터: data/us-inflation.json 을 fetch (로컬 서버 서빙 전제 — file:// 미지원).
 // 개인 입력(m-m override)은 localStorage 'us-inflation-forecast' 단일 객체 + JSON 내보내기/가져오기.
 
-import { buildForecastUS, missingPeriods } from './us-inflation-calc.js';
+import { buildForecastUS, missingPeriods, annualYoYSummaryUS } from './us-inflation-calc.js';
 import { renderIndexChart, renderMmChart, renderYoyChart } from './us-inflation-chart.js';
 
 const DATA_URL = 'data/us-inflation.json';
@@ -104,9 +104,31 @@ function renderAll() {
   renderMmChart(document.getElementById('chart-mm'), result);
   renderSeriesBar();
   renderSelector();
+  renderAnnual(annualYoYSummaryUS(activeEntry().data, scenario(), meta()));
   renderSummary(result);
   renderEditor(result);
   renderFootnote();
+}
+
+// ── 연평균 y-y 요약 카드 ──
+// m-m 입력·윈도우 토글·시리즈 전환 모두 renderAll을 거치므로 여기서 자동 재계산됨.
+function renderAnnual(summary) {
+  const el = document.getElementById('annual-summary');
+  if (!el) return;
+  if (!summary || summary.years.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = summary.years.map((y) => {
+    const parts = [];
+    if (y.actual > 0) parts.push(`실측 ${y.actual}M`);
+    parts.push(`입력 ${y.input}M`);
+    parts.push(`가이드 ${y.guide}M`);
+    const gap = y.complete ? '' : `<span class="annual-gap">${y.months}개월 평균</span>`;
+    return `
+      <div class="annual-item">
+        <div class="annual-year">${y.year}<span class="annual-unit">연평균</span>${gap}</div>
+        <div class="annual-val">${fmtSigned(y.avg, 2)}<span class="stat-unit">%</span></div>
+        <div class="annual-parts">${parts.join(' + ')}</div>
+      </div>`;
+  }).join('');
 }
 
 function renderSelector() {

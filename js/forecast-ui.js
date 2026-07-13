@@ -1,7 +1,7 @@
 // forecast-ui.js — 물가전망 페이지 컨트롤러.
 // calc.js(계산) + chart.js(렌더)를 엮어 화면 상태를 관리.
 
-import { buildForecast, computeMM } from './calc.js';
+import { buildForecast, computeMM, annualYoYSummary } from './calc.js';
 import { renderIndexChart, renderMmChart, renderYoyChart } from './chart.js';
 import { getSeriesData } from './series-config.js';
 
@@ -51,8 +51,30 @@ function renderAll() {
   renderIndexChart(document.getElementById('chart-index'), result);
   renderMmChart(document.getElementById('chart-mm'), result);
   renderYoyChart(document.getElementById('chart-yoy'), result, { yyMonths: state.yyMonths });
+  renderAnnual(annualYoYSummary(DATA, scenario(), meta()));
   renderSummary(result);
   renderEditor(result);
+}
+
+// ── 연평균 y-y 요약 카드 ──
+// 전망 m-m을 바꿀 때마다 renderAll 파이프라인에서 재계산됨(별도 상태 없음).
+function renderAnnual(summary) {
+  const el = document.getElementById('annual-summary');
+  if (!el) return;
+  if (!summary || summary.years.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = summary.years.map((y) => {
+    const parts = [];
+    if (y.actual > 0) parts.push(`실측 ${y.actual}M`);
+    parts.push(`입력 ${y.input}M`);
+    parts.push(`가이드 ${y.guide}M`);
+    const gap = y.complete ? '' : `<span class="annual-gap">${y.months}개월 평균</span>`;
+    return `
+      <div class="annual-item">
+        <div class="annual-year">${y.year}<span class="annual-unit">연평균</span>${gap}</div>
+        <div class="annual-val">${fmtSigned(y.avg, 2)}<span class="stat-unit">%</span></div>
+        <div class="annual-parts">${parts.join(' + ')}</div>
+      </div>`;
+  }).join('');
 }
 
 function fmt(v, d = 2) {

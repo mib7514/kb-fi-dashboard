@@ -18,6 +18,7 @@ import {
   recentAvgMM,
   resolveForecastMM,
   projectIndex,
+  annualYoYSummary,
 } from './calc.js';
 
 function sortByPeriod(points) {
@@ -37,6 +38,13 @@ export function computeMMGapAware(history) {
     out.push({ period: cur.period, value: (cur.value / prev.value - 1) * 100 });
   }
   return out;
+}
+
+// 당해년도·익년도 연평균 y-y 요약(US). 공용 annualYoYSummary에 gap-aware m-m 변환기를 주입 —
+// 계산 규약(고정 윈도우 가이드·익년 12월 연장·gap 월 제외)은 동일하고, m-m 표본만 gap-aware.
+// gap 월(예: base 2025-10 결측)의 y-y는 computeYY가 자연히 배제 → 해당 연도는 "N개월 평균"으로 표기됨.
+export function annualYoYSummaryUS(index_history, scenario, meta) {
+  return annualYoYSummary(index_history, scenario, meta, computeMMGapAware);
 }
 
 // 첫~마지막 사이 빠진 달 목록 (차트 gap 표기·각주 판정용).
