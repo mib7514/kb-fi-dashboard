@@ -1,0 +1,46 @@
+name: Taylor 압력 data (ECOS)
+
+# 국고3년·근원CPI·실질GDP·기준금리(ECOS)를 적재해 data/taylor-*.js 갱신.
+# 데이터가 실제로 바뀐 경우에만 커밋(diff 없으면 skip).
+
+on:
+  schedule:
+    - cron: '45 22 * * 1-5'   # 평일 22:45 UTC = KST 07:45 (익영업일 아침)
+  workflow_dispatch: {}        # 수동 트리거
+
+permissions:
+  contents: write
+
+concurrency:
+  group: taylor-update
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch ECOS → data/taylor-ktb3y.js · data/taylor-pressure.js
+        env:
+          ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
+        run: node scripts/update_taylor.mjs
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- data/taylor-ktb3y.js data/taylor-pressure.js; then
+            echo "갱신분 없음 — 커밋 skip."
+            exit 0
+          fi
+          ASOF=$(node -e "const fs=require('fs');const w={};new Function('window',fs.readFileSync('data/taylor-ktb3y.js','utf8'))(w);process.stdout.write(w.TAYLOR_KTB3Y.meta.asof)")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/taylor-ktb3y.js data/taylor-pressure.js
+          git commit -m "data: Taylor 압력·국고3년(ECOS) ${ASOF} 갱신"
+          git push

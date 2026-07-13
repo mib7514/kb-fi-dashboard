@@ -56,6 +56,7 @@
 <script src="data/kr-cpi-headline.js"></script>
 <script src="data/credit-spread.js"></script>
 <script src="data/onoff-ktb3y.js"></script>
+<script src="data/taylor-pressure.js"></script>
 <!-- app -->
 <script type="module">
   import { NAV_ITEMS } from './js/nav.js'; // nav 바 자동 렌더 + NAV_ITEMS 재사용
@@ -65,6 +66,7 @@
   const DATALESS = new Set(['carry', 'rg-regime']); // 입력형 모듈 — 기준일 대신 안내
   const lastUpdated = (id) => {
     if (id === 'onoff') return (window.ONOFF_KTB3Y && window.ONOFF_KTB3Y.updated) || null;
+    if (id === 'taylor') return (window.TAYLOR_PRESSURE && window.TAYLOR_PRESSURE.meta && window.TAYLOR_PRESSURE.meta.asof) || null;
     const key = SERIES_KEY[id];
     const s = key && window.FENRIR_SERIES && window.FENRIR_SERIES[key];
     return (s && s.meta && s.meta.last_updated) || null;

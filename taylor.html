@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Taylor 금리압력 모니터 | FI Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --red: #f85149; --ok: #3fb950;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 13px 15px; }
+  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .stat-main { font-size: 24px; font-weight: 600; font-family: var(--mono); letter-spacing: -0.01em; }
+  .stat-main.blue { color: var(--accent); }
+  .stat-main.red { color: var(--red); }
+  .stat-unit { font-size: 12px; color: var(--muted); margin-left: 3px; font-weight: 400; }
+  .stat-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
+
+  .chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px 6px; }
+  .chart-box { width: 100%; height: 460px; }
+
+  .footnote { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.7; }
+  .footnote .k { font-family: var(--mono); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">
+    <span class="step">MONITOR</span>
+    <span class="ctx">측정 레이어 · 국고 3년 방향성 탐색</span>
+  </div>
+  <h1>Taylor 금리압력 모니터</h1>
+  <p class="tagline">수정 Taylor 적정금리 − 기준금리 갭(압력)과 국고 3년 일별금리 오버레이 · 전량 ECOS</p>
+
+  <div class="stats" id="summary"></div>
+
+  <div class="chart-card">
+    <div class="chart-box" id="chart"></div>
+  </div>
+
+  <div class="footnote" id="footnote"></div>
+</div>
+
+<!-- data (window 전역 자기할당) -->
+<script src="data/taylor-ktb3y.js"></script>
+<script src="data/taylor-pressure.js"></script>
+<!-- 공통 내비게이션 -->
+<script type="module" src="js/nav.js"></script>
+<!-- vendor -->
+<script src="vendor/plotly.min.js"></script>
+<!-- app -->
+<script type="module">
+  const K = window.TAYLOR_KTB3Y, P = window.TAYLOR_PRESSURE;
+  const COLORS = { ktb: '#58a6ff', pressure: '#f85149', grid: '#21262d', axis: '#484f58', text: '#c9d1d9', muted: '#8b949e' };
+  const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+  const fmt = (x, d = 2) => (x == null || Number.isNaN(x) ? '—' : x.toFixed(d));
+
+  const ktbLast = K.series[K.series.length - 1];       // [date, yield]
+  const prsLast = P.series[P.series.length - 1];       // [month, pressure]
+  const gap = ktbLast[1] - prsLast[1];
+
+  // ── 상단 배지 3개 ──
+  document.getElementById('summary').innerHTML = [
+    `<div class="stat"><div class="stat-label">국고 3년 (최신)</div>
+      <div class="stat-main blue">${fmt(ktbLast[1], 3)}<span class="stat-unit">%</span></div>
+      <div class="stat-sub">asof ${ktbLast[0]}</div></div>`,
+    `<div class="stat"><div class="stat-label">Taylor 압력 (최신)</div>
+      <div class="stat-main red">${fmt(prsLast[1], 2)}<span class="stat-unit">%p</span></div>
+      <div class="stat-sub">asof ${prsLast[0]} · CPI ${P.meta.lastCpi} · GDP ${P.meta.lastGdpQuarter}</div></div>`,
+    `<div class="stat"><div class="stat-label">갭 (국고3년 − 압력)</div>
+      <div class="stat-main">${fmt(gap, 2)}<span class="stat-unit">%p</span></div>
+      <div class="stat-sub">r*=${P.meta.params.rstar} α=${P.meta.params.alpha} β=${P.meta.params.beta}</div></div>`,
+  ].join('');
+
+  // ── 차트: 국고3년 실선(파랑) + 압력 step(빨강) ──
+  const ktbTrace = {
+    x: K.series.map((r) => r[0]), y: K.series.map((r) => r[1]),
+    name: '국고 3년 (일별)', mode: 'lines', line: { color: COLORS.ktb, width: 1.5 },
+    hovertemplate: '%{x}<br>국고3년 %{y:.3f}%<extra></extra>',
+  };
+  const prsTrace = {
+    x: P.series.map((r) => `${r[0]}-01`), y: P.series.map((r) => r[1]),
+    name: 'Taylor 압력 (월별)', mode: 'lines', line: { color: COLORS.pressure, width: 1.8, shape: 'hv' },
+    hovertemplate: '%{x|%Y-%m}<br>압력 %{y:.2f}%p<extra></extra>',
+  };
+  const layout = {
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { color: COLORS.muted, family: FONT, size: 11 },
+    margin: { l: 48, r: 16, t: 10, b: 36 },
+    xaxis: { type: 'date', gridcolor: COLORS.grid, linecolor: COLORS.axis, zeroline: false, tickfont: { size: 10 } },
+    yaxis: { title: { text: '% / %p', font: { size: 11 } }, gridcolor: COLORS.grid, linecolor: COLORS.axis, zeroline: true, zerolinecolor: COLORS.axis, tickfont: { size: 10 } },
+    legend: { orientation: 'h', x: 0, y: 1.08, font: { size: 11 } },
+    hovermode: 'x unified',
+    shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y', y0: 0, y1: 0, line: { color: COLORS.axis, width: 1, dash: 'dot' }, layer: 'below' }],
+  };
+  Plotly.newPlot('chart', [ktbTrace, prsTrace], layout, { displayModeBar: false, responsive: true });
+
+  document.getElementById('footnote').innerHTML =
+    `범례: <span class="k">국고 3년</span> ECOS ${K.meta.source} · asof ${K.meta.asof} (${K.meta.n}일) &nbsp;|&nbsp; `
+    + `<span class="k">Taylor 압력</span> i* − 기준금리, i* = r* + π + α(π−2) + β·ygap · asof ${P.meta.asof} · ${P.meta.source}. `
+    + `π=근원CPI YoY, ygap=one-sided HP(λ=${P.meta.params.lambda}) 산출갭. 파라미터는 캘리브레이션 동결.`;
+</script>
+</body>
+</html>
