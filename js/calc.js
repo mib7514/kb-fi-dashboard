@@ -266,22 +266,24 @@ export function buildForecast(
     }
   }
 
-  // guide.seasonal_avg_window: forecast 시점에 대한 rolling.
-  const seasonalAvgRolling = rollingSeasonalAvgMM(mm_history, meta.window_years, forecastPeriods);
+  // guide.seasonal_avg_window: 전망 시점 시즈널 가이드 — 최종 실측 기준 "고정 윈도우"(동결).
+  // 지평 1~12M 구간은 rolling과 표본이 수학적으로 동일하고(값 불변), 12M 초과 연장 구간에서만
+  // rolling과 갈린다. 연평균 요약 카드(annualYoYSummary)가 익년 12월까지 고정 윈도우로 연장하므로,
+  // 카드와 차트 전망선이 전 지평에서 일치하도록 엔진도 고정 윈도우로 정렬.
+  const seasonalAvgFixed = seasonalAvgMM(mm_history, meta.window_years, endPeriod, forecastMonths);
   const guide = {
-    seasonal_avg_window: seasonalAvgRolling,
+    seasonal_avg_window: seasonalAvgFixed,
     seasonal_trimmed_window: seasonalTrimmedAvgMM(mm_history, meta.window_years, endPeriod, forecastMonths),
     recent_6m_avg: recentAvgMM(mm_history, 6),
     recent_12m_avg: recentAvgMM(mm_history, 12),
   };
 
-  // mm_guide_full: history 마지막 24개월 + forecast 모든 시점 rolling 가이드.
+  // mm_guide_full: history 마지막 24개월(회고적 rolling) + forecast 구간(고정 윈도우, 위 가이드와 동일).
   const last24HistoryPeriods = mm_history.slice(-24).map((p) => p.period);
-  const mm_guide_full = rollingSeasonalAvgMM(
-    mm_history,
-    meta.window_years,
-    [...last24HistoryPeriods, ...forecastPeriods],
-  );
+  const mm_guide_full = [
+    ...rollingSeasonalAvgMM(mm_history, meta.window_years, last24HistoryPeriods),
+    ...seasonalAvgFixed,
+  ];
 
   const mm_forecast = resolveForecastMM(scenario, guide.seasonal_avg_window);
   const index_forecast = projectIndex(lastIndex, mm_forecast);
