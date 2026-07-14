@@ -30,6 +30,16 @@
   #sample-badge.show { display: block; }
   #sample-badge .sub { font-weight: 400; color: #c9a227; }
 
+  /* 국가 탭 */
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .tabs button { font-size: 13px; padding: 6px 15px; border-radius: 8px; border: 1px solid var(--border-2);
+    background: var(--panel); color: var(--muted); cursor: pointer; transition: all .12s; }
+  .tabs button:hover { color: var(--text); border-color: var(--accent); }
+  .tabs button.active { background: var(--accent); color: #08111f; border-color: var(--accent); font-weight: 700; }
+  .au-note { display: none; font-size: 12px; color: var(--yellow); background: var(--yellow-bg);
+    border: 1px solid #46370f; border-radius: 8px; padding: 9px 12px; margin: 10px 0 0; }
+  .au-note.show { display: block; }
+
   /* ① 한 줄 결론 + 신호등 */
   .verdict { display: flex; gap: 16px; align-items: flex-start; background: var(--panel);
     border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin-bottom: 18px; }
@@ -102,13 +112,16 @@
 <div class="wrap">
   <div class="eyebrow">
     <span class="step">MEASURE</span>
-    <span class="ctx">FI Dashboard · 물가가 얼마나 넓게 오르나 (미국)</span>
+    <span class="ctx">FI Dashboard · 물가가 얼마나 넓게 오르나 (미국·한국·유럽·호주)</span>
   </div>
 
   <div id="sample-badge">
     🧪 샘플 데이터로 표시 중
     <span class="sub">— 실측 데이터(data/inflation-diffusion-us.js) 생성 전 미리보기입니다. 실데이터가 커밋되면 이 배지는 자동으로 사라집니다.</span>
   </div>
+
+  <!-- 국가 탭 -->
+  <div class="tabs" id="country-tabs"></div>
 
   <!-- ① 한 줄 결론 + 신호등 -->
   <div class="verdict" id="verdict">
@@ -132,10 +145,13 @@
   <!-- ③ 시계열 -->
   <h2 class="sec">얼마나 넓게 오르고 있나 <span class="q">— 뚜렷이 오르는 품목 비율과 평소(12개월 평균)</span></h2>
   <div class="chart-card"><div class="chart-box" id="chart-breadth"></div></div>
+  <p class="au-note" id="country-note"></p>
 
-  <!-- ④ trimmed 미니 패널 -->
-  <h2 class="sec">튀는 품목을 빼고 본 물가 <span class="q">— 몸통 물가 3종</span></h2>
-  <div class="trim-grid" id="trim-grid"></div>
+  <!-- ④ trimmed 미니 패널 (미국 전용) -->
+  <div id="trim-section">
+    <h2 class="sec">튀는 품목을 빼고 본 물가 <span class="q">— 몸통 물가 3종 (미국)</span></h2>
+    <div class="trim-grid" id="trim-grid"></div>
+  </div>
 
   <!-- ⑤ 접이식 상세 -->
   <details class="detail">
@@ -159,9 +175,15 @@
 <script src="vendor/plotly.min.js"></script>
 <!-- 실데이터 (있으면 로드 — 없으면 무해하게 skip) -->
 <script src="data/inflation-diffusion-us.js"></script>
+<script src="data/inflation-diffusion-kr.js"></script>
+<script src="data/inflation-diffusion-eu.js"></script>
+<script src="data/inflation-diffusion-au.js"></script>
 <script src="data/trimmed-us.js"></script>
 <!-- 픽스처 폴백 (data/ 부재 시에만 사용, window.FENRIR_FIXTURE) -->
 <script src="tests/fixtures/inflation-diffusion-us.fixture.js"></script>
+<script src="tests/fixtures/inflation-diffusion-kr.fixture.js"></script>
+<script src="tests/fixtures/inflation-diffusion-eu.fixture.js"></script>
+<script src="tests/fixtures/inflation-diffusion-au.fixture.js"></script>
 <script src="tests/fixtures/trimmed-us.fixture.js"></script>
 <!-- 페이지 로직 (외부 import 없음 → file:// 안전, 전역만 소비) -->
 <script type="module">
@@ -176,33 +198,51 @@
     return null;
   }
 
-  const cpi = get('inflation-diffusion-us-cpi');
-  const pce = get('inflation-diffusion-us-pce');
-  const trimmed = ['trimmed-pce-dallas', 'median-cpi-cleveland', 'trimmed-cpi-cleveland']
-    .map(get).filter(Boolean);
-
+  // 국가 정의 (US 기본). US만 PCE 보조선·trimmed 패널.
+  const COUNTRIES = [
+    { id: 'US', label: '미국', name: '미국', key: 'inflation-diffusion-us-cpi', pceKey: 'inflation-diffusion-us-pce', trimmed: true },
+    { id: 'KR', label: '한국', name: '한국', key: 'inflation-diffusion-kr' },
+    { id: 'EU', label: '유럽', name: '유럽', key: 'inflation-diffusion-eu' },
+    { id: 'AU', label: '호주', name: '호주', key: 'inflation-diffusion-au' },
+  ];
+  // 전 국가·trimmed 사전 해석 (usingFixture·가용성 판정을 렌더 전에 확정).
+  for (const c of COUNTRIES) { c._primary = get(c.key); if (c.pceKey) c._pce = get(c.pceKey); }
+  const trimmed = ['trimmed-pce-dallas', 'median-cpi-cleveland', 'trimmed-cpi-cleveland'].map(get).filter(Boolean);
+  const available = COUNTRIES.filter((c) => c._primary);
   if (usingFixture) document.getElementById('sample-badge').classList.add('show');
 
   const fmt = (x, d = 1) => (x == null ? '—' : Number(x).toFixed(d));
   const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);
-
-  // ── 유틸: breadth = 뚜렷이 오르는 품목 비율(가중 ge2) ──
   function breadthSeries(p) { return p.series.map((s) => s.weighted.ge2); }
+  const C = { red: 'red', yellow: 'yellow', green: 'green' };
 
-  const C = { // 신호등/셀 색
-    red: 'red', yellow: 'yellow', green: 'green',
-  };
+  // 기본 국가: URL 해시(#AU 등)로 딥링크 가능, 없으면 첫 국가(US).
+  const hashId = (location.hash || '').replace('#', '').toUpperCase();
+  let current = available.find((c) => c.id === hashId) || available[0];
 
-  function renderAll() {
-    const s = cpi.series;
+  function renderTabs() {
+    const el = document.getElementById('country-tabs');
+    el.innerHTML = available.map((c) =>
+      `<button data-id="${c.id}" class="${c.id === current.id ? 'active' : ''}">${c.label}</button>`).join('');
+    el.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+      current = available.find((c) => c.id === b.dataset.id);
+      el.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
+      if (history.replaceState) history.replaceState(null, '', '#' + current.id);
+      renderCountry();
+    }));
+  }
+
+  function renderCountry() {
+    const c = current;
+    const primary = c._primary;
+    const pce = c._pce || null;
+    const s = primary.series;
     const latest = s[s.length - 1];
     const prev = s[s.length - 2] || latest;
     const breadth = latest.weighted.ge2;
-    const bs = breadthSeries(cpi);
-    const last12 = bs.slice(-12);
-    const avg12 = mean(last12);
-    const prevBreadth = prev.weighted.ge2;
-    const baselineVert = Math.max(avg12, prevBreadth);
+    const bs = breadthSeries(primary);
+    const avg12 = mean(bs.slice(-12));
+    const baselineVert = Math.max(avg12, prev.weighted.ge2);
 
     // ── ① 신호등 + 한 줄 결론 ──
     const MARGIN = 3; // %p
@@ -214,31 +254,37 @@
 
     document.getElementById('v-light').className = 'light ' + light;
     document.getElementById('v-line').innerHTML =
-      `지금 미국 물가는 품목의 <b class="${light}">${fmt(breadth)}%</b>가 뚜렷이 오르는 중 ` +
+      `지금 ${c.name} 물가는 품목의 <b class="${light}">${fmt(breadth)}%</b>가 뚜렷이 오르는 중 ` +
       `— 평소(${fmt(avg12)}%)보다 <b class="${light}">${word} 있음</b>` +
       `<span class="status ${light}">${statusTxt}</span>`;
     document.getElementById('v-sub').innerHTML =
       `"뚜렷이 오르는 품목" = 전년보다 2% 넘게 오른 품목이 가계 지출에서 차지하는 비중(가중). ` +
-      `헤드라인 물가 ${fmt(latest.headline_yoy)}% (전월 ${fmt(prev.headline_yoy)}%), 근원 ${fmt(latest.core_yoy)}%. 기준: US-CPI ${latest.period}.`;
+      `헤드라인 물가 ${fmt(latest.headline_yoy)}% (전월 ${fmt(prev.headline_yoy)}%), 근원 ${fmt(latest.core_yoy)}%. 기준: ${primary.meta.country} ${latest.period}.`;
 
     // ── ② 판정표 ──
-    const priceHigh = latest.headline_yoy > prev.headline_yoy;   // 전월 y/y 대비
-    const breadthWide = breadth >= baselineVert;                 // 12m평균·전월 중 큰 쪽 기준
+    const priceHigh = latest.headline_yoy > prev.headline_yoy;
+    const breadthWide = breadth >= baselineVert;
     renderMatrix(priceHigh, breadthWide, breadth, baselineVert, latest.headline_yoy, prev.headline_yoy);
 
-    // ── ③ 시계열 ──
-    renderBreadthChart();
+    // ── ③ 시계열 (US면 PCE 보조선) ──
+    renderBreadthChart(primary, pce);
 
-    // ── ④ trimmed ──
-    renderTrimmed();
+    // 국가 각주 (AU 등 meta.footnote)
+    const noteEl = document.getElementById('country-note');
+    if (primary.meta.footnote) { noteEl.textContent = '※ ' + primary.meta.footnote; noteEl.classList.add('show'); }
+    else { noteEl.textContent = ''; noteEl.classList.remove('show'); }
 
-    // ── ⑤ 상세 ──
-    setupDetail();
+    // ── ④ trimmed (미국 전용) ──
+    document.getElementById('trim-section').style.display = c.trimmed ? '' : 'none';
+    if (c.trimmed) renderTrimmed();
+
+    // ── ⑤ 상세 (US: CPI/PCE 토글) ──
+    setupDetail(primary, pce);
 
     // ── 메타 ──
-    const m = cpi.meta;
+    const m = primary.meta;
     document.getElementById('meta-foot').textContent =
-      `US-CPI ${m.item_count}품목·가중커버 ${fmt((m.weight_coverage || 0) * 100)}% · 기준 ${m.last_updated} · ` +
+      `${m.country} ${m.item_count}품목·가중커버 ${fmt((m.weight_coverage || 0) * 100)}% · 기준 ${m.last_updated} · ` +
       `${m.window ? m.window.start + '~' + m.window.end : ''} · ${m.source?.toUpperCase?.() || ''} · ${m.port_ref || ''}` +
       (usingFixture ? ' · [샘플]' : '');
   }
@@ -281,12 +327,13 @@
     });
   }
 
-  function renderBreadthChart() {
-    const x = cpi.series.map((s) => s.period);
-    const yCpi = breadthSeries(cpi);
-    const yAvg = rollingAvg(yCpi, 12);
+  function renderBreadthChart(primary, pce) {
+    const x = primary.series.map((s) => s.period);
+    const yMain = breadthSeries(primary);
+    const yAvg = rollingAvg(yMain, 12);
+    const mainName = pce ? 'CPI 오르는 품목 비율' : '오르는 품목 비율';
     const traces = [
-      { x, y: yCpi, name: 'CPI 오르는 품목 비율', mode: 'lines', line: { color: COL.cpi, width: 2 } },
+      { x, y: yMain, name: mainName, mode: 'lines', line: { color: COL.cpi, width: 2 } },
       { x, y: yAvg, name: '평소 (12개월 평균)', mode: 'lines', line: { color: COL.avg, width: 1.4, dash: 'dot' } },
     ];
     if (pce) {
@@ -332,16 +379,18 @@
     });
   }
 
-  // ── ⑤ 상세: CPI/PCE 토글, 최근 달 품목 상승·하락 ──
-  let detailSource = 'cpi';
-  function setupDetail() {
+  // ── ⑤ 상세: 소스 토글(US=CPI/PCE), 최근 달 품목 상승·하락 ──
+  let detailPayloads = [];   // [{k,label,payload}]
+  let detailIdx = 0;
+  function setupDetail(primary, pce) {
+    detailPayloads = [{ k: 'p', label: pce ? `CPI (${primary.meta.item_count}품목)` : `${primary.meta.country} (${primary.meta.item_count}품목)`, payload: primary }];
+    if (pce) detailPayloads.push({ k: 'pce', label: `PCE (${pce.meta.item_count}품목)`, payload: pce });
+    detailIdx = 0;
     const toggle = document.getElementById('detail-toggle');
-    const opts = [['cpi', 'CPI (136품목)']];
-    if (pce) opts.push(['pce', 'PCE (176품목)']);
-    toggle.innerHTML = opts.map(([k, lbl]) =>
-      `<button data-k="${k}" class="${k === detailSource ? 'active' : ''}">${lbl}</button>`).join('');
+    toggle.innerHTML = detailPayloads.map((d, i) =>
+      `<button data-i="${i}" class="${i === 0 ? 'active' : ''}">${d.label}</button>`).join('');
     toggle.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
-      detailSource = b.dataset.k;
+      detailIdx = Number(b.dataset.i);
       toggle.querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b));
       renderMovers();
     }));
@@ -349,7 +398,7 @@
   }
 
   function renderMovers() {
-    const src = detailSource === 'pce' ? pce : cpi;
+    const src = detailPayloads[detailIdx].payload;
     const det = src.detail && src.detail[src.detail.length - 1];
     const upEl = document.getElementById('up-list'), downEl = document.getElementById('down-list');
     if (!det) { upEl.innerHTML = downEl.innerHTML = '<div style="color:var(--muted);font-size:12px">상세 없음</div>'; return; }
@@ -366,10 +415,11 @@
   }
 
   // 모든 선언 이후 진입 (const TDZ 회피).
-  if (!cpi) {
+  if (!current) {
     document.getElementById('v-line').textContent = '표시할 데이터가 없습니다.';
   } else {
-    renderAll();
+    renderTabs();
+    renderCountry();
   }
 </script>
 </body>

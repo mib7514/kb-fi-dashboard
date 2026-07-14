@@ -11,7 +11,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // ── DOM/Plotly 스텁 ──
 function makeEl(id) {
   return {
-    id, _html: '', className: '', textContent: '', dataset: {},
+    id, _html: '', className: '', textContent: '', dataset: {}, style: {},
     classList: { _s: new Set(), add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); },
       toggle(c, on) { if (on === undefined) on = !this._s.has(c); on ? this._s.add(c) : this._s.delete(c); },
       contains(c) { return this._s.has(c); } },
@@ -29,7 +29,11 @@ function runFresh(code, ...args) {
 function runPage(mode = 'fixture') {
   globalThis.window = {};
   // 픽스처 로드 (window.FENRIR_FIXTURE 채움) — 파일 텍스트를 window 인자로 실행.
-  for (const f of ['inflation-diffusion-us.fixture.js', 'trimmed-us.fixture.js']) {
+  const fixtureFiles = [
+    'inflation-diffusion-us.fixture.js', 'inflation-diffusion-kr.fixture.js',
+    'inflation-diffusion-eu.fixture.js', 'inflation-diffusion-au.fixture.js', 'trimmed-us.fixture.js',
+  ];
+  for (const f of fixtureFiles) {
     runFresh(readFileSync(join(ROOT, 'tests', 'fixtures', f), 'utf8'), ['window', globalThis.window]);
   }
   // 'real' 모드: 실데이터가 있는 상황 시뮬레이션 — 픽스처 payload를 FENRIR_SERIES로 승격.
@@ -41,6 +45,8 @@ function runPage(mode = 'fixture') {
     getElementById(id) { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); },
   };
   globalThis.Plotly = { react(elId, traces) { plotly.calls.push({ elId, n: traces.length }); }, newPlot() {} };
+  globalThis.location = { hash: '' };
+  globalThis.history = { replaceState() {} };
 
   // HTML에서 인라인 <script type="module"> 본문 추출 (src 있는 nav 태그 제외).
   const html = readFileSync(join(ROOT, 'inflation-diffusion.html'), 'utf8');
@@ -57,6 +63,11 @@ test('페이지 로직: 픽스처로 오류 없이 렌더 + 배지·판정표·�
 
   // 배지: 픽스처 사용이므로 show
   assert.ok(els.get('sample-badge').classList.contains('show'), '샘플 배지 표시 안됨');
+
+  // 국가 탭 4개 (US·KR·EU·AU)
+  const tabs = els.get('country-tabs').innerHTML;
+  assert.equal((tabs.match(/<button/g) || []).length, 4, '국가 탭 4개가 아님');
+  for (const lbl of ['미국', '한국', '유럽', '호주']) assert.ok(tabs.includes(lbl), `탭 누락: ${lbl}`);
 
   // 한 줄 결론: 채워지고 % 포함, 신호등 클래스 배정
   const line = els.get('v-line').innerHTML;

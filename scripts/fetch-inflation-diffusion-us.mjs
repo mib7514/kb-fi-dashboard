@@ -18,7 +18,6 @@
 // ⚠️ 키 필요 게이트: 이 스크립트의 실제 실행 + Fenrir 값 대조는 키가 있는 환경(개인
 //    노트북)에서 수행. 회사 PC는 키 미저장 원칙 → 코드 완성·구조 검증까지만.
 
-import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -30,12 +29,11 @@ import {
   BEA_PCE_ITEMS, PCE_HEADLINE_LINE, PCE_CORE_LINE, PCE_TABLE,
 } from './lib/us-pce-items.mjs';
 import { lookupPceWeight } from './lib/us-pce-weights.mjs';
-import { buildRecord } from './lib/diffusion-core.mjs';
-
-// ── 설정 ──
-const BACKFILL_MONTHS = 60;      // 5y + 1y z-score warmup (Fenrir DEFAULT_BACKFILL_MONTHS)
-const DETAIL_MONTHS = 6;         // 최근 N개월만 품목별 상세 포함 (파일 경량화)
-const DETAIL_SIZE_LIMIT = 500 * 1024;  // 500KB — 초과 시 임의 축소 대신 중단 (조건 2)
+// 공통 파이프라인 (국가 공유 — 방법론 드리프트 방지).
+import {
+  BACKFILL_MONTHS, DETAIL_MONTHS, DETAIL_SIZE_LIMIT,
+  monthsBetween, computeWindow, buildCountryPayload, serializeRegistration, writeDataFile,
+} from './lib/diffusion-pipeline.mjs';
 
 const BLS_API_URL = 'https://api.bls.gov/publicAPI/v2/timeseries/data/';
 const BLS_BATCH_SIZE = 50;
@@ -43,30 +41,11 @@ const BLS_SOURCE_URL = 'https://api.bls.gov/publicAPI/v2/timeseries/data/';
 const BEA_API_URL = 'https://apps.bea.gov/api/data/';
 const BEA_SOURCE_URL = 'https://apps.bea.gov/api/data/?DataSetName=NIUnderlyingDetail&TableName=U20404';
 
-// ── 공용 유틸 ──
-function* monthsBetween(start, end) {
-  let y = parseInt(start.slice(0, 4), 10), m = parseInt(start.slice(5, 7), 10);
-  const endY = parseInt(end.slice(0, 4), 10), endM = parseInt(end.slice(5, 7), 10);
-  while (y < endY || (y === endY && m <= endM)) {
-    yield `${y}-${String(m).padStart(2, '0')}`;
-    m += 1;
-    if (m > 12) { m = 1; y += 1; }
-  }
-}
-
+// BLS 배치 유틸.
 function chunk(arr, size) {
   const out = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
-}
-
-// 백필 윈도우: 종료 = 이전 달력월(D-1 month, 대부분 소스가 전월치를 시차 발표),
-// 시작 = 종료 − (months−1). Fenrir backfill/route.ts computeWindow와 동일.
-function computeWindow(now, months = BACKFILL_MONTHS) {
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - (months - 1), 1));
-  const fmt = (d) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-  return { start: fmt(start), end: fmt(end) };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -257,72 +236,8 @@ async function fetchPceHistory(start, end, apiKey) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// 파이프라인: 스냅샷 시계열 → 확산 레코드(누적 history z-score) → 출력 구조
+// 파이프라인/출력은 공통 diffusion-pipeline.mjs 사용 (국가 공유).
 // ══════════════════════════════════════════════════════════════════════
-const r4 = (x) => (x == null ? null : Math.round(x * 1e4) / 1e4);
-const r3 = (x) => (x == null ? null : Math.round(x * 1e3) / 1e3);
-
-function buildCountryPayload(snapshots, meta) {
-  // 시간순 정렬 후 누적 history로 레코드 생성 (Fenrir backfillCountry와 동일).
-  const sorted = [...snapshots].sort((a, b) => a.period.localeCompare(b.period));
-  const accumulated = [];
-  const records = [];
-  let flashSkipped = 0;
-  for (const snap of sorted) {
-    const rec = buildRecord(snap, accumulated);
-    if (rec === null) { flashSkipped++; continue; }
-    accumulated.push(rec.diffusion);
-    records.push({ record: rec, snapshot: snap });
-  }
-
-  const series = records.map(({ record }) => ({
-    period: record.period,
-    headline_yoy: r3(record.headline_yoy),
-    core_yoy: r3(record.core_yoy),
-    weighted: {
-      ge0: r4(record.diffusion.weighted.ge0), ge2: r4(record.diffusion.weighted.ge2),
-      ge25: r4(record.diffusion.weighted.ge25), ge3: r4(record.diffusion.weighted.ge3),
-    },
-    unweighted: {
-      ge0: r4(record.diffusion.unweighted.ge0), ge2: r4(record.diffusion.unweighted.ge2),
-      ge25: r4(record.diffusion.unweighted.ge25), ge3: r4(record.diffusion.unweighted.ge3),
-    },
-    z: {
-      ge0: r4(record.z_scores_5y.weighted.ge0), ge2: r4(record.z_scores_5y.weighted.ge2),
-      ge25: r4(record.z_scores_5y.weighted.ge25), ge3: r4(record.z_scores_5y.weighted.ge3),
-    },
-  }));
-
-  // 최근 DETAIL_MONTHS개월만 품목별 상세 (yoy=null 품목은 제외해 크기 절감).
-  const detail = records.slice(-DETAIL_MONTHS).map(({ record, snapshot }) => ({
-    period: record.period,
-    items: snapshot.items
-      .filter((i) => i.yoy != null)
-      .map((i) => ({ code: i.code, name: i.name, weight: i.weight, yoy: r3(i.yoy) })),
-  }));
-
-  const last = records[records.length - 1]?.record;
-  return {
-    payload: {
-      meta: {
-        ...meta,
-        last_updated: last?.period ?? null,
-        item_count: last?.item_count ?? 0,
-        weight_coverage: last ? r4(last.weight_coverage) : null,
-        flash_skipped: flashSkipped,
-      },
-      series,
-      detail,
-    },
-    stats: { periods: series.length, flashSkipped, latest: last?.period ?? null },
-  };
-}
-
-function serializeRegistration(key, payload) {
-  return `window.FENRIR_SERIES = window.FENRIR_SERIES || {};\n` +
-    `window.FENRIR_SERIES[${JSON.stringify(key)}] = ${JSON.stringify(payload)};\n`;
-}
-
 async function main() {
   const blsKey = process.env.BLS_API_KEY;
   const beaKey = process.env.BEA_API_KEY;
@@ -354,35 +269,21 @@ async function main() {
   const banner = `// data/inflation-diffusion-us.js — 미국 물가 확산지수(US-CPI·US-PCE).\n` +
     `// scripts/fetch-inflation-diffusion-us.mjs 생성. 원시 지수 미저장, 파생 확산율만.\n` +
     `// ⚠️ 자동 생성물 — 직접 편집 금지. 방법론은 ${PORT_REF}.\n`;
-  const body = banner +
-    serializeRegistration('inflation-diffusion-us-cpi', cpi.payload) +
-    serializeRegistration('inflation-diffusion-us-pce', pce.payload);
-
-  const bytes = Buffer.byteLength(body, 'utf8');
   console.error(`[diffusion-us] US-CPI ${cpi.stats.periods}개월(flash skip ${cpi.stats.flashSkipped}), 최신 ${cpi.stats.latest}`);
   console.error(`[diffusion-us] US-PCE ${pce.stats.periods}개월(flash skip ${pce.stats.flashSkipped}), 최신 ${pce.stats.latest}`);
-  console.error(`[diffusion-us] 출력 크기 ${(bytes / 1024).toFixed(1)}KB (한도 ${DETAIL_SIZE_LIMIT / 1024}KB)`);
-
-  // 조건 2: 500KB 초과 시 임의 축소 금지 — 중단하고 사용자에게 3개월 축소안 제시.
-  if (bytes > DETAIL_SIZE_LIMIT) {
-    console.error(
-      `\n[diffusion-us] ⛔ 파일 ${(bytes / 1024).toFixed(1)}KB > ${DETAIL_SIZE_LIMIT / 1024}KB 초과. ` +
-      `임의 축소하지 않고 중단합니다.\n` +
-      `  제안: 상세(detail) 구간을 DETAIL_MONTHS=6 → 3으로 줄이면 대략 절반으로 감소.\n` +
-      `  사용자 승인 후 스크립트 상단 DETAIL_MONTHS 상수를 3으로 변경해 재실행하세요.`
-    );
-    process.exit(2);
-  }
 
   const scriptDir = dirname(fileURLToPath(import.meta.url));
-  const dataDir = join(scriptDir, '..', 'data');
-  mkdirSync(dataDir, { recursive: true });
-  const outPath = join(dataDir, 'inflation-diffusion-us.js');
-  writeFileSync(outPath, body, 'utf8');
-  console.error(`[diffusion-us] 저장 완료 → ${outPath}`);
+  const { bytes, path } = writeDataFile({
+    dataDir: join(scriptDir, '..', 'data'), fileName: 'inflation-diffusion-us.js', banner, logTag: 'diffusion-us',
+    entries: [
+      { key: 'inflation-diffusion-us-cpi', payload: cpi.payload },
+      { key: 'inflation-diffusion-us-pce', payload: pce.payload },
+    ],
+  });
+  console.error(`[diffusion-us] 출력 ${(bytes / 1024).toFixed(1)}KB (한도 ${DETAIL_SIZE_LIMIT / 1024}KB) → ${path}`);
 }
 
-// 순수 파이프라인 헬퍼는 오프라인(키 없이) 테스트용으로 export.
+// 파이프라인 헬퍼는 공통 lib에서 재수출 (기존 테스트·픽스처 생성기 import 호환).
 export { computeWindow, monthsBetween, buildCountryPayload, serializeRegistration, DETAIL_MONTHS, DETAIL_SIZE_LIMIT };
 
 // CLI로 직접 실행할 때만 fetch 수행 (테스트에서 import 시 main 미실행).

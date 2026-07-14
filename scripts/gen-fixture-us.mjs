@@ -18,6 +18,11 @@ import { BLS_CPI_ITEMS } from './lib/us-cpi-items.mjs';
 import { lookupWeight } from './lib/us-cpi-weights.mjs';
 import { BEA_PCE_ITEMS } from './lib/us-pce-items.mjs';
 import { lookupPceWeight } from './lib/us-pce-weights.mjs';
+import { EU_HICP_ITEMS } from './lib/eu-hicp-items.mjs';
+import { AU_CPI_ITEMS } from './lib/au-cpi-items.mjs';
+import { lookupAuWeight } from './lib/au-cpi-weights.mjs';
+import { KR_CPI_ITEMS } from './lib/kr-cpi-items.mjs';
+import { lookupKrWeight } from './lib/kr-cpi-weights.mjs';
 import { computeWindow, monthsBetween, buildCountryPayload } from './fetch-inflation-diffusion-us.mjs';
 import { SERIES as TRIMMED_SERIES, buildTrimmedPayload, serializeTrimmed } from './fetch-trimmed-us.mjs';
 
@@ -37,12 +42,12 @@ function synthYoy(i, t) {
   return round2(center + 1.6 + timeWave + wiggle);
 }
 
-function synthSnapshots(items, lookup, country, periods) {
+function synthSnapshots(items, lookup, country, periods, intl = null) {
   return periods.map((period, t) => ({
     country, period,
     headline_yoy: round2(3.3 + 0.9 * Math.cos((t * Math.PI) / 20)),
     core_yoy: round2(3.0 + 0.6 * Math.cos((t * Math.PI) / 22)),
-    core_yoy_intl: null,
+    core_yoy_intl: intl == null ? null : round2(intl + 0.5 * Math.cos((t * Math.PI) / 21)),
     items: items.map((it, i) => ({
       code: it.code, name: it.name, weight: lookup(it.code), yoy: synthYoy(i, t),
     })),
@@ -115,17 +120,51 @@ function main() {
     `// ⚠️ 샘플 데이터. 실데이터(data/trimmed-us.js) 생성 후 자동 무시.\n`;
   const trimmedBody = serializeTrimmed(trimmedRegs, trimmedBanner, 'FENRIR_FIXTURE');
 
+  // ── KR·EU·AU 픽스처 (실 정적표 + 실 buildCountryPayload 경로, 국가 탭용) ──
+  const euWeight = () => 5; // EU 가중치는 API 유래 → 픽스처는 상수(커버리지 100% 가정)
+  const countries = [
+    { file: 'inflation-diffusion-eu', key: 'inflation-diffusion-eu', items: EU_HICP_ITEMS, lookup: euWeight,
+      country: 'EU', source: 'eurostat', name: 'EU HICP 확산지수 (Eurostat, 292품목)', intl: null,
+      note: 'EU는 최종치 D+15 시차 정상.' },
+    { file: 'inflation-diffusion-au', key: 'inflation-diffusion-au', items: AU_CPI_ITEMS, lookup: lookupAuWeight,
+      country: 'AU', source: 'abs', name: 'AU CPI 확산지수 (ABS, 87품목)', intl: 3.4,
+      footnote: '2025년 11월 이전 호주 데이터는 분기 자료를 월로 펴서 계산 — 변동이 실제보다 작아 보일 수 있음' },
+    { file: 'inflation-diffusion-kr', key: 'inflation-diffusion-kr', items: KR_CPI_ITEMS, lookup: lookupKrWeight,
+      country: 'KR', source: 'kosis', name: 'KR CPI 확산지수 (KOSIS, 458품목)', intl: 2.4,
+      note: '코어=농산물·석유류 제외(정책), 국제코어=식료품·에너지 제외.' },
+  ];
+  const countryBodies = {};
+  for (const c of countries) {
+    const built = buildCountryPayload(
+      synthSnapshots(c.items, c.lookup, c.country, periods, c.intl),
+      { series_id: c.key, display_name: c.name, country: c.country, source: c.source, unit: '%',
+        value_type: 'diffusion', frequency: 'monthly', yoy_basis: 'YoY',
+        thresholds: { ge0: 0, ge2: 2, ge25: 2.5, ge3: 3 }, window: { start, end }, port_ref: PORT_REF,
+        ...(c.note ? { note: c.note } : {}), ...(c.footnote ? { footnote: c.footnote } : {}) },
+    );
+    const banner = `// tests/fixtures/${c.file}.fixture.js — 페이지 개발용 합성 픽스처(${c.country}).\n` +
+      `// scripts/gen-fixture-us.mjs 생성. 실 buildCountryPayload 경로 통과, 스키마 동일.\n` +
+      `// ⚠️ 샘플 데이터. 실데이터(data/${c.file}.js) 생성 후 자동 무시.\n`;
+    countryBodies[c.file] = { body: serializeFixtureDiffusion(banner, [{ key: c.key, payload: built.payload }]), built };
+  }
+
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const fixDir = join(scriptDir, '..', 'tests', 'fixtures');
   mkdirSync(fixDir, { recursive: true });
   writeFileSync(join(fixDir, 'inflation-diffusion-us.fixture.js'), diffBody, 'utf8');
   writeFileSync(join(fixDir, 'trimmed-us.fixture.js'), trimmedBody, 'utf8');
+  for (const [file, { body }] of Object.entries(countryBodies)) {
+    writeFileSync(join(fixDir, `${file}.fixture.js`), body, 'utf8');
+  }
 
   const kb = (s) => (Buffer.byteLength(s, 'utf8') / 1024).toFixed(1);
   console.error(`[gen-fixture] window ${start}~${end}, ${periods.length}개월`);
   console.error(`[gen-fixture] CPI 최신 ${cpi.stats.latest} ge2=${cpi.payload.series.at(-1).weighted.ge2}%  PCE ge2=${pce.payload.series.at(-1).weighted.ge2}%`);
-  console.error(`[gen-fixture] diffusion fixture ${kb(diffBody)}KB, trimmed fixture ${kb(trimmedBody)}KB`);
-  console.error(`[gen-fixture] 저장 → tests/fixtures/{inflation-diffusion-us,trimmed-us}.fixture.js`);
+  console.error(`[gen-fixture] diffusion(us) ${kb(diffBody)}KB, trimmed ${kb(trimmedBody)}KB`);
+  for (const [file, { body, built }] of Object.entries(countryBodies)) {
+    console.error(`[gen-fixture] ${file} ${kb(body)}KB · ${built.payload.meta.item_count}품목 · ge2=${built.payload.series.at(-1).weighted.ge2}%`);
+  }
+  console.error(`[gen-fixture] 저장 → tests/fixtures/*.fixture.js (US·trimmed·EU·AU·KR)`);
 }
 
 main();
