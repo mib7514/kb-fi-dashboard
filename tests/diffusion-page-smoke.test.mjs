@@ -31,7 +31,8 @@ function runPage(mode = 'fixture') {
   // 픽스처 로드 (window.FENRIR_FIXTURE 채움) — 파일 텍스트를 window 인자로 실행.
   const fixtureFiles = [
     'inflation-diffusion-us.fixture.js', 'inflation-diffusion-kr.fixture.js',
-    'inflation-diffusion-eu.fixture.js', 'inflation-diffusion-au.fixture.js', 'trimmed-us.fixture.js',
+    'inflation-diffusion-eu.fixture.js', 'inflation-diffusion-au.fixture.js',
+    'inflation-diffusion-jp.fixture.js', 'trimmed-us.fixture.js',
   ];
   for (const f of fixtureFiles) {
     runFresh(readFileSync(join(ROOT, 'tests', 'fixtures', f), 'utf8'), ['window', globalThis.window]);
@@ -64,10 +65,10 @@ test('페이지 로직: 픽스처로 오류 없이 렌더 + 배지·판정표·�
   // 배지: 픽스처 사용이므로 show
   assert.ok(els.get('sample-badge').classList.contains('show'), '샘플 배지 표시 안됨');
 
-  // 국가 탭 4개 (US·KR·EU·AU)
+  // 국가 탭 5개 (US·KR·EU·AU·JP)
   const tabs = els.get('country-tabs').innerHTML;
-  assert.equal((tabs.match(/<button/g) || []).length, 4, '국가 탭 4개가 아님');
-  for (const lbl of ['미국', '한국', '유럽', '호주']) assert.ok(tabs.includes(lbl), `탭 누락: ${lbl}`);
+  assert.equal((tabs.match(/<button/g) || []).length, 5, '국가 탭 5개가 아님');
+  for (const lbl of ['미국', '한국', '유럽', '호주', '일본']) assert.ok(tabs.includes(lbl), `탭 누락: ${lbl}`);
 
   // 한 줄 결론: 채워지고 % 포함, 신호등 클래스 배정
   const line = els.get('v-line').innerHTML;

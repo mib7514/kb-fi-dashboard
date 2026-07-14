@@ -13,6 +13,8 @@ import { AU_CPI_ITEMS } from '../scripts/lib/au-cpi-items.mjs';
 import { lookupAuWeight } from '../scripts/lib/au-cpi-weights.mjs';
 import { KR_CPI_ITEMS } from '../scripts/lib/kr-cpi-items.mjs';
 import { lookupKrWeight } from '../scripts/lib/kr-cpi-weights.mjs';
+import { JP_CPI_ITEMS } from '../scripts/lib/jp-cpi-items.mjs';
+import { lookupJpWeight } from '../scripts/lib/jp-cpi-weights.mjs';
 
 // ── AU 브리지 ──
 test('au-bridge: quarterToMonthRange / periodToQuarter / priorYearQuarter', () => {
@@ -67,6 +69,7 @@ for (const [name, items, lookup, country, hasIntl, expectItems] of [
   ['EU', EU_HICP_ITEMS, () => 5, 'EU', false, 292],
   ['AU', AU_CPI_ITEMS, lookupAuWeight, 'AU', true, 87],
   ['KR', KR_CPI_ITEMS, lookupKrWeight, 'KR', true, 458],
+  ['JP', JP_CPI_ITEMS, lookupJpWeight, 'JP', true, 582],
 ]) {
   test(`pipeline 라운드트립: ${name} (${expectItems}품목)`, () => {
     // EU는 lookup이 상수 5(가중치 있음 가정). AU/KR은 실제 lookup.

@@ -23,6 +23,8 @@ import { AU_CPI_ITEMS } from './lib/au-cpi-items.mjs';
 import { lookupAuWeight } from './lib/au-cpi-weights.mjs';
 import { KR_CPI_ITEMS } from './lib/kr-cpi-items.mjs';
 import { lookupKrWeight } from './lib/kr-cpi-weights.mjs';
+import { JP_CPI_ITEMS } from './lib/jp-cpi-items.mjs';
+import { lookupJpWeight } from './lib/jp-cpi-weights.mjs';
 import { computeWindow, monthsBetween, buildCountryPayload } from './fetch-inflation-diffusion-us.mjs';
 import { SERIES as TRIMMED_SERIES, buildTrimmedPayload, serializeTrimmed } from './fetch-trimmed-us.mjs';
 
@@ -132,6 +134,9 @@ function main() {
     { file: 'inflation-diffusion-kr', key: 'inflation-diffusion-kr', items: KR_CPI_ITEMS, lookup: lookupKrWeight,
       country: 'KR', source: 'kosis', name: 'KR CPI 확산지수 (KOSIS, 458품목)', intl: 2.4,
       note: '코어=농산물·석유류 제외(정책), 국제코어=식료품·에너지 제외.' },
+    { file: 'inflation-diffusion-jp', key: 'inflation-diffusion-jp', items: JP_CPI_ITEMS, lookup: lookupJpWeight,
+      country: 'JP', source: 'estat', name: 'JP CPI 확산지수 (e-Stat, 582품목)', intl: 1.8,
+      note: '전국만, 코어=生鮮食品 제외, 국제코어=生鮮食品·에너지 제외.' },
   ];
   const countryBodies = {};
   for (const c of countries) {

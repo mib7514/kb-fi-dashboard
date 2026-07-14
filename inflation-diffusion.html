@@ -112,7 +112,7 @@
 <div class="wrap">
   <div class="eyebrow">
     <span class="step">MEASURE</span>
-    <span class="ctx">FI Dashboard · 물가가 얼마나 넓게 오르나 (미국·한국·유럽·호주)</span>
+    <span class="ctx">FI Dashboard · 물가가 얼마나 넓게 오르나 (미국·한국·유럽·호주·일본)</span>
   </div>
 
   <div id="sample-badge">
@@ -178,12 +178,14 @@
 <script src="data/inflation-diffusion-kr.js"></script>
 <script src="data/inflation-diffusion-eu.js"></script>
 <script src="data/inflation-diffusion-au.js"></script>
+<script src="data/inflation-diffusion-jp.js"></script>
 <script src="data/trimmed-us.js"></script>
 <!-- 픽스처 폴백 (data/ 부재 시에만 사용, window.FENRIR_FIXTURE) -->
 <script src="tests/fixtures/inflation-diffusion-us.fixture.js"></script>
 <script src="tests/fixtures/inflation-diffusion-kr.fixture.js"></script>
 <script src="tests/fixtures/inflation-diffusion-eu.fixture.js"></script>
 <script src="tests/fixtures/inflation-diffusion-au.fixture.js"></script>
+<script src="tests/fixtures/inflation-diffusion-jp.fixture.js"></script>
 <script src="tests/fixtures/trimmed-us.fixture.js"></script>
 <!-- 페이지 로직 (외부 import 없음 → file:// 안전, 전역만 소비) -->
 <script type="module">
@@ -204,6 +206,7 @@
     { id: 'KR', label: '한국', name: '한국', key: 'inflation-diffusion-kr' },
     { id: 'EU', label: '유럽', name: '유럽', key: 'inflation-diffusion-eu' },
     { id: 'AU', label: '호주', name: '호주', key: 'inflation-diffusion-au' },
+    { id: 'JP', label: '일본', name: '일본', key: 'inflation-diffusion-jp' },
   ];
   // 전 국가·trimmed 사전 해석 (usingFixture·가용성 판정을 렌더 전에 확정).
   for (const c of COUNTRIES) { c._primary = get(c.key); if (c.pceKey) c._pce = get(c.pceKey); }
