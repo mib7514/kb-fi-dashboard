@@ -116,8 +116,8 @@
   </div>
 
   <div id="sample-badge">
-    🧪 샘플 데이터로 표시 중
-    <span class="sub">— 실측 데이터(data/inflation-diffusion-us.js) 생성 전 미리보기입니다. 실데이터가 커밋되면 이 배지는 자동으로 사라집니다.</span>
+    🧪 이 국가는 샘플 데이터로 표시 중
+    <span class="sub">— 실측 데이터 생성 전 미리보기입니다. 해당 국가 실데이터가 커밋되면 이 탭에서 배지가 자동으로 사라집니다.</span>
   </div>
 
   <!-- 국가 탭 -->
@@ -192,11 +192,10 @@
   const REAL = window.FENRIR_SERIES || {};
   const FX = window.FENRIR_FIXTURE || {};
 
-  // 실데이터 우선, 없으면 픽스처 폴백. 하나라도 픽스처면 배지 표시.
-  let usingFixture = false;
-  function get(key) {
-    if (REAL[key]) return REAL[key];
-    if (FX[key]) { usingFixture = true; return FX[key]; }
+  // 실데이터 우선, 없으면 픽스처 폴백. 배지는 국가별로 판정(현재 탭이 픽스처일 때만).
+  function resolve(key) {
+    if (REAL[key]) return { p: REAL[key], fx: false };
+    if (FX[key]) return { p: FX[key], fx: true };
     return null;
   }
 
@@ -208,11 +207,15 @@
     { id: 'AU', label: '호주', name: '호주', key: 'inflation-diffusion-au' },
     { id: 'JP', label: '일본', name: '일본', key: 'inflation-diffusion-jp' },
   ];
-  // 전 국가·trimmed 사전 해석 (usingFixture·가용성 판정을 렌더 전에 확정).
-  for (const c of COUNTRIES) { c._primary = get(c.key); if (c.pceKey) c._pce = get(c.pceKey); }
-  const trimmed = ['trimmed-pce-dallas', 'median-cpi-cleveland', 'trimmed-cpi-cleveland'].map(get).filter(Boolean);
+  // 전 국가·trimmed 사전 해석. 국가별 _isFixture 기록(현재 탭 배지 판정용).
+  for (const c of COUNTRIES) {
+    const r = resolve(c.key); c._primary = r ? r.p : null; c._isFixture = r ? r.fx : false;
+    if (c.pceKey) { const rp = resolve(c.pceKey); c._pce = rp ? rp.p : null; if (rp && rp.fx) c._isFixture = true; }
+  }
+  const trimmedResolved = ['trimmed-pce-dallas', 'median-cpi-cleveland', 'trimmed-cpi-cleveland'].map(resolve).filter(Boolean);
+  const trimmed = trimmedResolved.map((r) => r.p);
+  const trimmedFixture = trimmedResolved.some((r) => r.fx);
   const available = COUNTRIES.filter((c) => c._primary);
-  if (usingFixture) document.getElementById('sample-badge').classList.add('show');
 
   const fmt = (x, d = 1) => (x == null ? '—' : Number(x).toFixed(d));
   const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);
@@ -239,6 +242,9 @@
     const c = current;
     const primary = c._primary;
     const pce = c._pce || null;
+    // 배지: 현재 탭이 픽스처(또는 US의 trimmed가 픽스처)일 때만 표시 → 실데이터 탭은 소멸.
+    const isSample = c._isFixture || (c.trimmed && trimmedFixture);
+    document.getElementById('sample-badge').classList.toggle('show', isSample);
     const s = primary.series;
     const latest = s[s.length - 1];
     const prev = s[s.length - 2] || latest;
@@ -289,7 +295,7 @@
     document.getElementById('meta-foot').textContent =
       `${m.country} ${m.item_count}품목·가중커버 ${fmt((m.weight_coverage || 0) * 100)}% · 기준 ${m.last_updated} · ` +
       `${m.window ? m.window.start + '~' + m.window.end : ''} · ${m.source?.toUpperCase?.() || ''} · ${m.port_ref || ''}` +
-      (usingFixture ? ' · [샘플]' : '');
+      (isSample ? ' · [샘플]' : '');
   }
 
   // 2×2: 사분면 정의 (가로=물가 높음/낮음, 세로=품목 많음/적음)

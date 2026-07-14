@@ -27,17 +27,17 @@ export const SERIES = [
   {
     id: 'trimmed-pce-dallas', fred: 'PCETRIM12M159SFRBDAL',
     display_name: '댈러스 연은 Trimmed Mean PCE (12M)',
-    blurb: '위아래로 가장 많이 튄 품목을 잘라내고 남은 물가 (연율, 전년비)',
+    blurb: '위아래로 가장 많이 튄 품목을 잘라내고 남은 물가 — 1년 전과 비교한 값',
   },
   {
     id: 'median-cpi-cleveland', fred: 'MEDCPIM158SFRBCLE',
     display_name: '클리블랜드 연은 Median CPI',
-    blurb: '품목을 물가상승률 순으로 줄 세웠을 때 딱 한가운데 품목의 물가',
+    blurb: '품목을 물가상승률 순으로 줄 세웠을 때 딱 한가운데 품목의 물가 — 최근 한 달 변화를 1년치로 환산한 값 (댈러스 지표와 잣대가 다름)',
   },
   {
     id: 'trimmed-cpi-cleveland', fred: 'TRMMEANCPIM158SFRBCLE',
     display_name: '클리블랜드 연은 16% Trimmed-Mean CPI',
-    blurb: '양 끝 16%씩 튀는 품목을 잘라내고 남은 몸통 물가',
+    blurb: '양 끝 16%씩 튀는 품목을 잘라내고 남은 몸통 물가 — 최근 한 달 변화를 1년치로 환산한 값 (댈러스 지표와 잣대가 다름)',
   },
 ];
 
