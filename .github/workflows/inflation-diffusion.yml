@@ -1,0 +1,114 @@
+name: Inflation Diffusion data (US·KR·EU·AU·JP + trimmed)
+
+# 물가 확산지수 5개국 + trimmed 3종을 각 공개/인증 API에서 적재해
+# data/inflation-diffusion-*.js · data/trimmed-us.js 갱신.
+# 데이터가 실제로 바뀐 경우에만 커밋(diff 없으면 skip).
+#
+# 시크릿 부재 시 해당 국가만 skip하고 나머지는 계속 진행(가드) →
+# EU·AU(무인증)는 시크릿 등록 전에도 Actions가 돌 수 있음.
+# 계산은 Actions에서 사전 수행, 페이지는 렌더만 (무빌드 정적 원칙).
+
+on:
+  schedule:
+    - cron: '0 0 12,15 * *'   # 매월 12·15일 00:00 UTC (미국 CPI 발표 주간 커버)
+  workflow_dispatch: {}         # 수동 트리거 (발표 당일 갱신용)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: inflation-diffusion
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── 무인증(EU·AU): 시크릿 없이 항상 실행 ──
+      - name: EU (Eurostat, 무인증)
+        continue-on-error: true
+        run: node scripts/fetch-inflation-diffusion-eu.mjs
+
+      - name: AU (ABS, 무인증)
+        continue-on-error: true
+        run: node scripts/fetch-inflation-diffusion-au.mjs
+
+      # ── 인증 필요: 시크릿 부재 시 해당 국가만 skip(exit 0), 나머지는 계속 ──
+      - name: US (BLS + BEA)
+        continue-on-error: true
+        env:
+          BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
+          BEA_API_KEY: ${{ secrets.BEA_API_KEY }}
+        run: |
+          if [ -z "$BLS_API_KEY" ] || [ -z "$BEA_API_KEY" ]; then
+            echo "⏭  US skip — BLS_API_KEY/BEA_API_KEY 시크릿 미등록"
+            exit 0
+          fi
+          node scripts/fetch-inflation-diffusion-us.mjs
+
+      - name: KR (KOSIS)
+        continue-on-error: true
+        env:
+          KOSIS_API_KEY: ${{ secrets.KOSIS_API_KEY }}
+        run: |
+          if [ -z "$KOSIS_API_KEY" ]; then
+            echo "⏭  KR skip — KOSIS_API_KEY 시크릿 미등록"
+            exit 0
+          fi
+          node scripts/fetch-inflation-diffusion-kr.mjs
+
+      - name: JP (e-Stat)
+        continue-on-error: true
+        env:
+          ESTAT_APP_ID: ${{ secrets.ESTAT_APP_ID }}
+        run: |
+          if [ -z "$ESTAT_APP_ID" ]; then
+            echo "⏭  JP skip — ESTAT_APP_ID 시크릿 미등록"
+            exit 0
+          fi
+          node scripts/fetch-inflation-diffusion-jp.mjs
+
+      - name: Trimmed 3종 (FRED)
+        continue-on-error: true
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: |
+          if [ -z "$FRED_API_KEY" ]; then
+            echo "⏭  Trimmed skip — FRED_API_KEY 시크릿 미등록"
+            exit 0
+          fi
+          node scripts/fetch-trimmed-us.mjs
+
+      - name: Commit if changed
+        run: |
+          # 생성/갱신된 파일만 개별 스테이징(신규 untracked 포함). 일부 국가가 skip돼
+          # 파일이 없어도 나머지가 정상 스테이징되도록 파일별로 add(한 번에 add하면
+          # 존재하지 않는 pathspec 하나 때문에 전체가 스테이징 안 됨).
+          for f in \
+            data/inflation-diffusion-us.js \
+            data/inflation-diffusion-kr.js \
+            data/inflation-diffusion-eu.js \
+            data/inflation-diffusion-au.js \
+            data/inflation-diffusion-jp.js \
+            data/trimmed-us.js; do
+            git add -- "$f" 2>/dev/null || true
+          done
+          if git diff --cached --quiet; then
+            echo "갱신분 없음 — 커밋 skip."
+            exit 0
+          fi
+          FILES=$(git diff --cached --name-only \
+            | sed 's#data/##; s#inflation-diffusion-##; s#\.js##; s#trimmed-us#trimmed#' \
+            | tr '\n' ' ')
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "data: 물가 확산지수 갱신 (${FILES})"
+          git push
