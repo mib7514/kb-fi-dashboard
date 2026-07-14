@@ -254,17 +254,26 @@
     const baselineVert = Math.max(avg12, prev.weighted.ge2);
 
     // ── ① 신호등 + 한 줄 결론 ──
+    // 분기 임계값(MARGIN)은 신호등 판정과 동일 기준 재사용. 값-평소 차이에 따라
+    // 조사까지 분기해 "보다 비슷하게" 같은 비문이 나오지 않게 함.
     const MARGIN = 3; // %p
     const diff = breadth - avg12;
-    let light, word, statusTxt;
-    if (diff >= MARGIN) { light = C.red; word = '넓게 퍼져'; statusTxt = '넓게 퍼짐'; }
-    else if (diff <= -MARGIN) { light = C.green; word = '좁아져'; statusTxt = '좁음'; }
-    else { light = C.yellow; word = '비슷하게 퍼져'; statusTxt = '애매'; }
+    const avgTxt = fmt(avg12);
+    let light, statusTxt, tail;
+    if (diff >= MARGIN) {
+      light = C.red; statusTxt = '넓게 퍼짐';
+      tail = `평소(${avgTxt}%)보다 <b class="${light}">넓게 퍼져 있음</b>`;
+    } else if (diff <= -MARGIN) {
+      light = C.green; statusTxt = '좁음';
+      tail = `평소(${avgTxt}%)보다 <b class="${light}">좁게 퍼져 있음</b>`;
+    } else {
+      light = C.yellow; statusTxt = '애매';
+      tail = `평소(${avgTxt}%)와 <b class="${light}">비슷한 수준</b>`;
+    }
 
     document.getElementById('v-light').className = 'light ' + light;
     document.getElementById('v-line').innerHTML =
-      `지금 ${c.name} 물가는 품목의 <b class="${light}">${fmt(breadth)}%</b>가 뚜렷이 오르는 중 ` +
-      `— 평소(${fmt(avg12)}%)보다 <b class="${light}">${word} 있음</b>` +
+      `지금 ${c.name} 물가는 품목의 <b class="${light}">${fmt(breadth)}%</b>가 뚜렷이 오르는 중 — ${tail}` +
       `<span class="status ${light}">${statusTxt}</span>`;
     document.getElementById('v-sub').innerHTML =
       `"뚜렷이 오르는 품목" = 전년보다 2% 넘게 오른 품목이 가계 지출에서 차지하는 비중(가중). ` +
