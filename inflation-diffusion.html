@@ -358,9 +358,11 @@
       { x, y: yMain, name: mainName, mode: 'lines', line: { color: COL.cpi, width: 2 } },
       { x, y: yAvg, name: '평소 (12개월 평균)', mode: 'lines', line: { color: COL.avg, width: 1.4, dash: 'dot' } },
     ];
-    // ex-energy(에너지 제외 코어) 점선 — 제외 테이블 있는 국가(US-CPI/PCE)에만 값 존재.
-    const yExE = primary.series.map((s) => (s.ex_energy ? s.ex_energy.ge2 : null));
-    if (yExE.some((v) => v != null)) {
+    // ex-energy(에너지 제외 코어) 점선 — 제외 테이블 있는 국가(US-CPI/PCE)만 ge2와 유의미하게
+    // 다름. 타국은 ex_energy가 ge2와 동일(퇴화) → 중복 라인·라벨 방지 위해 미표기.
+    const hasExE = primary.series.some((s) => s.ex_energy && Math.abs(s.ex_energy.ge2 - s.weighted.ge2) > 1e-6);
+    const yExE = hasExE ? primary.series.map((s) => (s.ex_energy ? s.ex_energy.ge2 : null)) : [];
+    if (hasExE) {
       traces.push({ x, y: yExE, name: '에너지 제외 (코어)', mode: 'lines',
         line: { color: COL.exE, width: 1.6, dash: 'dash' }, connectgaps: false });
     }
@@ -368,15 +370,36 @@
       traces.push({ x: pce.series.map((s) => s.period), y: breadthSeries(pce),
         name: 'PCE (참고)', mode: 'lines', line: { color: COL.pce, width: 1.3 }, opacity: 0.7 });
     }
+    // 끝점 값 라벨 (디자인 원칙 DESIGN.md: 마지막 점에 값 직접 표기 — 차트 단독 판독).
+    // ge2 실선 + ex-E 점선 끝점. 동적 바인딩, 두 라벨 세로 간격 확보(겹치면 지시선 분리).
+    // 타국 탭은 ex_energy 부재 → ge2 라벨만 자동 표기.
+    const lastX = x[x.length - 1];
+    const endLabels = [{ y: yMain[yMain.length - 1], color: COL.cpi, bold: true }];
+    const exeVals = yExE.filter((v) => v != null);
+    if (exeVals.length) endLabels.push({ y: exeVals[exeVals.length - 1], color: COL.exE, bold: false });
+    const PLOT_H = 276, MIN = 14;                 // chart-box 320px − 상하 여백 근사
+    const yToPx = (yy) => (100 - yy) / 100 * PLOT_H;
+    const sorted = endLabels.map((L) => ({ ...L, sTrue: yToPx(L.y) })).sort((a, b) => a.sTrue - b.sTrue);
+    const sDisp = sorted.map((o) => o.sTrue);
+    for (let k = 1; k < sDisp.length; k++) if (sDisp[k] - sDisp[k - 1] < MIN) sDisp[k] = sDisp[k - 1] + MIN;
+    const drift = sDisp.reduce((s, v, i) => s + (v - sorted[i].sTrue), 0) / sDisp.length;
+    const annotations = sorted.map((o, k) => ({
+      x: lastX, y: o.y, xref: 'x', yref: 'y',
+      text: (o.bold ? '<b>' : '') + o.y.toFixed(1) + '%' + (o.bold ? '</b>' : ''),
+      font: { color: o.color, size: 10.5 }, xanchor: 'left', ax: 14, ay: (sDisp[k] - drift) - o.sTrue,
+      showarrow: true, arrowcolor: o.color, arrowwidth: 1, arrowhead: 0, standoff: 2,
+    }));
+
     const layout = {
       paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
       font: { color: COL.text, family: FONT, size: 11 },
       xaxis: { gridcolor: COL.grid, linecolor: COL.axis, tickfont: { size: 10 } },
       yaxis: { title: { text: '오르는 품목 비율 (%)', font: { size: 10 } }, range: [0, 100],
         gridcolor: COL.grid, linecolor: COL.axis, tickfont: { size: 10 } },
-      margin: { l: 54, r: 14, t: 10, b: 34 },
+      margin: { l: 54, r: 54, t: 10, b: 34 },   // 오른쪽 끝점 라벨 공간 확보
       legend: { orientation: 'h', y: -0.16, font: { size: 10 } }, hovermode: 'x unified',
       shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 50, y1: 50, line: { color: COL.base, width: 1, dash: 'dash' } }],
+      annotations,
     };
     Plotly.react('chart-breadth', traces, layout, { displayModeBar: false, responsive: true });
   }
