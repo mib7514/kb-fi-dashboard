@@ -78,6 +78,7 @@
   .rv-num { background: var(--panel); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 6px 8px; font-family: var(--mono); font-size: 12px; width: 72px; text-align: right; }
   .rv-num:focus { outline: none; border-color: var(--accent); }
   .scen-badge { font-size: 11px; font-weight: 600; color: var(--forecast); background: rgba(240,136,62,0.12); border: 1px solid var(--forecast); border-radius: 5px; padding: 3px 8px; }
+  .rv-headline { font-size: 12px; color: var(--muted); margin: 2px 0 10px; }
   .scen-persector { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; margin: 0 0 14px; }
   .scen-persector .sp-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 11px; }
   .scen-persector .sp-row span { color: var(--muted); font-family: var(--mono); }
@@ -127,15 +128,15 @@
 
   <!-- 모드 + 호라이즌 토글 -->
   <div class="controls">
-    <div class="ctrl-group">
+    <div class="ctrl-group" title="기대수익 = 얼마 버나 / 레벨 %ile = 역사 대비 싸냐 비싸냐">
       <span class="ctrl-label">모드</span>
       <div class="seg">
         <button data-mode="excess" class="active">1개월 기대수익</button>
         <button data-mode="pctile">레벨 %ile</button>
       </div>
     </div>
-    <div class="ctrl-group" id="rv-hz-group">
-      <span class="ctrl-label">호라이즌</span>
+    <div class="ctrl-group" id="rv-hz-group" title="이 기간 동안 보유했을 때의 기대수익을 계산">
+      <span class="ctrl-label">보유기간</span>
       <div class="seg">
         <button data-hz="1" class="active">1개월</button>
         <button data-hz="3">3개월</button>
@@ -143,7 +144,7 @@
       </div>
     </div>
     <div class="ctrl-group" id="rv-mr-group">
-      <label class="mr-toggle"><input type="checkbox" id="rv-meanrev" /> <span>평균회귀 포함</span></label>
+      <label class="mr-toggle" title="현재 스프레드 수준(저/중/고)에서 과거 비슷한 상황의 평균 변화를 기대수익에 가산. 시나리오 사용 중엔 비활성(이중 계산 방지)"><input type="checkbox" id="rv-meanrev" /> <span>과거 회귀 경향 반영</span></label>
     </div>
   </div>
 
@@ -163,6 +164,9 @@
     <span id="rv-badge" class="scen-badge" style="display:none"></span>
   </div>
   <div id="rv-scen-persector" class="scen-persector" style="display:none"></div>
+
+  <!-- 상태 헤드라인 (모드/토글 연동) -->
+  <div class="rv-headline" id="rv-headline"></div>
 
   <!-- 히트맵 (셀 클릭 → 하단 드릴다운) -->
   <div class="card"><div class="chart-box tall" id="rv-heatmap"></div>

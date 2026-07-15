@@ -65,7 +65,15 @@ function syncControls() {
   const mrChk = document.getElementById('rv-meanrev'), mrLbl = mrChk.closest('.mr-toggle');
   mrChk.checked = state.meanRev; mrChk.disabled = scenActive();
   mrLbl.classList.toggle('disabled', scenActive());
-  mrLbl.title = scenActive() ? '시나리오와 동시 적용 불가' : '';
+  // title(설명 툴팁)은 HTML 고정 — 비활성 사유는 그 안에 포함되어 덮어쓰지 않음
+  // 상태 헤드라인 (모드/토글 연동, 시나리오 배지와 병존)
+  const hl = document.getElementById('rv-headline');
+  if (state.mode === 'excess') {
+    const mrApplied = state.meanRev && !scenActive(); // resolveHeatmapOpts와 동일 조건
+    hl.textContent = `국고 대비 초과수익 (bp) · ${state.horizon}개월 보유 기준 · 캐리+롤다운${mrApplied ? ' +과거 회귀 경향' : ''}`;
+  } else {
+    hl.textContent = '스프레드 레벨의 1년 히스토리 백분위 (스테일 제외)';
+  }
   // 배지
   const badge = document.getElementById('rv-badge');
   if (scenActive()) {
