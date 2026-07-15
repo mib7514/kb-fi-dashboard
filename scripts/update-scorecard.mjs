@@ -13,8 +13,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { comparePeriods } from '../js/calc.js';
 import {
-  computeLivePrediction, actualYoY, mmToYoY, scoreRow, PREDICTION_COLUMNS,
+  computeLivePrediction, actualYoY, mmToYoY, scoreRow, classifyRealizedOil,
 } from '../js/us-inflation-scorecard.js';
+import { computeOilBand } from '../js/us-oil-scenario.js';
 
 const DATA = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
 const readJSON = (f) => JSON.parse(readFileSync(join(DATA, f), 'utf8'));
@@ -29,12 +30,14 @@ function main() {
   const ncIn = readJSON('us-energy-nowcast.json');
 
   const headlineData = us.series['us-cpi-headline'].data;
+  const wtiData = ncIn.series['us-wti-monthly'].data.map((p) => ({ period: p.period, value: p.value }));
   const inputs = {
     headlineData,
     coreData: us.series['us-cpi-core'].data,
     energyData: ncIn.series['us-cpi-energy'].data,
     foodData: ncIn.series['us-cpi-food'].data,
     gasData: ncIn.series['us-gasoline-monthly'].data.map((p) => ({ period: p.period, value: p.value })),
+    wtiData,
   };
   const lastActual = headlineData[headlineData.length - 1].period;
 
@@ -57,8 +60,9 @@ function main() {
     }
   }
 
-  // ── 2) 라이브 예측: 다음 발표월(=lastActual+1) 행 갱신/생성 (frozen 아니면만 예측 덮어씀) ──
+  // ── 2) 라이브 예측 + 유가 밴드: 다음 발표월 행 갱신/생성 (frozen 아니면만 예측 덮어씀) ──
   const live = computeLivePrediction(inputs);
+  const band = computeOilBand(inputs);
   if (live) {
     let row = byMonth.get(live.month);
     if (!row) {
@@ -68,7 +72,8 @@ function main() {
     if (!row.frozen) {
       row.seasonal = live.seasonal;   // ① 갱신(롤링 스냅샷)
       row.combined = live.combined;   // ② 갱신
-      // 수동 컬럼·actual·miss_reason은 보존(사용자 편집분).
+      if (band && band.month === row.month) row.band = band; // 유가 3갈래 밴드
+      // 수동 컬럼·actual·miss_reason·봉인 갈래는 보존(사용자 편집분).
       for (const k of MANUAL) if (!(k in row)) row[k] = { yoy: null };
       if (!('actual' in row)) row.actual = { yoy: null, mm: null };
       if (!('miss_reason' in row)) row.miss_reason = null;
@@ -76,9 +81,10 @@ function main() {
     }
   }
 
-  // ── 3) 정렬 + 메타 ──
+  // ── 3) 정렬 + 메타 (최근 실측 y/y 경로 = 밴드 미니차트용) ──
   card.rows.sort((a, b) => comparePeriods(a.month, b.month));
   card.meta.last_actual = lastActual;
+  card.meta.recent_actual_yoy = recentYoY(headlineData, 13);
 
   writeFileSync(join(DATA, 'us-inflation-scorecard.json'), JSON.stringify(card, null, 2) + '\n', 'utf8');
 
@@ -100,8 +106,26 @@ function main() {
     if (row.combined?.retro && row.combined.retro.yoy == null && row.combined.retro.mm != null) {
       row.combined.retro.yoy = r2(mmToYoY(row.month, row.combined.retro.mm, headlineData));
     }
+    // 봉인 근거 갈래 채점: 실현 유가 갈래 vs 봉인 갈래(적중 여부). '모델 오차'(sealed err)와 분리.
+    if (row.sealed?.branch) {
+      row.realized_oil = classifyRealizedOil(row.month, wtiData);
+      row.sealed.branch_hit = (row.sealed.branch === 'other' || row.realized_oil == null)
+        ? null : (row.sealed.branch === row.realized_oil);
+    }
     row.errors = scoreRow(row);
   }
+}
+
+// 최근 n개월 실측 헤드라인 y/y 경로 [{month,yoy}] (밴드 미니차트 solid 라인용).
+function recentYoY(headlineData, n) {
+  const idx = new Map(headlineData.map((p) => [p.period, p.value]));
+  const out = [];
+  for (const p of headlineData) {
+    const [y, m] = p.period.split('-').map(Number);
+    const base = idx.get(`${y - 1}-${String(m).padStart(2, '0')}`);
+    if (base != null && base !== 0) out.push({ month: p.period, yoy: r2((p.value / base - 1) * 100) });
+  }
+  return out.slice(-n);
 }
 
 // 실측 m/m (period 인덱스/전월 인덱스). 없으면 null.

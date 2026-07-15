@@ -155,6 +155,34 @@
   .sc-cumulative { margin-top: 12px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); line-height: 1.9; }
   .sc-cumulative b { color: var(--text); }
   .sc-cumulative .best { color: var(--ok); }
+
+  /* 다음 발표 한 줄 결론 + 유가 밴드 */
+  .nextcast { background: linear-gradient(180deg, rgba(88,166,255,0.10), var(--panel)); border: 1px solid var(--border-2);
+    border-left: 3px solid var(--accent); border-radius: 10px; padding: 13px 16px; margin-top: 20px; font-size: 14px; }
+  .nextcast b { font-family: var(--mono); font-size: 17px; color: var(--accent); }
+  .nextcast .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .oilband { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin-top: 10px; overflow: hidden; }
+  .oilband > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; align-items: baseline; gap: 10px; }
+  .oilband > summary::-webkit-details-marker { display: none; }
+  .oilband > summary::before { content: '▸'; color: var(--muted); font-size: 12px; }
+  .oilband[open] > summary::before { content: '▾'; }
+  .oilband > summary h2 { font-size: 13px; margin: 0; }
+  .oilband > summary .desc { font-size: 11px; color: var(--muted); }
+  .oilband-body { padding: 0 16px 16px; }
+  .oilband-lines { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .oilrow { flex: 1; min-width: 130px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+  .oilrow .lbl { font-size: 11px; color: var(--muted); }
+  .oilrow .v { font-size: 20px; font-weight: 700; font-family: var(--mono); margin-top: 3px; }
+  .oilrow.hold { border-left: 3px solid var(--accent); }
+  .oilrow.hold .v { color: var(--accent); }
+  .oilrow.up .v { color: var(--warn); }
+  .oilrow.down .v { color: var(--ok); }
+  .oilband-chart { width: 100%; height: 220px; }
+  .oilband-note { font-size: 10.5px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+  table.sc td.branch { color: var(--override); font-size: 10.5px; }
+  table.sc td.branch .hit { margin-left: 4px; }
+  table.sc td.branch .hit.y { color: var(--ok); }
+  table.sc td.branch .hit.n { color: var(--warn); }
 </style>
 </head>
 <body>
@@ -247,6 +275,16 @@
     <div class="editor-grid" id="editor-body"></div>
     <div class="footnote" id="footnote"></div>
   </div>
+
+  <!-- 다음 발표 한 줄 결론 (유지 갈래) + 유가 시나리오 밴드 -->
+  <div class="nextcast" id="nextcast-oneline" style="display:none"></div>
+  <details class="oilband" id="oilband" style="display:none">
+    <summary>
+      <h2>기름값에 따라 달라져요</h2>
+      <span class="desc">유가가 지금과 다르면 다음 발표 물가가 어떻게 달라지는지</span>
+    </summary>
+    <div class="oilband-body" id="oilband-body"></div>
+  </details>
 
   <!-- 예측 성적표 (접이식) — 헤드라인 CPI y/y -->
   <details class="scorecard" id="scorecard">

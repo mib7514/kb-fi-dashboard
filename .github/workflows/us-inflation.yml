@@ -5,7 +5,10 @@ name: US Inflation data (FRED)
 
 on:
   schedule:
-    - cron: '0 0 * * 3'   # 매주 수요일 00:00 UTC
+    # 주 1회 화요일 15:00 UTC — GASREGW(주간, 월요일 종료)가 화요일 ~14시 UTC FRED 갱신된 뒤.
+    # 유가 나우캐스트·밴드가 최신 주간 휘발유를 반영하도록 주간 주기로 상향(기존 수요일 00:00에서).
+    # 충돌 없음: taylor(평일 22:45)·diffusion(12·15일 00:00)과 시각·concurrency group 모두 분리.
+    - cron: '0 15 * * 2'
   workflow_dispatch: {}    # 수동 트리거
 
 permissions:

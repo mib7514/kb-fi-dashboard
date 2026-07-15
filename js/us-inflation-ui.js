@@ -5,7 +5,7 @@
 
 import { buildForecastUS, missingPeriods, annualYoYSummaryUS } from './us-inflation-calc.js';
 import { renderIndexChart, renderMmChart, renderYoyChart } from './us-inflation-chart.js';
-import { cumulativeError, PREDICTION_COLUMNS } from './us-inflation-scorecard.js';
+import { cumulativeError, PREDICTION_COLUMNS, OIL_BRANCH_LABELS } from './us-inflation-scorecard.js';
 
 const DATA_URL = 'data/us-inflation.json';
 const SCORECARD_URL = 'data/us-inflation-scorecard.json';
@@ -335,14 +335,24 @@ function renderScorecard(card) {
       <b>실제</b> 발표된 값. <span style="color:var(--override)">소급/지연</span>은 성적 집계에서 뺍니다.
     </div>`;
 
-  const head = `<tr><th>발표월</th>${PREDICTION_COLUMNS.map((c) => `<th>${c.label}</th>`).join('')}<th>실제</th><th>미스 원인</th></tr>`;
+  const head = `<tr><th>발표월</th>${PREDICTION_COLUMNS.map((c) => `<th>${c.label}</th>`).join('')}`
+    + `<th>봉인 유가 갈래</th><th>실제</th><th>미스 원인</th></tr>`;
   const body = rows.map((row) => {
     const cls = row.frozen ? '' : ' class="live"';
     const preds = PREDICTION_COLUMNS.map((c) => `<td>${scCell(row, c.key)}</td>`).join('');
+    // 봉인 근거 유가 갈래 + 적중 여부(모델 오차와 분리 — 유가를 틀렸나 판단을 틀렸나).
+    let branch = '<span class="na">–</span>';
+    if (row.sealed && row.sealed.branch) {
+      branch = OIL_BRANCH_LABELS[row.sealed.branch] || row.sealed.branch;
+      if (row.frozen && row.sealed.branch_hit != null) {
+        branch += row.sealed.branch_hit ? '<span class="hit y" title="유가 갈래 적중">✓</span>'
+          : `<span class="hit n" title="실현 유가는 ${OIL_BRANCH_LABELS[row.realized_oil] || '?'}">✗</span>`;
+      }
+    }
     const actual = (row.actual && row.actual.yoy != null)
       ? `<td class="actual">${row.actual.yoy.toFixed(1)}</td>` : '<td class="na">–</td>';
     const reason = `<td class="reason">${row.miss_reason ? row.miss_reason : (row.frozen ? '' : '<span style="color:var(--accent)">예측 진행중</span>')}</td>`;
-    return `<tr${cls}><td class="month">${row.month}</td>${preds}${actual}${reason}</tr>`;
+    return `<tr${cls}><td class="month">${row.month}</td>${preds}<td class="branch">${branch}</td>${actual}${reason}</tr>`;
   }).join('');
 
   // 누적 평균 오차 (동결·실측·비소급·비지연만).
@@ -361,11 +371,67 @@ function renderScorecard(card) {
     + `<div class="sc-cumulative">누적 평균 오차 (작을수록 정확, 발표 전 예측만): ${cumLine}</div>`;
 }
 
+// 다음 발표 한 줄 결론(유지 갈래) + 유가 밴드 3줄 + 미니 차트.
+function renderNextcast(card) {
+  const live = (card.rows || []).find((r) => !r.frozen && r.band);
+  const one = document.getElementById('nextcast-oneline');
+  const box = document.getElementById('oilband');
+  if (!live || !one || !box) return;
+  const hold = live.band.branches.find((b) => b.key === 'hold');
+  const up = live.band.branches.find((b) => b.key === 'up20');
+  const down = live.band.branches.find((b) => b.key === 'down20');
+  if (hold?.yoy == null) return;
+
+  one.style.display = '';
+  one.innerHTML = `다음 발표 예상: <b>${hold.yoy.toFixed(1)}%</b> 안팎 <span style="color:var(--muted)">(기름값이 지금 수준일 때)</span>`
+    + `<div class="sub">${live.month} 헤드라인 CPI · 작년 같은 달 대비</div>`;
+
+  box.style.display = '';
+  const bodyEl = document.getElementById('oilband-body');
+  const rowHtml = (cls, lbl, v) => `<div class="oilrow ${cls}"><div class="lbl">${lbl}</div><div class="v">${v == null ? '–' : v.toFixed(1) + '%'}</div></div>`;
+  bodyEl.innerHTML =
+    `<div class="oilband-lines">
+       ${rowHtml('up', '기름값 +20%면', up?.yoy)}
+       ${rowHtml('hold', '지금 수준이면', hold?.yoy)}
+       ${rowHtml('down', '기름값 −20%면', down?.yoy)}
+     </div>
+     <div class="oilband-chart" id="oilband-chart"></div>
+     <div class="oilband-note">가운데 실선 = 기름값이 지금 수준일 때, 음영 = 기름값 ±20% 범위. ${live.band.passthrough.note}</div>`;
+  drawBandChart(card, live, { hold, up, down });
+}
+
+function drawBandChart(card, live, br) {
+  const elId = 'oilband-chart';
+  if (typeof Plotly === 'undefined' || !document.getElementById(elId)) return;
+  const hist = (card.meta && card.meta.recent_actual_yoy) || [];
+  if (hist.length === 0) return;
+  const xh = hist.map((p) => p.month), yh = hist.map((p) => p.yoy);
+  const last = hist[hist.length - 1];
+  const fx = [last.month, live.month]; // 마지막 실측 → 전망월
+  const A = '#58a6ff';
+  const traces = [
+    { x: xh, y: yh, mode: 'lines', name: '실측', line: { color: A, width: 2 } },
+    { x: fx, y: [last.yoy, br.up.yoy], mode: 'lines', line: { color: A, width: 1, dash: 'dot' }, showlegend: false, hoverinfo: 'skip' },
+    { x: fx, y: [last.yoy, br.down.yoy], mode: 'lines', line: { color: A, width: 1, dash: 'dot' }, fill: 'tonexty', fillcolor: 'rgba(88,166,255,0.15)', showlegend: false, hoverinfo: 'skip' },
+    { x: fx, y: [last.yoy, br.hold.yoy], mode: 'lines+markers', name: '전망(지금 수준)', line: { color: A, width: 2, dash: 'dash' }, marker: { size: 6 } },
+  ];
+  const layout = {
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { color: '#c9d1d9', family: 'ui-monospace, Menlo, Consolas, monospace', size: 10 },
+    xaxis: { gridcolor: '#21262d', linecolor: '#484f58', tickfont: { size: 9 } },
+    yaxis: { title: { text: 'y/y %', font: { size: 9 } }, gridcolor: '#21262d', linecolor: '#484f58', tickfont: { size: 9 } },
+    margin: { l: 42, r: 10, t: 8, b: 26 }, showlegend: false, hovermode: 'x unified',
+  };
+  Plotly.react(elId, traces, layout, { displayModeBar: false, responsive: true });
+}
+
 async function loadScorecard() {
   try {
     const res = await fetch(SCORECARD_URL, { cache: 'no-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    renderScorecard(await res.json());
+    const card = await res.json();
+    renderNextcast(card);
+    renderScorecard(card);
   } catch { /* 성적표 부재/오류는 비치명 — 나머지 페이지는 정상 렌더 */ }
 }
 

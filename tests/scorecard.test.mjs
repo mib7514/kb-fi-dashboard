@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mmToYoY, actualYoY, scoreRow, cumulativeError, computeLivePrediction, PREDICTION_COLUMNS,
+  classifyRealizedOil, OIL_BRANCH_LABELS,
 } from '../js/us-inflation-scorecard.js';
 
 const near = (a, b, tol = 1e-6) => assert.ok(Math.abs(a - b) <= tol, `${a} ≉ ${b} (±${tol})`);
@@ -106,6 +107,19 @@ test('computeLivePrediction: 다음 발표월 = 최신 실측+1, 시즈널·결�
   assert.ok(Number.isFinite(live.seasonal.yoy));
   assert.ok(Number.isFinite(live.combined.yoy));
   assert.ok(live.combined.reg && Number.isFinite(live.combined.reg.b));
+});
+
+test('classifyRealizedOil: WTI 월평균 m/m ±10% 경계로 up20/hold/down20', () => {
+  // WTI 인덱스: 2026-05=100, 2026-06=115(+15%→up20), 2026-07=100(−13%→down20).
+  const wti = [
+    { period: '2026-04', value: 100 }, { period: '2026-05', value: 100 },
+    { period: '2026-06', value: 115 }, { period: '2026-07', value: 100 },
+  ];
+  assert.equal(classifyRealizedOil('2026-06', wti), 'up20');    // +15%
+  assert.equal(classifyRealizedOil('2026-07', wti), 'down20');  // −13%
+  assert.equal(classifyRealizedOil('2026-05', wti), 'hold');    // 0%
+  assert.equal(classifyRealizedOil('2099-01', wti), null);      // 데이터 없음
+  assert.ok(OIL_BRANCH_LABELS.hold && OIL_BRANCH_LABELS.up20 && OIL_BRANCH_LABELS.down20);
 });
 
 test('PREDICTION_COLUMNS: 5개 예측 컬럼·쉬운 라벨 보유', () => {

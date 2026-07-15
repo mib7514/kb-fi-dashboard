@@ -27,6 +27,20 @@ export const PREDICTION_COLUMNS = [
 ];
 const MANUAL_COLUMNS = ['sealed', 'consensus', 'cleveland'];
 
+// 봉인 근거 갈래(수동 선택) 라벨 + 실현 유가 분류 임계.
+export const OIL_BRANCH_LABELS = { hold: '지금 수준', up20: '유가 +20%', down20: '유가 −20%', other: '기타' };
+export const OIL_BRANCH_THRESHOLD = 10; // 실현 WTI m/m ±% 경계(±20 시나리오의 중점).
+
+/** 실현 유가 갈래 분류: 해당월 WTI 월평균 m/m로 up20/hold/down20. 없으면 null. */
+export function classifyRealizedOil(month, wtiData) {
+  const mm = computeMMGapAware(wtiData);
+  const hit = mm.find((p) => p.period === month);
+  if (!hit) return null;
+  if (hit.value >= OIL_BRANCH_THRESHOLD) return 'up20';
+  if (hit.value <= -OIL_BRANCH_THRESHOLD) return 'down20';
+  return 'hold';
+}
+
 const r2 = (x) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 100) / 100);
 const r3 = (x) => (x == null || !Number.isFinite(x) ? null : Math.round(x * 1000) / 1000);
 
