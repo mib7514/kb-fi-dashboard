@@ -1,7 +1,7 @@
 // ⚠️ 이식본 (PORTED) — 원본: Fenrir src/lib/inflation-diffusion/calculator.ts (+ types.ts)
-//    기준 커밋: a242949 (mib7514/fenrir HEAD, 2026-07-14 clone)
-//    이 파일의 방법론(임계치·가중식·z-score·flash 판정) 수정 시 반드시 Fenrir 원본과
-//    동시 반영할 것. (이중 구현 드리프트 방지 — 한쪽만 고치면 확산지수가 조용히 갈라짐.)
+//    기준 커밋: a242949 (기본 8계열) + 1266dfc·51c7abd (ex_energy 재정규화 추가).
+//    이 파일의 방법론(임계치·가중식·z-score·flash 판정·ex_energy) 수정 시 반드시 Fenrir
+//    원본과 동시 반영할 것. (이중 구현 드리프트 방지 — 한쪽만 고치면 확산지수가 조용히 갈라짐.)
 //    TS→ESM 손이식. 로직·상수는 원본과 1:1, 타입 주석만 제거.
 //
 // 확산지수 방법론 요약:
@@ -10,12 +10,22 @@
 //   - 가중:  Σ(임계초과 품목 가중치) / Σ(유효 품목 가중치) × 100
 //   - 비가중: (임계초과 품목수) / (유효 품목수) × 100
 //   - yoy=null → 분모·분자 양쪽 제외. weight=null → 가중 버전에서만 제외.
+//   - ex_energy(ge0/ge2): 에너지 직계+파급 제외 후 비제외 가중 합으로 재정규화(코어 판독).
+//     제외 테이블(diffusion-exclusions.mjs) 없는 국가는 전체 가중 시리즈와 동일(퇴화).
 //   - z-score: 5년 rolling, population std. history<12개월 → 0(warmup, UI 회색).
 //   - flash: 유효 yoy 비율 < 20% → 레코드 null(z-score baseline 오염 방지).
+
+import { exclusionCodeSet } from './diffusion-exclusions.mjs';
 
 /** 임계치 상수 (ge0=≥0%, ge2=≥2%, ge25=≥2.5%, ge3=≥3%) */
 export const THRESHOLDS = { ge0: 0, ge2: 2, ge25: 2.5, ge3: 3 };
 const THRESHOLD_KEYS = Object.keys(THRESHOLDS);
+
+/** ex-energy 재정규화 시리즈에서 산출하는 임계치 (ge0/ge2만). */
+const EX_ENERGY_THRESHOLDS = [
+  ['ge0', THRESHOLDS.ge0],
+  ['ge2', THRESHOLDS.ge2],
+];
 
 /** Z-score warmup: 최소 이만큼의 history 개월이 있어야 의미 있는 z. */
 export const Z_MIN_HISTORY = 12;
@@ -56,7 +66,31 @@ export function computeDiffusion(snapshot) {
     }
   }
 
-  return { weighted, unweighted };
+  return { weighted, unweighted, ex_energy: computeExEnergy(snapshot, itemsWithWeight) };
+}
+
+/**
+ * ex-energy 가중 diffusion (ge0/ge2).
+ * 에너지 직계+파급 2차 제외 후 **비제외 품목 가중 합**을 분모로 재정규화:
+ *   D_ex(τ, t) = Σ_{i ∉ E, π_i ≥ τ} w_i / Σ_{i ∉ E} w_i × 100
+ * E = exclusionCodeSet(country), i는 (yoy≠null ∧ weight>0)인 품목.
+ * 분모(비제외 가중 합) 0이면 0 반환. 제외 테이블 없는 국가는 E=∅ → 전체 가중과 동일(퇴화).
+ */
+function computeExEnergy(snapshot, itemsWithWeight) {
+  const excluded = exclusionCodeSet(snapshot.country);
+  const included = itemsWithWeight.filter((i) => !excluded.has(i.code));
+  const denom = included.reduce((s, i) => s + i.weight, 0);
+
+  const weighted = { ge0: 0, ge2: 0 };
+  if (denom > 0) {
+    for (const [key, tau] of EX_ENERGY_THRESHOLDS) {
+      const matchingWeight = included
+        .filter((i) => i.yoy >= tau)
+        .reduce((s, i) => s + i.weight, 0);
+      weighted[key] = (matchingWeight / denom) * 100;
+    }
+  }
+  return { weighted };
 }
 
 /**

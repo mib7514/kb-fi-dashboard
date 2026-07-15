@@ -59,6 +59,14 @@ export function buildCountryPayload(snapshots, meta) {
       ge0: r4(record.diffusion.unweighted.ge0), ge2: r4(record.diffusion.unweighted.ge2),
       ge25: r4(record.diffusion.unweighted.ge25), ge3: r4(record.diffusion.unweighted.ge3),
     },
+    // ex_energy(ge0/ge2): 에너지 직계+파급 제외 재정규화 코어 확산. 제외 테이블 없는
+    // 국가는 전체 가중과 동일(퇴화). 백필 이전 방어용으로 부재 시 생략.
+    ...(record.diffusion.ex_energy ? {
+      ex_energy: {
+        ge0: r4(record.diffusion.ex_energy.weighted.ge0),
+        ge2: r4(record.diffusion.ex_energy.weighted.ge2),
+      },
+    } : {}),
     z: {
       ge0: r4(record.z_scores_5y.weighted.ge0), ge2: r4(record.z_scores_5y.weighted.ge2),
       ge25: r4(record.z_scores_5y.weighted.ge25), ge3: r4(record.z_scores_5y.weighted.ge3),

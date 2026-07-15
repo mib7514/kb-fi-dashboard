@@ -275,9 +275,13 @@
     document.getElementById('v-line').innerHTML =
       `지금 ${c.name} 물가는 품목의 <b class="${light}">${fmt(breadth)}%</b>가 뚜렷이 오르는 중 — ${tail}` +
       `<span class="status ${light}">${statusTxt}</span>`;
+    const exE = latest.ex_energy ? latest.ex_energy.ge2 : null;
+    const exETxt = exE != null
+      ? ` 에너지 제외(코어) ge2 <b>${fmt(exE)}%</b> — 에너지 직계+파급 제외 재정규화.`
+      : '';
     document.getElementById('v-sub').innerHTML =
       `"뚜렷이 오르는 품목" = 전년보다 2% 넘게 오른 품목이 가계 지출에서 차지하는 비중(가중). ` +
-      `헤드라인 물가 ${fmt(latest.headline_yoy)}% (전월 ${fmt(prev.headline_yoy)}%), 근원 ${fmt(latest.core_yoy)}%. 기준: ${primary.meta.country} ${latest.period}.`;
+      `헤드라인 물가 ${fmt(latest.headline_yoy)}% (전월 ${fmt(prev.headline_yoy)}%), 근원 ${fmt(latest.core_yoy)}%.${exETxt} 기준: ${primary.meta.country} ${latest.period}.`;
 
     // ── ② 판정표 ──
     const priceHigh = latest.headline_yoy > prev.headline_yoy;
@@ -334,7 +338,7 @@
   }
 
   // 색상 (chart)
-  const COL = { cpi: '#58a6ff', avg: '#8b949e', pce: '#f0883e', base: '#30363d', text: '#c9d1d9', grid: '#21262d', axis: '#484f58' };
+  const COL = { cpi: '#58a6ff', avg: '#8b949e', pce: '#f0883e', exE: '#bc8cff', base: '#30363d', text: '#c9d1d9', grid: '#21262d', axis: '#484f58' };
   const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
   function rollingAvg(arr, w) {
@@ -354,6 +358,12 @@
       { x, y: yMain, name: mainName, mode: 'lines', line: { color: COL.cpi, width: 2 } },
       { x, y: yAvg, name: '평소 (12개월 평균)', mode: 'lines', line: { color: COL.avg, width: 1.4, dash: 'dot' } },
     ];
+    // ex-energy(에너지 제외 코어) 점선 — 제외 테이블 있는 국가(US-CPI/PCE)에만 값 존재.
+    const yExE = primary.series.map((s) => (s.ex_energy ? s.ex_energy.ge2 : null));
+    if (yExE.some((v) => v != null)) {
+      traces.push({ x, y: yExE, name: '에너지 제외 (코어)', mode: 'lines',
+        line: { color: COL.exE, width: 1.6, dash: 'dash' }, connectgaps: false });
+    }
     if (pce) {
       traces.push({ x: pce.series.map((s) => s.period), y: breadthSeries(pce),
         name: 'PCE (참고)', mode: 'lines', line: { color: COL.pce, width: 1.3 }, opacity: 0.7 });

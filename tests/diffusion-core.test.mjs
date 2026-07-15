@@ -141,3 +141,67 @@ test('buildRecord: flash(유효 yoy<20%) → null', () => {
   }));
   assert.equal(buildRecord(snap(items), []), null);
 });
+
+// ── ex_energy 재정규화 앵커 (Fenrir calculator.test.ts 이식) ──
+// US-CPI 제외 코드(diffusion-exclusions.mjs): SETB01=Gasoline(direct), SETG01=Airline(spillover).
+
+test('ex_energy: 제외 품목만 2% 초과 → ge2=0, ge0=100', () => {
+  const r = computeDiffusion(snap([
+    { code: 'SETB01', name: 'Gasoline', weight: 30, yoy: 5.0 }, // 제외·초과
+    { code: 'A', name: 'A', weight: 40, yoy: 1.0 },             // 비제외·미달
+    { code: 'B', name: 'B', weight: 30, yoy: 0.5 },             // 비제외·미달
+  ]));
+  near(r.weighted.ge2, 30);            // 전체 가중은 별개 유지
+  near(r.ex_energy.weighted.ge2, 0);
+  near(r.ex_energy.weighted.ge0, 100); // 비제외 A,B 모두 ≥0
+});
+
+test('ex_energy: 전 품목 2% 초과 → ge2=100', () => {
+  const r = computeDiffusion(snap([
+    { code: 'SETB01', name: 'Gasoline', weight: 30, yoy: 5.0 },      // 제외
+    { code: 'SETG01', name: 'Airline fares', weight: 10, yoy: 4.0 }, // 제외
+    { code: 'A', name: 'A', weight: 40, yoy: 3.0 },                  // 비제외·초과
+    { code: 'B', name: 'B', weight: 20, yoy: 2.0 },                  // 비제외·경계
+  ]));
+  near(r.ex_energy.weighted.ge2, 100);
+  near(r.ex_energy.weighted.ge0, 100);
+});
+
+test('ex_energy: 재정규화 분모 = 비제외 가중 합', () => {
+  const r = computeDiffusion(snap([
+    { code: 'SETB01', name: 'Gasoline', weight: 50, yoy: 10.0 }, // 제외 (거대 가중)
+    { code: 'A', name: 'A', weight: 30, yoy: 3.0 },              // 비제외·초과
+    { code: 'B', name: 'B', weight: 20, yoy: 1.0 },              // 비제외·미달
+  ]));
+  near(r.weighted.ge2, 80);          // 에너지 포함 분모 100 → (50+30)/100
+  near(r.ex_energy.weighted.ge2, 60); // 분모 50, 분자 A(30) → 60
+});
+
+test('ex_energy: yoy=null·weight=null 비제외는 분모에서 제외', () => {
+  const r = computeDiffusion(snap([
+    { code: 'SETB01', name: 'Gasoline', weight: 50, yoy: 9.0 }, // 제외
+    { code: 'A', name: 'A', weight: 30, yoy: 3.0 },             // 계수
+    { code: 'B', name: 'B', weight: null, yoy: 3.0 },           // weight=null → 제외
+    { code: 'C', name: 'C', weight: 20, yoy: null },            // yoy=null → 제외
+  ]));
+  near(r.ex_energy.weighted.ge2, 100); // 분모=A(30)만, 분자=A(30)
+});
+
+test('ex_energy: 비제외 전멸 → 분모 0 → 0', () => {
+  const r = computeDiffusion(snap([
+    { code: 'SETB01', name: 'Gasoline', weight: 60, yoy: 5.0 },
+    { code: 'SEHF01', name: 'Electricity', weight: 40, yoy: 4.0 },
+  ]));
+  near(r.ex_energy.weighted.ge2, 0);
+  near(r.ex_energy.weighted.ge0, 0);
+});
+
+test('ex_energy: 제외 테이블 없는 국가(KR)는 전체 가중과 동일(퇴화)', () => {
+  const r = computeDiffusion(snap([
+    { code: 'SETB01', name: '(KR 코드 아님)', weight: 60, yoy: 3.0 },
+    { code: 'B', name: 'B', weight: 40, yoy: 1.0 },
+  ], { country: 'KR' }));
+  near(r.ex_energy.weighted.ge2, r.weighted.ge2);
+  near(r.ex_energy.weighted.ge0, r.weighted.ge0);
+  near(r.ex_energy.weighted.ge2, 60);
+});
