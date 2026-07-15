@@ -404,23 +404,65 @@ function drawBandChart(card, live, br) {
   const elId = 'oilband-chart';
   if (typeof Plotly === 'undefined' || !document.getElementById(elId)) return;
   const hist = (card.meta && card.meta.recent_actual_yoy) || [];
-  if (hist.length === 0) return;
+  if (hist.length === 0 || br.hold.yoy == null || br.up.yoy == null || br.down.yoy == null) return;
   const xh = hist.map((p) => p.month), yh = hist.map((p) => p.yoy);
   const last = hist[hist.length - 1];
   const fx = [last.month, live.month]; // 마지막 실측 → 전망월
-  const A = '#58a6ff';
+  const A = '#58a6ff';          // 실선(중앙) 색
+  const DEEP = '#2f81f7';       // 음영보다 진한 같은 파랑 계열(상·하 라벨/마커)
+  const up = br.up.yoy, hold = br.hold.yoy, down = br.down.yoy; // 동적 바인딩(하드코딩 없음)
+
   const traces = [
-    { x: xh, y: yh, mode: 'lines', name: '실측', line: { color: A, width: 2 } },
-    { x: fx, y: [last.yoy, br.up.yoy], mode: 'lines', line: { color: A, width: 1, dash: 'dot' }, showlegend: false, hoverinfo: 'skip' },
-    { x: fx, y: [last.yoy, br.down.yoy], mode: 'lines', line: { color: A, width: 1, dash: 'dot' }, fill: 'tonexty', fillcolor: 'rgba(88,166,255,0.15)', showlegend: false, hoverinfo: 'skip' },
-    { x: fx, y: [last.yoy, br.hold.yoy], mode: 'lines+markers', name: '전망(지금 수준)', line: { color: A, width: 2, dash: 'dash' }, marker: { size: 6 } },
+    { x: xh, y: yh, mode: 'lines', name: '실측', line: { color: A, width: 2 }, hovertemplate: '실제 %{y:.1f}%<extra></extra>' },
+    // 콘: 상단·하단 커넥터 + 사이 음영
+    { x: fx, y: [last.yoy, up], mode: 'lines', line: { color: DEEP, width: 1, dash: 'dot' }, hoverinfo: 'skip', showlegend: false },
+    { x: fx, y: [last.yoy, down], mode: 'lines', line: { color: DEEP, width: 1, dash: 'dot' }, fill: 'tonexty', fillcolor: 'rgba(88,166,255,0.13)', hoverinfo: 'skip', showlegend: false },
+    { x: fx, y: [last.yoy, hold], mode: 'lines', line: { color: A, width: 2, dash: 'dash' }, hoverinfo: 'skip', showlegend: false },
+    // 전망월 세 갈래 마커 — 호버(x unified)에서 함께 뜸
+    { x: [live.month], y: [up], mode: 'markers', name: '기름값 +20%면', marker: { color: DEEP, size: 7 }, hovertemplate: '기름값 +20%면 %{y:.1f}%<extra></extra>' },
+    { x: [live.month], y: [hold], mode: 'markers', name: '지금이면', marker: { color: A, size: 9 }, hovertemplate: '지금이면 %{y:.1f}%<extra></extra>' },
+    { x: [live.month], y: [down], mode: 'markers', name: '기름값 −20%면', marker: { color: DEEP, size: 7 }, hovertemplate: '기름값 −20%면 %{y:.1f}%<extra></extra>' },
+    // 실측 마지막 점 강조
+    { x: [last.month], y: [last.yoy], mode: 'markers', marker: { color: A, size: 7 }, hoverinfo: 'skip', showlegend: false },
   ];
+
+  // ── y 범위 + 라벨 겹침 방지(콘이 좁으면 지시선으로 상·중·하 분리) ──
+  const yAll = [...yh, up, hold, down];
+  const ymin = Math.min(...yAll), ymax = Math.max(...yAll);
+  const pad = Math.max(0.15, (ymax - ymin) * 0.15);
+  const lo = ymin - pad, hi = ymax + pad, span = hi - lo;
+  const PLOT_H = 180;                 // 대략 plot 높이(px) — 간격 판정용
+  const yToPx = (y) => (hi - y) / span * PLOT_H; // 위=작은 px
+  const MIN = 15;                     // 라벨 최소 세로 간격(px)
+  let sHold = yToPx(hold), sUp = yToPx(up), sDown = yToPx(down);
+  if (sHold - sUp < MIN) sUp = sHold - MIN;     // up은 hold 위로 최소 간격
+  if (sDown - sHold < MIN) sDown = sHold + MIN; // down은 hold 아래로
+
+  const valLabel = (y, sy, color, bold) => ({
+    x: live.month, y, xref: 'x', yref: 'y',
+    text: (bold ? '<b>' : '') + y.toFixed(1) + '%' + (bold ? '</b>' : ''),
+    font: { color, size: 11.5 }, xanchor: 'left', ax: 24, ay: sy - yToPx(y),
+    showarrow: true, arrowcolor: color, arrowwidth: 1, arrowhead: 0, standoff: 2,
+  });
+  const annotations = [
+    valLabel(up, sUp, DEEP, false),
+    valLabel(hold, sHold, A, true),
+    valLabel(down, sDown, DEEP, false),
+    { // 실측 마지막 점 = 기준점
+      x: last.month, y: last.yoy, xref: 'x', yref: 'y',
+      text: `<b>${last.yoy.toFixed(1)}%</b> <span style="font-size:9px">여기까지 실제</span>`,
+      font: { color: A, size: 11 }, xanchor: 'right', ax: -6, ay: -16,
+      showarrow: true, arrowcolor: A, arrowwidth: 1, arrowhead: 0, standoff: 2,
+    },
+  ];
+
   const layout = {
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     font: { color: '#c9d1d9', family: 'ui-monospace, Menlo, Consolas, monospace', size: 10 },
     xaxis: { gridcolor: '#21262d', linecolor: '#484f58', tickfont: { size: 9 } },
-    yaxis: { title: { text: 'y/y %', font: { size: 9 } }, gridcolor: '#21262d', linecolor: '#484f58', tickfont: { size: 9 } },
-    margin: { l: 42, r: 10, t: 8, b: 26 }, showlegend: false, hovermode: 'x unified',
+    yaxis: { title: { text: 'y/y %', font: { size: 9 } }, range: [lo, hi], gridcolor: '#21262d', linecolor: '#484f58', tickfont: { size: 9 } },
+    margin: { l: 42, r: 66, t: 16, b: 26 }, // 오른쪽 라벨 공간 확보
+    showlegend: false, hovermode: 'x unified', annotations,
   };
   Plotly.react(elId, traces, layout, { displayModeBar: false, responsive: true });
 }
