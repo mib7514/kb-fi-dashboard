@@ -1,47 +1,103 @@
-// rv-ui.js — Curve RV 화면 오케스트레이션 (Phase 2: 기대수익 히트맵 + 드릴다운, 단일 화면).
-//   계산·조립은 rv-heatmap.js(순수), 렌더는 rv-chart.js. 데이터: window.FENRIR_SERIES['credit-spread'].
-//   시나리오 입력·평균회귀 토글은 Phase 3 — 여기선 ΔS=0 고정.
-import { buildHeatmap, buildDrilldown, HORIZONS } from './rv-heatmap.js';
+// rv-ui.js — Curve RV 화면 오케스트레이션 (Phase 3: 시나리오 ΔS + 평균회귀).
+//   계산·조립은 rv-heatmap.js(순수), 렌더는 rv-chart.js. 데이터: FENRIR_SERIES['credit-spread']
+//   + ['curve-rv-backtest']. 시나리오는 localStorage(팀 비공유). 셀 색·순위는 항상 ΔS=0 기준.
+import { buildHeatmap, buildDrilldown } from './rv-heatmap.js';
 import { renderHeatmap, renderHistory } from './rv-chart.js';
 
-let DATA;
-const state = { mode: 'excess', horizon: 1, sel: null };
+const LS_KEY = 'curve-rv-scenario';
+let DATA, BT, CREDIT;
+const state = { mode: 'excess', horizon: 1, sel: null, scenario: { mode: 'none', uniform: 0, perSector: {} }, meanRev: false };
 
 const num0 = (v) => (typeof v === 'number' && Number.isFinite(v)) ? (v >= 0 ? '+' : '') + v.toFixed(0) : '—';
 const num1 = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v.toFixed(1) : '—';
+const sgn1 = (v) => (typeof v === 'number' && Number.isFinite(v)) ? (v >= 0 ? '+' : '') + v.toFixed(1) : '—';
 const pct0 = (v) => (typeof v === 'number' && Number.isFinite(v)) ? String(Math.round(v)) : '—';
+const BUCKET_KO = { low: '저', mid: '중', high: '고' };
+
+function save() { try { localStorage.setItem(LS_KEY, JSON.stringify({ scenario: state.scenario, meanRev: state.meanRev })); } catch { /* noop */ } }
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+    if (s && s.scenario && ['none', 'uniform', 'perSector'].includes(s.scenario.mode)) state.scenario = { mode: s.scenario.mode, uniform: Number(s.scenario.uniform) || 0, perSector: s.scenario.perSector || {} };
+    if (s && typeof s.meanRev === 'boolean') state.meanRev = s.meanRev;
+  } catch { /* noop */ }
+  if (state.scenario.mode !== 'none') state.meanRev = false; // 상호배제
+}
+
+// excess 모드에서만 시나리오/평균회귀 적용.
+const scenActive = () => state.mode === 'excess' && state.scenario.mode !== 'none';
+
+// 상태 → buildHeatmap opts (상호배제 적용: 시나리오 활성 시 meanRev 강제 off). 순수·테스트용.
+export function resolveHeatmapOpts(st, bt) {
+  const active = st.mode === 'excess' && st.scenario && st.scenario.mode !== 'none';
+  const opts = { mode: st.mode, horizonMonths: st.horizon };
+  if (st.mode === 'excess') {
+    opts.backtest = bt;
+    opts.meanRev = !!st.meanRev && !active; // 상호배제 — 둘 다 스프레드 변화 기대치라 동시=이중계산
+    opts.scenario = active ? st.scenario : null;
+  }
+  return opts;
+}
 
 function drawHeatmap() {
-  const hd = buildHeatmap(DATA, { mode: state.mode, horizonMonths: state.horizon });
+  const hd = buildHeatmap(DATA, resolveHeatmapOpts(state, BT));
   renderHeatmap(document.getElementById('rv-heatmap'),
     { rows: hd.rows, cols: hd.cols, z: hd.zColor, text: hd.text, stale: hd.stale, carryOnly: hd.carryOnly, mode: hd.mode, ktbRowIndex: hd.ktbRowIndex },
     onCell);
-  // 토글 active 동기화
-  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === state.mode));
-  document.querySelectorAll('[data-hz]').forEach(b => b.classList.toggle('active', +b.dataset.hz === state.horizon));
-  document.getElementById('rv-hz-group').style.display = state.mode === 'excess' ? '' : 'none';
-  const legendEx = document.getElementById('rv-legend-excess'), legendPc = document.getElementById('rv-legend-pctile');
-  if (legendEx && legendPc) { legendEx.style.display = state.mode === 'excess' ? '' : 'none'; legendPc.style.display = state.mode === 'excess' ? 'none' : ''; }
+  syncControls();
 }
 
-function onCell(sector, mat) {
-  state.sel = { sector, mat };
-  drawDrilldown();
+function syncControls() {
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === state.mode));
+  document.querySelectorAll('[data-hz]').forEach(b => b.classList.toggle('active', +b.dataset.hz === state.horizon));
+  const excess = state.mode === 'excess';
+  document.getElementById('rv-hz-group').style.display = excess ? '' : 'none';
+  document.getElementById('rv-mr-group').style.display = excess ? '' : 'none';
+  document.getElementById('rv-scenario-bar').style.display = excess ? '' : 'none';
+  document.getElementById('rv-legend-excess').style.display = excess ? '' : 'none';
+  document.getElementById('rv-legend-pctile').style.display = excess ? 'none' : '';
+  // 시나리오 컨트롤
+  document.getElementById('rv-scen-mode').value = state.scenario.mode;
+  document.getElementById('rv-scen-uniform').style.display = state.scenario.mode === 'uniform' ? '' : 'none';
+  document.getElementById('rv-scen-uniform-in').value = state.scenario.uniform || '';
+  document.getElementById('rv-scen-persector').style.display = (excess && state.scenario.mode === 'perSector') ? '' : 'none';
+  // 상호배제: 시나리오 적용 중 → 평균회귀 off·비활성
+  const mrChk = document.getElementById('rv-meanrev'), mrLbl = mrChk.closest('.mr-toggle');
+  mrChk.checked = state.meanRev; mrChk.disabled = scenActive();
+  mrLbl.classList.toggle('disabled', scenActive());
+  mrLbl.title = scenActive() ? '시나리오와 동시 적용 불가' : '';
+  // 배지
+  const badge = document.getElementById('rv-badge');
+  if (scenActive()) {
+    const ds = state.scenario.mode === 'uniform' ? `${num0(state.scenario.uniform)}bp` : '섹터별';
+    badge.textContent = `시나리오 적용 중 · ${state.horizon}개월 기준 ΔS ${ds}`;
+    badge.style.display = '';
+  } else badge.style.display = 'none';
 }
+
+function renderPerSector() {
+  const box = document.getElementById('rv-scen-persector');
+  box.innerHTML = CREDIT.map(s =>
+    `<label class="sp-row"><span>${s}</span><input type="number" class="rv-num" data-sec="${s}" step="1" value="${state.scenario.perSector[s] ?? ''}" placeholder="0" /></label>`).join('');
+  box.querySelectorAll('input[data-sec]').forEach(inp => inp.addEventListener('input', () => {
+    const v = inp.value.trim(); if (v === '') delete state.scenario.perSector[inp.dataset.sec]; else state.scenario.perSector[inp.dataset.sec] = Number(v) || 0;
+    save(); drawHeatmap(); if (state.sel) drawDrilldown();
+  }));
+}
+
+function onCell(sector, mat) { state.sel = { sector, mat }; drawDrilldown(); }
 
 function drawDrilldown() {
   const box = document.getElementById('rv-drill');
   if (!state.sel) { box.innerHTML = '<div class="empty">히트맵 셀을 클릭하면 상세가 여기 표시됩니다.</div>'; return; }
-  const d = buildDrilldown(DATA, state.sel.sector, state.sel.mat);
-
+  const d = buildDrilldown(DATA, state.sel.sector, state.sel.mat, BT);
+  const hz = d.horizons;
   const head = `<div class="drill-head">
     <span class="dh-sec">${d.sector}${d.isKtb ? ' <span class="ref">참조</span>' : ''}</span>
     <span class="dh-mat">${d.mat}</span>
     <span class="dh-kv">현재 스프레드 <b>${num1(d.spreadBp)}</b>bp</span>
     <span class="dh-kv">1년 %ile <b>${pct0(d.pctile1y)}</b></span>
   </div>`;
-
-  const hz = d.horizons; // [{months,excess,carry,rolldown}]
   const col = (k) => hz.map(x => `<td class="n">${num0(x[k])}</td>`).join('');
   const table = `<table class="drill-tbl">
     <thead><tr><th>지표</th>${hz.map(x => `<th>${x.months}개월</th>`).join('')}</tr></thead>
@@ -49,10 +105,18 @@ function drawDrilldown() {
       <tr><td>기대수익 bp</td>${col('excess')}</tr>
       <tr><td>캐리 bp</td>${col('carry')}</tr>
       <tr><td>롤다운 bp</td>${col('rolldown')}</tr>
-      <tr class="ph3"><td>평균회귀</td><td colspan="${hz.length}">Phase 3</td></tr>
     </tbody></table>`;
 
-  box.innerHTML = `${head}<div class="drill-grid"><div class="card">${table}</div><div class="card"><div class="chart-box short" id="rv-drill-chart"></div></div></div>`;
+  // 평균회귀 빈도표 (버킷 × 호라이즌). 현재 버킷 강조. 미제공 = 표본 부족.
+  let mrHtml = '';
+  if (d.meanrev) {
+    const cell = (b, hh) => { const s = d.meanrev.table[b][hh]; return s ? `${s.n}회 중 ${s.shrink}회 축소·평균 ${sgn1(s.mean)}` : '<span class="short">표본 부족</span>'; };
+    const rowB = (b) => `<tr class="${d.meanrev.currentBucket === b ? 'cur' : ''}"><td>${BUCKET_KO[b]}${d.meanrev.currentBucket === b ? ' ◀현재' : ''}</td>${[1, 3, 6].map(hh => `<td class="n">${cell(b, hh)}</td>`).join('')}</tr>`;
+    mrHtml = `<div class="drill-mr"><table><thead><tr><th>평균회귀 버킷</th><th>1개월</th><th>3개월</th><th>6개월</th></tr></thead>
+      <tbody>${['low', 'mid', 'high'].map(rowB).join('')}</tbody></table></div>`;
+  } else mrHtml = '<div class="drill-mr note">국고 참조행 — 평균회귀 미제공</div>';
+
+  box.innerHTML = `${head}<div class="drill-grid"><div class="card">${table}${mrHtml}</div><div class="card"><div class="chart-box short" id="rv-drill-chart"></div></div></div>`;
   renderHistory(document.getElementById('rv-drill-chart'), {
     dates: d.history.dates, values: d.history.values, stale: d.history.stale,
     current: d.spreadBp, title: `${d.sector} ${d.mat} 스프레드 (최근 1년, 회색 점선=스테일)`,
@@ -63,19 +127,36 @@ export function initCurveRV() {
   DATA = window.FENRIR_SERIES && window.FENRIR_SERIES['credit-spread'];
   const app = document.getElementById('rv-app');
   if (!DATA) { app.innerHTML = '<p class="empty">데이터를 불러오지 못했습니다 (data/credit-spread.js).</p>'; return; }
+  BT = (window.FENRIR_SERIES['curve-rv-backtest'] || {}).data || null;
+  CREDIT = DATA.meta.sectors.filter(s => s !== '국고채권');
+  load();
 
   document.getElementById('rv-updated').textContent = DATA.meta.last_updated;
   document.getElementById('rv-range').textContent = `${DATA.dates[0]} ~ ${DATA.dates[DATA.dates.length - 1]}`;
   document.getElementById('rv-count').textContent = `${DATA.dates.length}일 · ${DATA.meta.nodes.length}노드(표시 ${DATA.meta.nodes.length - 1})`;
 
-  document.querySelectorAll('[data-mode]').forEach(b =>
-    b.addEventListener('click', () => { state.mode = b.dataset.mode; drawHeatmap(); }));
-  document.querySelectorAll('[data-hz]').forEach(b =>
-    b.addEventListener('click', () => { state.horizon = +b.dataset.hz; drawHeatmap(); if (state.sel) drawDrilldown(); }));
+  document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { state.mode = b.dataset.mode; drawHeatmap(); if (state.sel) drawDrilldown(); }));
+  document.querySelectorAll('[data-hz]').forEach(b => b.addEventListener('click', () => { state.horizon = +b.dataset.hz; drawHeatmap(); if (state.sel) drawDrilldown(); }));
 
+  // 평균회귀 토글 (상호배제)
+  document.getElementById('rv-meanrev').addEventListener('change', (e) => {
+    if (scenActive()) { e.target.checked = false; return; }
+    state.meanRev = e.target.checked; save(); drawHeatmap();
+  });
+  // 시나리오 모드
+  document.getElementById('rv-scen-mode').addEventListener('change', (e) => {
+    state.scenario.mode = e.target.value;
+    if (state.scenario.mode !== 'none') state.meanRev = false; // 상호배제
+    if (state.scenario.mode === 'perSector') renderPerSector();
+    save(); drawHeatmap(); if (state.sel) drawDrilldown();
+  });
+  document.getElementById('rv-scen-uniform-in').addEventListener('input', (e) => {
+    state.scenario.uniform = Number(e.target.value) || 0; save(); drawHeatmap(); if (state.sel) drawDrilldown();
+  });
+
+  if (state.scenario.mode === 'perSector') renderPerSector();
   drawHeatmap();
-  // 기본 드릴다운: 공사채AAA 3년
   onCell('공사채AAA', '3년');
 }
 
-export { buildHeatmap, buildDrilldown, HORIZONS };
+export { buildHeatmap, buildDrilldown };

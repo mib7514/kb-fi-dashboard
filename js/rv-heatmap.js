@@ -7,6 +7,7 @@ import {
 } from './curve-rv-calc.js';
 // carryOnly = 롤다운 미측정(만기도래 m≤h 또는 롤다운 타겟<최소노드) → 캐리만 표시.
 import { maturityToYears } from './credit-parse.js';
+import { fullPctileFn, bucketize } from './rv-backtest.js';
 
 export const HIDDEN_NODES = [10];       // 인제스트엔 있으나 표시 제외(제외 방식 — 복귀 한 줄).
 export const HORIZONS = [1, 3, 6];      // 개월
@@ -60,10 +61,41 @@ function rankPct(values, v) {
   return c / pool.length;
 }
 
+// 셀 현재 버킷 (스테일 제외 모수 full %ile → low/mid/high). 평균회귀 E[Δ] 조회용.
+function currentBucket(series, sector, mat, curSpread) {
+  const lab = `${sector}_${mat}`;
+  let mask = staleMask(series[lab] || []);
+  if (mat === '3월' && sector !== KTB) mask = combineMask(mask, staleMask(series[`${KTB}_3월`] || []));
+  const pctFn = fullPctileFn(bpSeriesOf(series, lab), mask);
+  return bucketize(pctFn(curSpread));
+}
+
+// 시나리오/평균회귀 옵션에 따른 셀 ΔS(bp). 국고행·carryOnly는 0.
+//   상호배제: meanRev와 scenario는 동시 활성 불가(UI가 강제). 여기선 meanRev 우선.
+function cellDeltaS({ series, sector, mat, m, curve, hMonths, scenario, meanRev, backtest }) {
+  if (sector === KTB) return 0;
+  if (meanRev && backtest) {
+    const bt = backtest[`${sector}_${mat}`];
+    const stat = bt && bt[hMonths];
+    if (stat) {
+      const b = currentBucket(series, sector, mat, curveVal(curve, m));
+      const e = b && stat[b] ? stat[b].mean : null;
+      return (e == null) ? 0 : e; // 미제공 버킷/셀 → 0(순수 excess)
+    }
+    return 0;
+  }
+  if (scenario && scenario.mode && scenario.mode !== 'none') {
+    if (scenario.mode === 'uniform') return Number(scenario.uniform) || 0;
+    if (scenario.mode === 'perSector') return Number(scenario.perSector?.[sector]) || 0;
+  }
+  return 0;
+}
+
 // ── 히트맵 조립 ──
-// 반환: { rows(라벨), cols(라벨), colsYears, mode, horizon,
-//         value[r][c], text[r][c], zColor[r][c](null=무채색), stale[r][c], ktbRowIndex }
-export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1 } = {}) {
+// opts: { mode, horizonMonths, scenario:{mode,uniform,perSector}, meanRev:bool, backtest:데이터 }
+// 반환: { rows, cols, colsYears, mode, horizon, value, text, zColor(null=무채색), stale, carryOnly, ktbRowIndex }
+//   색·순위(zColor)는 항상 ΔS=0 base excess 기준(전제). 표시값(value/text)만 ΔS 반영.
+export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1, scenario = null, meanRev = false, backtest = null } = {}) {
   const { dates, series, meta } = DATA;
   const nodes = meta.nodes, maturities = meta.maturities;
   const T = lastIdx(dates);
@@ -84,20 +116,22 @@ export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1 } = {}) 
     return cols.map((mat, ci) => {
       const m = colsYears[ci];
       const st = cellStale(series, sector, mat, m, h, nodes, maturities);
-      let val, co = false;
+      let val, co = false, base = null;
       if (mode === 'excess') {
-        const ex = excessReturn(curve, m, h, 0);
-        if (ex != null) { val = ex; }
-        else { val = carry(curve, m, h); co = val != null; } // 롤다운 미측정 → 캐리만(†)
-        // 랭크 풀: 스테일·carryOnly 제외한 full-excess만 (수정 ①·결정 ①)
-        if (sector !== KTB && !st && !co && val != null) excessPool.push(val);
+        base = excessReturn(curve, m, h, 0); // 색·순위 기준(ΔS=0)
+        if (base != null) {
+          const dS = cellDeltaS({ series, sector, mat, m, curve, hMonths: horizonMonths, scenario, meanRev, backtest });
+          val = dS !== 0 ? excessReturn(curve, m, h, dS) : base; // 표시값(ΔS 반영)
+        } else { val = carry(curve, m, h); co = val != null; } // 롤다운 미측정 → 캐리만(†), ΔS 무효
+        // 랭크 풀: 스테일·carryOnly 제외 full-excess의 base(ΔS=0) (수정 ①·전제)
+        if (sector !== KTB && !st && !co && base != null) excessPool.push(base);
       } else { // pctile — 1년 %ile, 스테일 제외 모수
         const lab = `${sector}_${mat}`;
         let mask = staleMask(series[lab] || []);
         if (mat === '3월' && sector !== KTB) mask = combineMask(mask, staleMask(series[`${KTB}_3월`] || []));
         val = pctile(bpSeriesOf(series, lab), mask, '1y');
       }
-      return { val, st, co, m, mat };
+      return { val, st, co, base, m, mat };
     });
   });
 
@@ -106,16 +140,16 @@ export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1 } = {}) 
     const isKtb = rows[r] === KTB;
     const vrow = [], trow = [], srow = [], zrow = [], corow = [];
     for (let c = 0; c < cols.length; c++) {
-      const { val, st, co } = raw[r][c];
+      const { val, st, co, base } = raw[r][c];
       vrow.push(val); srow.push(st); corow.push(co);
       let txt = '—';
       if (val != null && Number.isFinite(val)) txt = mode === 'excess' ? (val >= 0 ? '+' : '') + val.toFixed(0) : String(Math.round(val));
       trow.push(txt);
-      // 색 z: 국고행/스테일/carryOnly/무값 → null(무채색·순위 미반영).
+      // 색 z: 국고행/스테일/carryOnly/무값 → null(무채색). excess는 base(ΔS=0) 순위, pctile은 값.
       let z = null;
-      if (!isKtb && !st && !co && val != null && Number.isFinite(val)) {
-        if (mode === 'excess') z = val < 0 ? -1 : rankPct(excessPool, val); // [-1..1]
-        else z = val; // 0..100
+      if (!isKtb && !st && !co) {
+        if (mode === 'excess' && base != null && Number.isFinite(base)) z = base < 0 ? -1 : rankPct(excessPool, base);
+        else if (mode !== 'excess' && val != null && Number.isFinite(val)) z = val;
       }
       zrow.push(z);
     }
@@ -126,9 +160,9 @@ export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1 } = {}) 
 }
 
 // ── 드릴다운 조립 ──
-// 반환: { sector, mat, m, spreadBp, pctile1y,
-//         horizons:[{months, excess, carry, rolldown}], history:{dates,values,stale}, isKtb }
-export function buildDrilldown(DATA, sector, mat) {
+// 반환: { sector, mat, m, spreadBp, pctile1y, horizons:[{months,excess,carry,rolldown}],
+//         history:{dates,values,stale}, isKtb, meanrev:{currentBucket, table} }
+export function buildDrilldown(DATA, sector, mat, backtest = null) {
   const { dates, series, meta } = DATA;
   const nodes = meta.nodes, maturities = meta.maturities;
   const T = lastIdx(dates);
@@ -153,5 +187,14 @@ export function buildDrilldown(DATA, sector, mat) {
 
   const curSpread = curveVal(curve, m);
   const p1 = pctile(spBp, mask, '1y');
-  return { sector, mat, m, spreadBp: curSpread, pctile1y: p1, horizons, history: hist, isKtb };
+
+  // 평균회귀 상세: 현재 버킷 + 버킷×호라이즌 빈도(제공 시). 국고행 미제공.
+  let meanrev = null;
+  if (!isKtb) {
+    const bt = backtest && backtest[lab];
+    const table = { low: {}, mid: {}, high: {} };
+    for (const b of ['low', 'mid', 'high']) for (const hh of HORIZONS) table[b][hh] = (bt && bt[hh] && bt[hh][b]) ? bt[hh][b] : null;
+    meanrev = { currentBucket: currentBucket(series, sector, mat, curSpread), table };
+  }
+  return { sector, mat, m, spreadBp: curSpread, pctile1y: p1, horizons, history: hist, isKtb, meanrev };
 }

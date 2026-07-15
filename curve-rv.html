@@ -71,6 +71,24 @@
   .legend-inline { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
   .swatch { display: inline-block; width: 22px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
 
+  /* 시나리오/평균회귀 */
+  .mr-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+  .mr-toggle input { accent-color: var(--accent); }
+  .mr-toggle.disabled { opacity: 0.4; cursor: not-allowed; }
+  .rv-num { background: var(--panel); border: 1px solid var(--border-2); color: var(--text); border-radius: 6px; padding: 6px 8px; font-family: var(--mono); font-size: 12px; width: 72px; text-align: right; }
+  .rv-num:focus { outline: none; border-color: var(--accent); }
+  .scen-badge { font-size: 11px; font-weight: 600; color: var(--forecast); background: rgba(240,136,62,0.12); border: 1px solid var(--forecast); border-radius: 5px; padding: 3px 8px; }
+  .scen-persector { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; margin: 0 0 14px; }
+  .scen-persector .sp-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 11px; }
+  .scen-persector .sp-row span { color: var(--muted); font-family: var(--mono); }
+  .drill-mr { margin-top: 10px; }
+  .drill-mr table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 11.5px; }
+  .drill-mr th, .drill-mr td { padding: 6px 9px; border-bottom: 1px solid var(--border); text-align: right; }
+  .drill-mr th:first-child, .drill-mr td:first-child { text-align: left; color: var(--muted); }
+  .drill-mr tr.cur td { background: rgba(88,166,255,0.10); }
+  .drill-mr tr.cur td:first-child { color: var(--accent); font-weight: 600; }
+  .drill-mr .short { color: var(--border-2); }
+
   /* 드릴다운 (히트맵 하단 고정 영역) */
   .drill { margin-top: 8px; }
   .drill-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; padding: 10px 14px; background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 8px 8px 0 0; }
@@ -124,7 +142,27 @@
         <button data-hz="6">6개월</button>
       </div>
     </div>
+    <div class="ctrl-group" id="rv-mr-group">
+      <label class="mr-toggle"><input type="checkbox" id="rv-meanrev" /> <span>평균회귀 포함</span></label>
+    </div>
   </div>
+
+  <!-- 스프레드 시나리오 바 (excess 모드) -->
+  <div class="controls" id="rv-scenario-bar">
+    <div class="ctrl-group">
+      <span class="ctrl-label">시나리오 ΔS</span>
+      <select id="rv-scen-mode" class="rv-select" style="min-width:130px">
+        <option value="none">불변</option>
+        <option value="uniform">전 섹터 일괄</option>
+        <option value="perSector">섹터별 입력</option>
+      </select>
+    </div>
+    <div class="ctrl-group" id="rv-scen-uniform" style="display:none">
+      <input type="number" id="rv-scen-uniform-in" class="rv-num" step="1" placeholder="bp" /> <span class="ctrl-label">bp</span>
+    </div>
+    <span id="rv-badge" class="scen-badge" style="display:none"></span>
+  </div>
+  <div id="rv-scen-persector" class="scen-persector" style="display:none"></div>
 
   <!-- 히트맵 (셀 클릭 → 하단 드릴다운) -->
   <div class="card"><div class="chart-box tall" id="rv-heatmap"></div>
@@ -155,6 +193,8 @@
 <script src="vendor/plotly.min.js"></script>
 <!-- data (window.FENRIR_SERIES['credit-spread']) -->
 <script src="data/credit-spread.js"></script>
+<!-- 평균회귀 백테스트 (사전계산, window.FENRIR_SERIES['curve-rv-backtest']) -->
+<script src="data/curve-rv-backtest.js"></script>
 <!-- app (ES module) -->
 <script type="module">
   import { initCurveRV } from './js/rv-ui.js';
