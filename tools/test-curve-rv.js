@@ -18,10 +18,17 @@ async function main() {
   const t = (name, fn) => { try { fn(); pass++; } catch (e) { fail++; console.log(`  ✗ ${name}: ${e.message}`); } };
 
   console.log('════ 게이트 1: 자체 테스트 (손계산 대조 + 경계) ════');
-  // ① carry: 평탄 커브 S=26, m=2, h=1/12 → 26/12 = 2.1667
+  // ① carry: 평탄 커브 S=26, m=2, h=1/12 → 26/12 = 2.1667 (m>h → S×h)
   t('carry: S=26 × 1/12 = 2.1667', () => {
     const cv = { nodes: [1, 2, 3], values: [26, 26, 26] };
     near(C.carry(cv, 2, 1 / 12), 26 / 12);
+  });
+  // ①' carry m≤h 만기도래: min(m,h)=m → S×m
+  t('carry m≤h → S×m (만기도래)', () => {
+    const cv = { nodes: [0.25, 0.5, 1], values: [10, 12, 15] };
+    near(C.carry(cv, 0.25, 0.5), 10 * 0.25);   // m=0.25 ≤ h=0.5 → S×0.25
+    near(C.carry(cv, 0.5, 0.5), 12 * 0.5);     // m=h → S×0.5
+    near(C.carry(cv, 1, 0.5), 15 * 0.5);       // m>h → S×0.5
   });
   // ② rolldown 평탄 커브 → 0, excess = carry
   t('rolldown 평탄=0, excess=carry', () => {

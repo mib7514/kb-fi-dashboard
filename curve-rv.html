@@ -71,7 +71,23 @@
   .legend-inline { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 8px; }
   .swatch { display: inline-block; width: 22px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
 
-  @media (max-width: 820px) { .grid-2, .grid-side { grid-template-columns: 1fr; } }
+  /* 드릴다운 (히트맵 하단 고정 영역) */
+  .drill { margin-top: 8px; }
+  .drill-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; padding: 10px 14px; background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 8px 8px 0 0; }
+  .drill-head .dh-sec { font-size: 15px; font-weight: 700; }
+  .drill-head .dh-sec .ref { font-size: 10px; color: var(--muted); font-weight: 400; border: 1px solid var(--border-2); border-radius: 3px; padding: 1px 4px; }
+  .drill-head .dh-mat { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .drill-head .dh-kv { font-size: 12px; color: var(--muted); } .drill-head .dh-kv b { color: var(--text); font-family: var(--mono); }
+  .drill-grid { display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; margin-top: 10px; }
+  table.drill-tbl { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  table.drill-tbl th { color: var(--muted); font-weight: 500; text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--border-2); font-size: 11px; }
+  table.drill-tbl th:first-child, table.drill-tbl td:first-child { text-align: left; color: var(--muted); }
+  table.drill-tbl td { padding: 7px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.drill-tbl td.n { color: var(--text); }
+  table.drill-tbl tr.ph3 td { color: var(--border-2); font-style: italic; }
+  .chart-box.short { height: 210px; }
+
+  @media (max-width: 820px) { .grid-2, .grid-side, .drill-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -91,77 +107,46 @@
     <span class="meta">최신 <span id="rv-updated">—</span></span>
   </div>
 
-  <!-- [0] 히트맵 -->
+  <!-- 모드 + 호라이즌 토글 -->
   <div class="controls">
     <div class="ctrl-group">
-      <span class="ctrl-label">히트맵 윈도우</span>
+      <span class="ctrl-label">모드</span>
       <div class="seg">
-        <button data-heatwin="1y">1Y</button>
-        <button data-heatwin="3y">3Y</button>
-        <button data-heatwin="full" class="active">FULL</button>
+        <button data-mode="excess" class="active">1개월 기대수익</button>
+        <button data-mode="pctile">레벨 %ile</button>
+      </div>
+    </div>
+    <div class="ctrl-group" id="rv-hz-group">
+      <span class="ctrl-label">호라이즌</span>
+      <div class="seg">
+        <button data-hz="1" class="active">1개월</button>
+        <button data-hz="3">3개월</button>
+        <button data-hz="6">6개월</button>
       </div>
     </div>
   </div>
+
+  <!-- 히트맵 (셀 클릭 → 하단 드릴다운) -->
   <div class="card"><div class="chart-box tall" id="rv-heatmap"></div>
-    <div class="legend-inline">
-      <span><span class="swatch" style="background:#8b1a1a"></span>낮은 %ile · 타이트 = 위험(고평가)</span>
+    <div class="legend-inline" id="rv-legend-excess">
+      <span><span class="swatch" style="background:#3fb950"></span>기대수익 상위(초록)</span>
+      <span><span class="swatch" style="background:#484f58"></span>하위(무채색)</span>
+      <span><span class="swatch" style="background:#8b1a1a"></span>음수(적색)</span>
+      <span>국고 행=참조(회색) · <b>*</b>=스테일(순위·색 제외) · <b>†</b>=롤다운 미측정—캐리만</span>
+    </div>
+    <div class="legend-inline" id="rv-legend-pctile" style="display:none">
+      <span><span class="swatch" style="background:#8b1a1a"></span>낮은 %ile · 타이트=위험</span>
       <span><span class="swatch" style="background:#6e7681"></span>중간</span>
-      <span><span class="swatch" style="background:#1f6feb"></span>높은 %ile · 와이드 = 저평가 후보</span>
+      <span><span class="swatch" style="background:#1f6feb"></span>높은 %ile · 와이드=저평가 후보</span>
+      <span>스테일 제외 모수의 1년 %ile · <b>*</b>=스테일</span>
     </div>
   </div>
 
-  <!-- 섹터 선택 (히트맵 행 클릭과 이원화 — 같은 상태를 갱신) -->
-  <div class="controls">
-    <div class="ctrl-group">
-      <span class="ctrl-label">섹터</span>
-      <select id="rv-sector-select" class="rv-select"></select>
-    </div>
-    <div class="ctrl-group">
-      <span class="ctrl-label">비교 오버레이</span>
-      <select id="rv-compare-select" class="rv-select"><option value="">없음</option></select>
-    </div>
-  </div>
+  <!-- 드릴다운 (하단 고정 영역) -->
+  <div class="section-title">셀 상세 (3개 호라이즌)</div>
+  <div class="drill" id="rv-drill"></div>
 
-  <!-- [1] 스코어카드 -->
-  <div class="section-title">스코어카드 — <span id="rv-sector-name">공사채AAA</span> (행 클릭 → 상세)</div>
-  <div class="card">
-    <table class="rv">
-      <thead><tr>
-        <th>만기</th><th>스프레드bp</th><th>%ile 1y/3y/full</th><th>스프레드캐리</th>
-        <th>스프레드롤</th><th>KTB롤</th><th>초과캐리+롤</th><th>초과/dur</th><th>현재구간 백테스트</th>
-      </tr></thead>
-      <tbody id="rv-scorecard-body"></tbody>
-    </table>
-    <div class="note">캐리·롤·초과캐리롤·KTB롤 단위 bp / 초과/dur = 초과캐리롤 ÷ 듀레이션. 백테스트 = 현재 full %ile 버킷의 6개월 forward 평균Δ·축소확률.</div>
-  </div>
-
-  <!-- [1-상세] -->
-  <div class="section-title">상세 — <span id="rv-detail-title">—</span></div>
-  <div class="grid-side">
-    <div class="card"><div class="chart-box" id="rv-detail-chart"></div></div>
-    <div class="card"><table class="rv" id="rv-detail-bt"></table>
-      <div class="note">버킷: 저(&lt;50%) / 중(50~85%) / 고(&gt;85%). 성과 = 6개월 뒤 스프레드 변화(bp). 축소확률 = 변화&lt;0 비율.</div>
-    </div>
-  </div>
-
-  <!-- [2] 텀스트럭처 -->
-  <div class="section-title">텀스트럭처 & 기울기 — <span id="rv-ts-sector">공사채AAA</span></div>
-  <div class="grid-side">
-    <div class="card"><div class="chart-box" id="rv-term"></div></div>
-    <div class="card">
-      <div class="note" style="margin:0 0 6px">기울기 (극단 %ile ≤5 또는 ≥95 강조)</div>
-      <table class="rv"><tbody id="rv-slope-body"></tbody></table>
-    </div>
-  </div>
-
-  <!-- [4] 페어 -->
-  <div class="section-title">페어 — <span id="rv-pair-name">—</span></div>
-  <div class="grid-side">
-    <div class="card"><div class="chart-box short" id="rv-pair-chart"></div></div>
-    <div class="card"><table class="rv"><tbody id="rv-pair-body"></tbody></table>
-      <div class="note">페어 = spread(X) − spread(Y). 확장은 rv-calc.js의 PAIRS 배열.</div>
-    </div>
-  </div>
+  <div class="note">기대수익 = 국고 대비 초과수익(bp, 동일 원금) = 캐리(스프레드×보유) + 롤다운(잔존만기 재평가). 색은 캐리+롤다운 순위(음수 적색). ΔS 시나리오·평균회귀는 Phase 3. 국고 행은 금리 기준 참조.</div>
 </div>
 
 <!-- 공통 내비게이션 -->

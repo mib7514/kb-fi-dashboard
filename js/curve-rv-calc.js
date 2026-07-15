@@ -77,10 +77,11 @@ export function interp(nodes, values, m) {
 // curve = { nodes:[...년], values:[...bp] }. m년 스프레드(bp) — 보간, 범위 밖 null.
 export function curveVal(curve, m) { return interp(curve.nodes, curve.values, m); }
 
-// 캐리(bp) = S(m) × h.  [스프레드(bp) × 보유기간(년) = 기간 중 받는 스프레드(bp)]
+// 캐리(bp) = S(m) × min(m, h).  [스프레드(bp) × 보유기간(년)]
+//   m ≤ h(보유 중 만기 도래)면 S×m 확정 캐리 — 그 이후 스프레드 수취 없음. m > h면 S×h.
 export function carry(curve, m, h) {
   const s = curveVal(curve, m);
-  return s == null ? null : s * h;
+  return s == null ? null : s * Math.min(m, h);
 }
 
 // 재평가(롤다운+시나리오, bp) = −[ S(m−h) + ΔS − S(m) ] × (m−h).

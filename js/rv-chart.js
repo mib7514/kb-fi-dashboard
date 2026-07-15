@@ -1,108 +1,82 @@
-// rv-chart.js — Curve RV Plotly 렌더링. 전역 Plotly 사용 (vendor/plotly.min.js 선로드).
-// 기존 chart.js의 다크 테마·baseLayout 패턴 답습.
+// rv-chart.js — Curve RV Plotly 렌더링 (전역 Plotly). curve-rv 페이지 전용(다른 화면 미사용).
+//   히트맵(모드별 색·국고행/스테일 무채색·셀 텍스트) + 스프레드 히스토리(스테일 회색 세그먼트).
 
 const COLORS = {
-  current: '#58a6ff',   // 현재 (파랑)
-  prior: '#8b949e',     // 1년 전 (회색)
-  band: '#30363d',      // 3y min~max 밴드
-  accent: '#f0883e',
-  marker: '#f0883e',
-  grid: '#21262d',
-  axis: '#484f58',
-  text: '#c9d1d9',
-  muted: '#8b949e',
+  current: '#58a6ff', accent: '#f0883e', grid: '#21262d', axis: '#484f58',
+  text: '#c9d1d9', muted: '#8b949e', grey: '#6e7681', white: '#e6edf3',
 };
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const CONFIG = { displayModeBar: false, responsive: true };
 
-// 위험 우선 색상: 낮은 %ile(타이트=위험) 적색 → 중간 중립 → 높은 %ile(와이드=저평가) 청색
-const RISK_SCALE = [
-  [0.00, '#8b1a1a'],
-  [0.25, '#f85149'],
-  [0.50, '#6e7681'],
-  [0.75, '#399ae6'],
-  [1.00, '#1f6feb'],
-];
+// %ile(레벨) 색: 낮음(타이트=위험) 적색 → 중립 → 높음(와이드) 청색.
+const RISK_SCALE = [[0, '#8b1a1a'], [0.25, '#f85149'], [0.5, '#6e7681'], [0.75, '#399ae6'], [1, '#1f6feb']];
+// 기대수익 색(랭크): 음수 적색 → 하위 무채색 → 상위 초록. z∈[-1,1], t=(z+1)/2.
+const EXCESS_SCALE = [[0, '#8b1a1a'], [0.49, '#da3633'], [0.5, '#484f58'], [0.75, '#2ea043'], [1, '#3fb950']];
 
-function baseLayout(title, yTitle, extra = {}) {
-  return {
-    title: { text: title, font: { color: COLORS.text, size: 13, family: FONT }, x: 0, xanchor: 'left' },
-    paper_bgcolor: 'transparent',
-    plot_bgcolor: 'transparent',
-    font: { color: COLORS.muted, family: FONT, size: 11 },
-    xaxis: { gridcolor: COLORS.grid, zerolinecolor: COLORS.axis, linecolor: COLORS.axis, tickfont: { size: 10 }, ...(extra.xaxis || {}) },
-    yaxis: { title: { text: yTitle, font: { size: 10 } }, gridcolor: COLORS.grid, zerolinecolor: COLORS.axis, linecolor: COLORS.axis, tickfont: { size: 10 }, ...(extra.yaxis || {}) },
-    margin: { l: 52, r: 16, t: 34, b: 36 },
-    showlegend: extra.showlegend !== undefined ? extra.showlegend : true,
-    legend: { orientation: 'h', y: -0.18, font: { size: 10 }, bgcolor: 'transparent' },
-    hovermode: extra.hovermode || 'x unified',
-    ...extra.layout,
-  };
-}
-
-// ── [0] 섹터×만기 히트맵 ──
-// grid: { sectors:[...14], maturities:[...5], z:[[pct|null,...],...] }, onSelect(sector)
-export function renderHeatmap(el, grid, onSelect) {
-  const text = grid.z.map(row => row.map(v => (typeof v === 'number' && Number.isFinite(v)) ? Math.round(v).toString() : '—'));
+// ── 히트맵 ── data: { rows, cols, z(null=무채색), text, stale, carryOnly, mode, ktbRowIndex }
+export function renderHeatmap(el, data, onSelect) {
+  const { rows, cols, z, text, stale, carryOnly, mode, ktbRowIndex } = data;
+  const isExcess = mode === 'excess';
   const trace = {
-    type: 'heatmap',
-    x: grid.maturities, y: grid.sectors, z: grid.z,
-    text, texttemplate: '%{text}', textfont: { size: 11, family: FONT, color: '#e6edf3' },
-    colorscale: RISK_SCALE, zmin: 0, zmax: 100,
-    xgap: 2, ygap: 2,
-    hovertemplate: '%{y} · %{x}<br>%ile %{z:.0f}<extra></extra>',
-    colorbar: { title: { text: '%ile', font: { size: 9, color: COLORS.muted } }, tickfont: { size: 9, color: COLORS.muted }, thickness: 10, len: 0.9, outlinewidth: 0 },
+    type: 'heatmap', x: cols, y: rows, z,
+    colorscale: isExcess ? EXCESS_SCALE : RISK_SCALE,
+    zmin: isExcess ? -1 : 0, zmax: isExcess ? 1 : 100,
+    xgap: 2, ygap: 2, showscale: false,
+    hoverongaps: true,
+    customdata: text,
+    hovertemplate: '%{y} · %{x}<br>' + (isExcess ? '기대수익 %{customdata}bp' : '%ile %{customdata}') + '<extra></extra>',
   };
-  const layout = baseLayout('섹터 × 만기 percentile 히트맵 (행 클릭 → 상세)', '', {
-    showlegend: false, hovermode: 'closest',
-    yaxis: { autorange: 'reversed', tickfont: { size: 10 }, gridcolor: 'transparent', linecolor: COLORS.axis },
-    xaxis: { side: 'top', gridcolor: 'transparent', linecolor: COLORS.axis, tickfont: { size: 11 } },
-    layout: { margin: { l: 92, r: 40, t: 44, b: 20 } },
-  });
+  // 셀 텍스트를 annotation으로 (색: 국고행/스테일=회색, 그 외=흰색)
+  const annotations = [];
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < cols.length; c++) {
+    let t = text[r][c];
+    if (t == null || t === '') continue;
+    const isStale = stale && stale[r][c];
+    const isCarryOnly = carryOnly && carryOnly[r][c];
+    const grey = r === ktbRowIndex || isStale || isCarryOnly;
+    if (isStale) t += '*';
+    if (isCarryOnly) t += '†';
+    annotations.push({
+      x: cols[c], y: rows[r], xref: 'x', yref: 'y', text: t,
+      showarrow: false, font: { size: 10.5, family: FONT, color: grey ? COLORS.grey : COLORS.white },
+    });
+  }
+  const layout = {
+    paper_bgcolor: 'transparent', plot_bgcolor: '#0d1117',
+    font: { color: COLORS.muted, family: FONT, size: 11 },
+    xaxis: { side: 'top', gridcolor: 'transparent', linecolor: COLORS.axis, tickfont: { size: 11 }, type: 'category' },
+    yaxis: { autorange: 'reversed', gridcolor: 'transparent', linecolor: COLORS.axis, tickfont: { size: 10 }, type: 'category' },
+    margin: { l: 92, r: 20, t: 40, b: 16 }, showlegend: false, hovermode: 'closest', annotations,
+  };
   Plotly.react(el, [trace], layout, CONFIG);
   if (onSelect && !el._rvBound) {
     el._rvBound = true;
     el.on('plotly_click', (ev) => {
       const p = ev.points && ev.points[0];
-      if (p && p.y) onSelect(p.y);
+      if (p && p.y && p.x) onSelect(p.y, p.x);
     });
   }
 }
 
-// ── [2] 스프레드 텀스트럭처: 현재 커브 + 1년 전 + 3y min~max 밴드 (+선택 비교 섹터 오버레이) ──
-// data: { maturities:[1,2,3,5,10], current:[..bp], prior:[..bp], lo:[..bp], hi:[..bp],
-//         title?, compare?: { name, current:[..bp] } }
-export function renderTermStructure(el, data) {
-  const x = data.maturities;
-  const traces = [
-    // 밴드: lo → hi 채우기
-    { x, y: data.lo, name: '3y min', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false },
-    { x, y: data.hi, name: '3y min~max', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: 'rgba(88,166,255,0.10)', hoverinfo: 'skip' },
-    { x, y: data.prior, name: '1년 전', mode: 'lines+markers', line: { color: COLORS.prior, width: 1.5, dash: 'dot' }, marker: { size: 5 } },
-    { x, y: data.current, name: '현재', mode: 'lines+markers', line: { color: COLORS.current, width: 2 }, marker: { size: 7 } },
-  ];
-  // 비교 섹터 현재 커브 (점선 오버레이)
-  if (data.compare && Array.isArray(data.compare.current)) {
-    traces.push({
-      x, y: data.compare.current, name: `${data.compare.name} (비교)`, mode: 'lines+markers',
-      line: { color: COLORS.accent, width: 1.5, dash: 'dash' }, marker: { size: 5 },
-    });
-  }
-  const layout = baseLayout(data.title || '스프레드 텀스트럭처 (bp)', 'bp', {
-    hovermode: 'x unified',
-    xaxis: { type: 'category', gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 10 } },
-  });
-  Plotly.react(el, traces, layout, CONFIG);
-}
-
-// ── 스프레드 히스토리 (상세 / 페어) : 전 기간 + 현재값 표시선 ──
-// data: { dates:[...], values:[...bp|null], current:number|null, title, yTitle }
+// ── 스프레드 히스토리 (최근 1년, 스테일 구간 회색 점선) ──
+// data: { dates, values(bp|null), stale(bool[]), current, title }
 export function renderHistory(el, data) {
-  const traces = [{
-    x: data.dates, y: data.values, name: data.name || '스프레드', mode: 'lines',
-    line: { color: COLORS.current, width: 1.4 }, connectgaps: false,
-  }];
-  const layout = baseLayout(data.title || '스프레드 히스토리 (bp)', data.yTitle || 'bp', { showlegend: false, hovermode: 'x' });
+  const { dates, values, stale } = data;
+  // 정상 세그먼트(파랑 실선) / 스테일 세그먼트(회색 점선) 분리 — 스테일 점만 남긴 시리즈.
+  const normal = values.map((v, i) => (stale && stale[i]) ? null : v);
+  const staleY = values.map((v, i) => (stale && stale[i]) ? v : null);
+  const traces = [
+    { x: dates, y: normal, name: '스프레드', mode: 'lines', line: { color: COLORS.current, width: 1.6 }, connectgaps: false },
+    { x: dates, y: staleY, name: '스테일', mode: 'lines', line: { color: COLORS.grey, width: 1.6, dash: 'dot' }, connectgaps: false },
+  ];
+  const layout = {
+    title: { text: data.title || '스프레드 히스토리 (bp)', font: { color: COLORS.text, size: 12, family: FONT }, x: 0, xanchor: 'left' },
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { color: COLORS.muted, family: FONT, size: 10 },
+    xaxis: { gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 9 } },
+    yaxis: { title: { text: 'bp', font: { size: 9 } }, gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 9 } },
+    margin: { l: 46, r: 14, t: 28, b: 28 }, showlegend: false, hovermode: 'x',
+  };
   if (typeof data.current === 'number' && Number.isFinite(data.current)) {
     layout.shapes = [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: data.current, y1: data.current, line: { color: COLORS.accent, width: 1, dash: 'dash' } }];
     layout.annotations = [{ xref: 'paper', x: 1, xanchor: 'right', y: data.current, yanchor: 'bottom', text: `현재 ${data.current.toFixed(1)}`, showarrow: false, font: { color: COLORS.accent, size: 9 } }];
