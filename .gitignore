@@ -11,3 +11,6 @@ curve-rv-command.md
 .env.*
 *.pem
 .corp-ca.pem
+
+# 에너지 나우캐스트 백테스트 로컬 캐시(원시 FRED, 재생성 가능)
+scripts/.nowcast-cache.json
