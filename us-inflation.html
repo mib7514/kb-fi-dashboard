@@ -125,6 +125,36 @@
   .footnote .warn { color: var(--warn); margin-bottom: 6px; }
 
   @media (max-width: 720px) { .chart-grid { grid-template-columns: 1fr; } }
+
+  /* 예측 성적표 (접이식) */
+  .scorecard { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin-top: 20px; overflow: hidden; }
+  .scorecard > summary { list-style: none; cursor: pointer; padding: 14px 18px; display: flex; align-items: baseline; gap: 10px; }
+  .scorecard > summary::-webkit-details-marker { display: none; }
+  .scorecard > summary::before { content: '▸'; color: var(--muted); font-size: 12px; }
+  .scorecard[open] > summary::before { content: '▾'; }
+  .scorecard > summary h2 { font-size: 14px; margin: 0; }
+  .scorecard > summary .desc { font-size: 11px; color: var(--muted); }
+  .sc-body { padding: 0 18px 18px; }
+  .sc-legend { font-size: 11px; color: var(--muted); line-height: 1.8; margin-bottom: 12px; }
+  .sc-legend b { color: var(--text); font-weight: 600; }
+  .sc-table-wrap { overflow-x: auto; }
+  table.sc { border-collapse: collapse; width: 100%; font-size: 11.5px; font-family: var(--mono); }
+  table.sc th, table.sc td { padding: 7px 9px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  table.sc th { color: var(--muted); font-weight: 600; font-family: var(--sans); font-size: 11px; text-align: right; }
+  table.sc th:first-child, table.sc td:first-child { text-align: left; }
+  table.sc td.month { color: var(--text); font-weight: 600; }
+  table.sc tr.live td { background: rgba(88,166,255,0.06); }
+  table.sc tr.live td.month::after { content: ' ●'; color: var(--accent); font-size: 9px; }
+  table.sc td.actual { color: var(--text); font-weight: 600; }
+  table.sc .err { font-size: 9.5px; margin-left: 4px; }
+  table.sc .err.hi { color: var(--warn); }
+  table.sc .err.ok { color: var(--ok); }
+  table.sc .na { color: var(--border-2); }
+  table.sc .flag { font-size: 9px; color: var(--override); margin-left: 3px; }
+  table.sc td.reason { text-align: left; color: var(--muted); font-family: var(--sans); font-size: 10.5px; white-space: normal; min-width: 160px; }
+  .sc-cumulative { margin-top: 12px; font-size: 11.5px; color: var(--muted); font-family: var(--mono); line-height: 1.9; }
+  .sc-cumulative b { color: var(--text); }
+  .sc-cumulative .best { color: var(--ok); }
 </style>
 </head>
 <body>
@@ -217,6 +247,15 @@
     <div class="editor-grid" id="editor-body"></div>
     <div class="footnote" id="footnote"></div>
   </div>
+
+  <!-- 예측 성적표 (접이식) — 헤드라인 CPI y/y -->
+  <details class="scorecard" id="scorecard">
+    <summary>
+      <h2>예측 성적표</h2>
+      <span class="desc">헤드라인 CPI 물가(작년 대비 %)를 누가 얼마나 맞혔나 — 발표 전 예측을 그대로 박제</span>
+    </summary>
+    <div class="sc-body" id="scorecard-body"></div>
+  </details>
 </div>
 
 <!-- 공통 내비게이션 -->

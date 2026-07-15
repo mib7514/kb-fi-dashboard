@@ -1,0 +1,103 @@
+{
+  "meta": {
+    "kind": "us-inflation-scorecard",
+    "unit": "y/y headline CPI %",
+    "note": "헤드라인 CPI y/y 예측 성적표. 점-시점: 발표 직전 예측 스냅샷을 동결(frozen), 발표 후 소급수정 금지. combined.retro(백테스트 소급)·수동입력 late=true는 누적 성적에서 제외. asof/타임스탬프는 데이터 파생(last_actual)만 사용.",
+    "columns": {
+      "seasonal": "우리 계산기 (시즈널 단독)",
+      "combined": "계산기+기름값 (나우캐스트 결합)",
+      "sealed": "내 최종 판단 (봉인값·수동)",
+      "consensus": "시장 예상 (컨센서스·수동)",
+      "cleveland": "클리블랜드 연은 (클리블랜드 나우캐스트)",
+      "actual": "실제"
+    },
+    "last_actual": "2026-06"
+  },
+  "rows": [
+    {
+      "month": "2026-06",
+      "frozen": true,
+      "seed": true,
+      "seasonal": {
+        "mm": null,
+        "yoy": 3.9
+      },
+      "combined": {
+        "mm": null,
+        "yoy": null,
+        "retro": {
+          "mm": 0.046,
+          "yoy": 3.95
+        }
+      },
+      "sealed": {
+        "yoy": 4.1,
+        "late": false
+      },
+      "consensus": {
+        "yoy": 3.8,
+        "late": false
+      },
+      "cleveland": {
+        "yoy": 3.96,
+        "auto": false,
+        "late": false
+      },
+      "actual": {
+        "yoy": 3.5,
+        "mm": null
+      },
+      "frozen_manual": {
+        "sealed": true,
+        "consensus": true,
+        "cleveland": true
+      },
+      "errors": {
+        "seasonal": 0.4,
+        "combined": null,
+        "sealed": 0.6,
+        "consensus": 0.3,
+        "cleveland": 0.46
+      },
+      "miss_reason": "에너지 급락 무채널 + 유가 조정 축소 채택"
+    },
+    {
+      "month": "2026-07",
+      "frozen": false,
+      "seasonal": {
+        "mm": 0.184,
+        "yoy": 3.42
+      },
+      "combined": {
+        "mm": 0.078,
+        "yoy": 3.31,
+        "reg": {
+          "b": 0.494,
+          "r2": 0.915,
+          "w_e": 0.075
+        }
+      },
+      "sealed": {
+        "yoy": null
+      },
+      "consensus": {
+        "yoy": null
+      },
+      "cleveland": {
+        "yoy": null
+      },
+      "actual": {
+        "yoy": null,
+        "mm": null
+      },
+      "miss_reason": null,
+      "errors": {
+        "seasonal": null,
+        "combined": null,
+        "sealed": null,
+        "consensus": null,
+        "cleveland": null
+      }
+    }
+  ]
+}

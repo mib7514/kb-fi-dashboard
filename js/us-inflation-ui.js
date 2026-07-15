@@ -5,8 +5,10 @@
 
 import { buildForecastUS, missingPeriods, annualYoYSummaryUS } from './us-inflation-calc.js';
 import { renderIndexChart, renderMmChart, renderYoyChart } from './us-inflation-chart.js';
+import { cumulativeError, PREDICTION_COLUMNS } from './us-inflation-scorecard.js';
 
 const DATA_URL = 'data/us-inflation.json';
+const SCORECARD_URL = 'data/us-inflation-scorecard.json';
 const LS_KEY = 'us-inflation-forecast';
 const SERIES_ORDER = ['us-cpi-headline', 'us-cpi-core', 'us-pce-headline', 'us-pce-core'];
 const SERIES_LABEL = {
@@ -295,9 +297,82 @@ function syncControlActive() {
   document.querySelectorAll('[data-yy]').forEach((b) => b.classList.toggle('active', Number(b.dataset.yy) === state.yyMonths));
 }
 
+// ── 예측 성적표 (헤드라인 CPI y/y) — 저장된 동결 스냅샷 표시 전용 ──
+function scCell(row, key) {
+  const c = row[key];
+  const v = c?.yoy;
+  if (v == null) return '<span class="na">–</span>';
+  let s = v.toFixed(1);
+  if (key === 'combined' && c.retro) s += '<span class="flag" title="백테스트 소급값 — 누적 성적 제외">소급</span>';
+  if (['sealed', 'consensus', 'cleveland'].includes(key) && c.late) s += '<span class="flag" title="발표 후 입력 — 누적 성적 제외">지연</span>';
+  if (row.frozen && row.actual && row.actual.yoy != null) {
+    const e = row.errors ? row.errors[key] : null;
+    if (e != null) {
+      const cls = Math.abs(e) <= 0.15 ? 'ok' : 'hi';
+      s += `<span class="err ${cls}">${e >= 0 ? '+' : ''}${e.toFixed(2)}</span>`;
+    }
+  }
+  return s;
+}
+
+function renderScorecard(card) {
+  const el = document.getElementById('scorecard-body');
+  if (!el) return;
+  if (!card || !Array.isArray(card.rows) || card.rows.length === 0) {
+    el.innerHTML = '<div class="empty">아직 기록된 예측이 없습니다.</div>';
+    return;
+  }
+  const rows = [...card.rows].sort((a, b) => (a.month < b.month ? -1 : 1));
+
+  const legend = `
+    <div class="sc-legend">
+      숫자는 <b>작년 같은 달 대비 물가 상승률(%)</b>. 발표 전 예측을 그대로 박제하고, 실제가 나오면 옆에 <b>오차</b>를 붙입니다.<br>
+      <b>우리 계산기</b> 평소 계절 흐름만으로 계산 ·
+      <b>계산기+기름값</b> 여기에 최근 기름값을 반영 ·
+      <b>내 최종 판단</b> 직접 봉인한 값 ·
+      <b>시장 예상</b> 시장 컨센서스 ·
+      <b>클리블랜드 연은</b> 클리블랜드 연준 추정 ·
+      <b>실제</b> 발표된 값. <span style="color:var(--override)">소급/지연</span>은 성적 집계에서 뺍니다.
+    </div>`;
+
+  const head = `<tr><th>발표월</th>${PREDICTION_COLUMNS.map((c) => `<th>${c.label}</th>`).join('')}<th>실제</th><th>미스 원인</th></tr>`;
+  const body = rows.map((row) => {
+    const cls = row.frozen ? '' : ' class="live"';
+    const preds = PREDICTION_COLUMNS.map((c) => `<td>${scCell(row, c.key)}</td>`).join('');
+    const actual = (row.actual && row.actual.yoy != null)
+      ? `<td class="actual">${row.actual.yoy.toFixed(1)}</td>` : '<td class="na">–</td>';
+    const reason = `<td class="reason">${row.miss_reason ? row.miss_reason : (row.frozen ? '' : '<span style="color:var(--accent)">예측 진행중</span>')}</td>`;
+    return `<tr${cls}><td class="month">${row.month}</td>${preds}${actual}${reason}</tr>`;
+  }).join('');
+
+  // 누적 평균 오차 (동결·실측·비소급·비지연만).
+  const cum = cumulativeError(rows);
+  let best = null;
+  for (const c of PREDICTION_COLUMNS) { const m = cum[c.key]; if (m.mae != null && (best == null || m.mae < best.mae)) best = { key: c.key, mae: m.mae }; }
+  const cumLine = PREDICTION_COLUMNS.map((c) => {
+    const m = cum[c.key];
+    if (m.mae == null) return `${c.label} <b>–</b>`;
+    const b = best && best.key === c.key ? ' class="best"' : '';
+    return `<span${b}>${c.label} <b>${m.mae.toFixed(2)}</b><span style="opacity:.6">(n=${m.n})</span></span>`;
+  }).join(' · ');
+
+  el.innerHTML = legend
+    + `<div class="sc-table-wrap"><table class="sc"><thead>${head}</thead><tbody>${body}</tbody></table></div>`
+    + `<div class="sc-cumulative">누적 평균 오차 (작을수록 정확, 발표 전 예측만): ${cumLine}</div>`;
+}
+
+async function loadScorecard() {
+  try {
+    const res = await fetch(SCORECARD_URL, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    renderScorecard(await res.json());
+  } catch { /* 성적표 부재/오류는 비치명 — 나머지 페이지는 정상 렌더 */ }
+}
+
 // ── 초기화 ──
 export async function initUS() {
   load();
+  loadScorecard(); // 시리즈 상태와 무관 — 병렬 로드(비치명)
   try {
     const res = await fetch(DATA_URL, { cache: 'no-cache' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

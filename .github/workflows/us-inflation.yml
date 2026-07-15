@@ -27,20 +27,33 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Fetch FRED series → data/us-inflation.json
+      - name: Fetch FRED 물가지수 → data/us-inflation.json
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: node scripts/fetch-us-inflation.mjs
 
+      - name: Fetch 에너지 나우캐스트 입력 → data/us-energy-nowcast.json
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: node scripts/fetch-energy-nowcast.mjs
+
+      # 성적표 스냅샷: 매 fetch마다 다음 발표월 예측 현재값 기록, 실측 편입 시 직전 스냅샷 동결.
+      # 키 불필요(적재된 data만 읽음). 수동 컬럼(봉인/컨센/클리블랜드)·miss_reason은 보존.
+      - name: 예측 성적표 갱신·동결 → data/us-inflation-scorecard.json
+        run: node scripts/update-scorecard.mjs
+
       - name: Commit if changed
         run: |
-          if git diff --quiet -- data/us-inflation.json; then
+          # 3개 산출물 개별 스테이징(부재 허용). 실제 diff 있을 때만 커밋.
+          for f in data/us-inflation.json data/us-energy-nowcast.json data/us-inflation-scorecard.json; do
+            git add -- "$f" 2>/dev/null || true
+          done
+          if git diff --cached --quiet; then
             echo "갱신분 없음 — 커밋 skip."
             exit 0
           fi
           LAST=$(node -e "const d=require('./data/us-inflation.json');const ms=Object.values(d.series).map(s=>s.meta.last_updated).sort();process.stdout.write(ms[ms.length-1])")
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/us-inflation.json
-          git commit -m "data: US 물가지수(FRED) ${LAST} 갱신"
+          git commit -m "data: US 물가지수·에너지 나우캐스트·성적표 ${LAST} 갱신"
           git push
