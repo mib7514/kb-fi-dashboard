@@ -171,10 +171,12 @@
   <!-- 히트맵 (셀 클릭 → 하단 드릴다운) -->
   <div class="card"><div class="chart-box tall" id="rv-heatmap"></div>
     <div class="legend-inline" id="rv-legend-excess">
-      <span><span class="swatch" style="background:#3fb950"></span>기대수익 상위(초록)</span>
-      <span><span class="swatch" style="background:#484f58"></span>하위(무채색)</span>
+      <span><span class="swatch" style="background:#3fb950;outline:1.5px solid #56d364;outline-offset:-1px"></span>상위 10%(진초록)</span>
+      <span><span class="swatch" style="background:#2ea043"></span>상위 10~25%</span>
+      <span><span class="swatch" style="background:#1f4a2e"></span>상위 25~50%(연초록)</span>
+      <span><span class="swatch" style="background:#484f58"></span>하위 50%(무채색)</span>
       <span><span class="swatch" style="background:#8b1a1a"></span>음수(적색)</span>
-      <span>국고 행=참조(회색) · <b>*</b>=스테일(순위·색 제외) · <b>†</b>=롤다운 미측정—캐리만</span>
+      <span>국고 행=참조 · <b>*</b>=스테일(순위·색 제외) · <b>†</b>=캐리만</span>
     </div>
     <div class="legend-inline" id="rv-legend-pctile" style="display:none">
       <span><span class="swatch" style="background:#8b1a1a"></span>낮은 %ile · 타이트=위험</span>

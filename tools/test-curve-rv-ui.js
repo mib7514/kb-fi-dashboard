@@ -18,11 +18,12 @@ async function main() {
 
   console.log('════ 게이트 2: 히트맵/드릴다운/스테일 스모크 ════');
   const credit = DATA.meta.sectors.filter(s => s !== '국고채권');
-  t('excess 히트맵 차원 = (1+14)×10, 10년 제외', () => {
+  t('excess 히트맵 차원 = (1+13)×10, 10년·BBB+ 제외', () => {
     const hd = H.buildHeatmap(DATA, { mode: 'excess', horizonMonths: 1 });
-    assert.equal(hd.rows.length, 15);
+    assert.equal(hd.rows.length, 14); // 국고 + 크레딧 13(회사채BBB+ 숨김)
     assert.equal(hd.cols.length, 10);
     assert.ok(!hd.cols.includes('10년'), '10년 표시 제외');
+    assert.ok(!hd.rows.includes('회사채BBB+'), 'BBB+ 표시 제외');
     assert.equal(hd.rows[0], '국고채권');
     assert.ok(hd.value.slice(1).flat().some(v => v != null), 'excess 값 존재');
   });
@@ -76,6 +77,25 @@ async function main() {
   const gsRank = sorted.findIndex(x => x.sec === '공사채AAA' && x.mat === '2년');
   const gs2 = ranked.find(x => x.sec === '공사채AAA' && x.mat === '2년');
   console.log(`▶ 확인 포인트 — 공사채AAA 2년: ${f(gs2?.v)}bp · 순위 ${gsRank + 1}/${ranked.length} (하위권일수록 험프 영향 확인)`);
+
+  // ── 색 분포 집계 (5단계 이산 · COLOR_STEPS 튜닝용). zColor→excessBand. 국고행 제외. ──
+  const dist = { g1: 0, g2: 0, g3: 0, flat: 0, neg: 0, excluded: 0 };
+  let poolN = 0;
+  for (let r = 1; r < hd.rows.length; r++) for (let c = 0; c < hd.cols.length; c++) {
+    const v = hd.value[r][c];
+    if (v == null || !Number.isFinite(v)) continue; // 빈 셀(무데이터) 제외
+    const band = H.excessBand(hd.zColor[r][c]);
+    if (band == null) { dist.excluded++; continue; } // 스테일/carryOnly (zColor=null)
+    dist[band]++; poolN++;
+  }
+  const pctOf = (n) => poolN ? ` (${(100 * n / poolN).toFixed(0)}%)` : '';
+  console.log(`\n════ 색 분포 (COLOR_STEPS ${JSON.stringify(H.COLOR_STEPS)} · 순위 풀 ${poolN}셀) ════`);
+  console.log(`▶ 진초록 상위10%(테두리): ${dist.g1}${pctOf(dist.g1)}  ← 126×10%≈12~13 기대`);
+  console.log(`▶ 중간초록 10~25%: ${dist.g2}${pctOf(dist.g2)}`);
+  console.log(`▶ 연초록 25~50%: ${dist.g3}${pctOf(dist.g3)}`);
+  console.log(`▶ 무채색 하위50%: ${dist.flat}${pctOf(dist.flat)}`);
+  console.log(`▶ 적색 음수: ${dist.neg}${pctOf(dist.neg)}`);
+  console.log(`▶ 순위 제외(스테일/carryOnly, 회색만): ${dist.excluded}`);
 
   console.log('');
   console.log(fail === 0 ? '✅ 게이트 2 전 통과' : `⛔ 게이트 2 실패 ${fail}건`);

@@ -1,6 +1,8 @@
 // rv-chart.js — Curve RV Plotly 렌더링 (전역 Plotly). curve-rv 페이지 전용(다른 화면 미사용).
 //   히트맵(모드별 색·국고행/스테일 무채색·셀 텍스트) + 스프레드 히스토리(스테일 회색 세그먼트).
 
+import { excessBand, COLOR_STEPS } from './rv-heatmap.js';
+
 const COLORS = {
   current: '#58a6ff', accent: '#f0883e', grid: '#21262d', axis: '#484f58',
   text: '#c9d1d9', muted: '#8b949e', grey: '#6e7681', white: '#e6edf3',
@@ -10,8 +12,22 @@ const CONFIG = { displayModeBar: false, responsive: true };
 
 // %ile(레벨) 색: 낮음(타이트=위험) 적색 → 중립 → 높음(와이드) 청색.
 const RISK_SCALE = [[0, '#8b1a1a'], [0.25, '#f85149'], [0.5, '#6e7681'], [0.75, '#399ae6'], [1, '#1f6feb']];
-// 기대수익 색(랭크): 음수 적색 → 하위 무채색 → 상위 초록. z∈[-1,1], t=(z+1)/2.
-const EXCESS_SCALE = [[0, '#8b1a1a'], [0.49, '#da3633'], [0.5, '#484f58'], [0.75, '#2ea043'], [1, '#3fb950']];
+// 기대수익 색(랭크 5단계 이산): 음수 적색 · 하위50% 무채색 · 상위 25~50/10~25/10% 3단 초록.
+const EX_NEG = '#8b1a1a', EX_FLAT = '#484f58', EX_G3 = '#1f4a2e', EX_G2 = '#2ea043', EX_G1 = '#3fb950';
+const EX_BORDER = '#56d364'; // 상위 10% 강조 테두리
+// COLOR_STEPS(상위 누적 비율)로부터 이산 step colorscale 생성. z∈[-1,1], t=(z+1)/2.
+//   음수(z=-1)만 t=0. 양수 랭크 z는 밴드 경계 1-c/1-b/1-a에서 색이 계단식으로 바뀐다.
+function excessColorscale([a, b, c]) {
+  const tz = (z) => (z + 1) / 2;
+  const t0 = tz(0), t3 = tz(1 - c), t2 = tz(1 - b), t1 = tz(1 - a); // flat/g3/g2/g1 시작점
+  return [
+    [0, EX_NEG], [t0, EX_NEG],
+    [t0, EX_FLAT], [t3, EX_FLAT],
+    [t3, EX_G3], [t2, EX_G3],
+    [t2, EX_G2], [t1, EX_G2],
+    [t1, EX_G1], [1, EX_G1],
+  ];
+}
 
 // ── 히트맵 ── data: { rows, cols, z(null=무채색), text, stale, carryOnly, mode, ktbRowIndex }
 export function renderHeatmap(el, data, onSelect) {
@@ -19,7 +35,7 @@ export function renderHeatmap(el, data, onSelect) {
   const isExcess = mode === 'excess';
   const trace = {
     type: 'heatmap', x: cols, y: rows, z,
-    colorscale: isExcess ? EXCESS_SCALE : RISK_SCALE,
+    colorscale: isExcess ? excessColorscale(COLOR_STEPS) : RISK_SCALE,
     zmin: isExcess ? -1 : 0, zmax: isExcess ? 1 : 100,
     xgap: 2, ygap: 2, showscale: false,
     hoverongaps: true,
@@ -41,12 +57,22 @@ export function renderHeatmap(el, data, onSelect) {
       showarrow: false, font: { size: 10.5, family: FONT, color: grey ? COLORS.grey : COLORS.white },
     });
   }
+  // 상위 10%(g1) 셀 강조 테두리 (excess 모드만). 카테고리축 데이터좌표(인덱스±0.5)로 rect.
+  const shapes = [];
+  if (isExcess) {
+    for (let r = 0; r < rows.length; r++) for (let c = 0; c < cols.length; c++) {
+      if (excessBand(z[r][c]) === 'g1') shapes.push({
+        type: 'rect', xref: 'x', yref: 'y', x0: c - 0.5, x1: c + 0.5, y0: r - 0.5, y1: r + 0.5,
+        line: { color: EX_BORDER, width: 2 }, fillcolor: 'rgba(0,0,0,0)', layer: 'above',
+      });
+    }
+  }
   const layout = {
     paper_bgcolor: 'transparent', plot_bgcolor: '#0d1117',
     font: { color: COLORS.muted, family: FONT, size: 11 },
     xaxis: { side: 'top', gridcolor: 'transparent', linecolor: COLORS.axis, tickfont: { size: 11 }, type: 'category' },
     yaxis: { autorange: 'reversed', gridcolor: 'transparent', linecolor: COLORS.axis, tickfont: { size: 10 }, type: 'category' },
-    margin: { l: 92, r: 20, t: 40, b: 16 }, showlegend: false, hovermode: 'closest', annotations,
+    margin: { l: 92, r: 20, t: 40, b: 16 }, showlegend: false, hovermode: 'closest', annotations, shapes,
   };
   Plotly.react(el, [trace], layout, CONFIG);
   if (onSelect && !el._rvBound) {

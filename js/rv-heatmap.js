@@ -10,8 +10,22 @@ import { maturityToYears } from './credit-parse.js';
 import { fullPctileFn, bucketize } from './rv-backtest.js';
 
 export const HIDDEN_NODES = [10];       // 인제스트엔 있으나 표시 제외(제외 방식 — 복귀 한 줄).
+export const HIDDEN_SECTORS = ['회사채BBB+']; // 표시 행·순위/색 풀에서 제외(데이터 무변경 — 복귀 한 줄).
 export const HORIZONS = [1, 3, 6];      // 개월
 export const KTB = '국고채권';
+
+// 기대수익 색 5단계 순위 경계(상위 누적 비율): top10% / top25% / top50%. 실사용 후 조정 가능.
+export const COLOR_STEPS = [0.10, 0.25, 0.50];
+// 랭크 z(0..1) 또는 -1(음수) → 색 밴드. null(제외 셀: 국고행/스테일/carryOnly/숨김섹터)은 null 유지.
+export function excessBand(z) {
+  if (z == null || !Number.isFinite(z)) return null;
+  if (z < 0) return 'neg';                 // 음수: 적색
+  const [a, b, c] = COLOR_STEPS;
+  if (z >= 1 - a) return 'g1';             // 진초록 (상위 10%, 강조 테두리)
+  if (z >= 1 - b) return 'g2';             // 중간 초록 (상위 10~25%)
+  if (z >= 1 - c) return 'g3';             // 연초록 (상위 25~50%)
+  return 'flat';                           // 무채색 (하위 50%)
+}
 
 const bpSeriesOf = (series, lab) => (series[lab] || []).map(v => (v == null || !Number.isFinite(v)) ? null : v * 100);
 const lastIdx = (dates) => dates.length - 1;
@@ -104,8 +118,8 @@ export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1, scenari
   const dispIdx = nodes.map((n, i) => i).filter(i => !HIDDEN_NODES.includes(nodes[i]));
   const cols = dispIdx.map(i => maturities[i]);
   const colsYears = dispIdx.map(i => nodes[i]);
-  const creditSectors = meta.sectors.filter(s => s !== KTB);
-  const rows = [KTB, ...creditSectors];
+  const creditSectors = meta.sectors.filter(s => s !== KTB && !HIDDEN_SECTORS.includes(s));
+  const rows = [KTB, ...creditSectors]; // 숨김섹터는 rows 제외 → excessPool(순위/색)에도 자연 제외
 
   const value = [], text = [], stale = [], zColor = [], carryOnly = [];
   const excessPool = []; // 크레딧 full-excess 값(스테일·carryOnly 제외) — 랭크 색용
