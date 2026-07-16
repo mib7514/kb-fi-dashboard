@@ -122,6 +122,33 @@ async function main() {
   pick.slice(0, 5).forEach(({ r, c, tag }) =>
     console.log(`   ${hdD.rows[r]} ${hdD.cols[c]} [${tag}]: 1줄 "${hdD.text[r][c]}" / 2줄 ${hdD.text2[r][c] == null ? '(없음)' : `"${hdD.text2[r][c]}"`}`));
 
+  // ── 순위 기준 비교: 절대 bp ↔ 변동성 조정 상위 11셀 (250d 스테일 비율 컬럼 포함) ──
+  const sr1 = (x) => (x == null ? '  —' : `${Math.round(x)}%`.padStart(3)); // 250d 스테일 비율
+  const top11 = (basis) => {
+    const hb = H.buildHeatmap(DATA, { mode: 'excess', horizonMonths: 1, rankBasis: basis });
+    const cells = [];
+    for (let r = 1; r < hb.rows.length; r++) for (let c = 0; c < hb.cols.length; c++) {
+      const z = hb.zColor[r][c]; // null=제외, -1=음수
+      if (z == null || z < 0) continue;
+      cells.push({ sec: hb.rows[r], mat: hb.cols[c], v: hb.value[r][c], rv: hb.rankVal[r][c], sr: hb.staleRatio250[r][c] });
+    }
+    return cells.sort((a, b) => b.rv - a.rv).slice(0, 11);
+  };
+  const absT = top11('absolute'), volT = top11('vol_adjusted');
+  const secN = (arr) => new Set(arr.map(x => x.sec)).size;
+  const matN = (arr) => new Set(arr.map(x => x.mat)).size;
+  console.log(`\n════ 순위 기준 비교: 상위 11셀 (신뢰도 게이트 STALE_HEAVY_RATIO=${H.STALE_HEAVY_RATIO}% 적용) ════`);
+  console.log(`   #  │ 절대 bp 기준 (스테일%)             │ 변동성 조정 기준 base/σ (스테일%)`);
+  console.log(`   ───┼───────────────────────────────────┼──────────────────────────────────`);
+  for (let i = 0; i < 11; i++) {
+    const a = absT[i], v = volT[i];
+    const aStr = a ? `${a.sec} ${a.mat} ${f(a.v)}bp [${sr1(a.sr)}]` : '';
+    const vStr = v ? `${v.sec} ${v.mat} ${f(v.v)}bp ÷σ=${v.rv.toFixed(2)} [${sr1(v.sr)}]` : '';
+    console.log(`   ${String(i + 1).padStart(2)} │ ${aStr.padEnd(33)} │ ${vStr}`);
+  }
+  console.log(`   → 다양성: 절대 ${secN(absT)}섹터·${matN(absT)}만기 vs 변동성 조정 ${secN(volT)}섹터·${matN(volT)}만기`);
+  console.log(`   → 변동성 조정 상위 11셀 최대 스테일 비율: ${Math.max(...volT.map(x => x.sr ?? 0)).toFixed(0)}% (게이트 ${H.STALE_HEAVY_RATIO}% 미만이어야 정상)`);
+
   console.log('');
   console.log(fail === 0 ? '✅ 게이트 2 전 통과' : `⛔ 게이트 2 실패 ${fail}건`);
   if (fail) process.exit(1);

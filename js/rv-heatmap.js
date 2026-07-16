@@ -3,7 +3,7 @@
 //   드릴다운 데이터를 만든다. 렌더(rv-chart)·오케스트레이션(rv-ui)과 분리.
 
 import {
-  staleMask, combineMask, curveVal, carry, reval, excessReturn, pctile,
+  staleMask, combineMask, curveVal, carry, reval, excessReturn, pctile, spreadVol, staleRatio,
 } from './curve-rv-calc.js';
 // carryOnly = 롤다운 미측정(만기도래 m≤h 또는 롤다운 타겟<최소노드) → 캐리만 표시.
 import { maturityToYears } from './credit-parse.js';
@@ -16,6 +16,12 @@ export const KTB = '국고채권';
 
 // 기대수익 색 5단계 순위 경계(상위 누적 비율): top10% / top25% / top50%. 실사용 후 조정 가능.
 export const COLOR_STEPS = [0.10, 0.25, 0.50];
+// 색·순위 기준 기본값. 'vol_adjusted'=(캐리+롤다운)/σ_h(변동성 대비 매력도) · 'absolute'=bp 크기 그대로.
+export const RANK_BASIS = 'vol_adjusted';
+// σ 신뢰도 게이트: 최근 250영업일 스테일 비율 ≥ 이 값(%)인 셀은 vol_adjusted 순위 제외.
+//   근거: 5일 스테일 룰이 못 잡는 준동결이 σ를 압축 → σ가 시장변동성 아닌 갱신빈도 측정이라 분모 자격 미달.
+//   백테스트 제외 30%보다 엄격 — 순위 1위 후보 자격은 통계 제공보다 높은 신뢰 요구.
+export const STALE_HEAVY_RATIO = 20;
 // 랭크 z(0..1) 또는 -1(음수) → 색 밴드. null(제외 셀: 국고행/스테일/carryOnly/숨김섹터)은 null 유지.
 export function excessBand(z) {
   if (z == null || !Number.isFinite(z)) return null;
@@ -115,10 +121,11 @@ function fmtDecomp(cBp, rBp) {
 }
 
 // ── 히트맵 조립 ──
-// opts: { mode, horizonMonths, scenario:{mode,uniform,perSector}, meanRev:bool, backtest:데이터, decompose:bool }
-// 반환: { rows, cols, colsYears, mode, horizon, value, text, text2(분해 2줄째|null), zColor(null=무채색), stale, carryOnly, ktbRowIndex }
+// opts: { mode, horizonMonths, scenario:{mode,uniform,perSector}, meanRev:bool, backtest:데이터, decompose:bool, rankBasis }
+// 반환: { rows, cols, colsYears, mode, horizon, value, text, text2(분해 2줄째|null), zColor(null=무채색), rankVal(순위 풀값|null), stale, carryOnly, ktbRowIndex }
 //   색·순위(zColor)는 항상 ΔS=0 base excess 기준(전제). 표시값(value/text)만 ΔS 반영. text2는 항상 base(ΔS=0) 분해.
-export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1, scenario = null, meanRev = false, backtest = null, decompose = false } = {}) {
+//   rankBasis='vol_adjusted'면 순위 풀 값 = base/σ_h(σ null 셀은 순위 제외→스테일 취급 '*'), 'absolute'면 base 그대로.
+export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1, scenario = null, meanRev = false, backtest = null, decompose = false, rankBasis = RANK_BASIS } = {}) {
   const { dates, series, meta } = DATA;
   const nodes = meta.nodes, maturities = meta.maturities;
   const T = lastIdx(dates);
@@ -130,25 +137,36 @@ export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1, scenari
   const creditSectors = meta.sectors.filter(s => s !== KTB && !HIDDEN_SECTORS.includes(s));
   const rows = [KTB, ...creditSectors]; // 숨김섹터는 rows 제외 → excessPool(순위/색)에도 자연 제외
 
-  const value = [], text = [], text2 = [], stale = [], zColor = [], carryOnly = [];
-  const excessPool = []; // 크레딧 full-excess 값(스테일·carryOnly 제외) — 랭크 색용
+  const value = [], text = [], text2 = [], stale = [], zColor = [], rankVal = [], carryOnly = [], staleRatio250 = [];
+  const excessPool = []; // 순위 풀 값(스테일·carryOnly 제외) — absolute=base, vol_adjusted=base/σ
   const wantDecomp = decompose && mode === 'excess';
+  const volAdj = mode === 'excess' && rankBasis === 'vol_adjusted';
 
-  // 1차 패스: 값·스테일·carryOnly (+분해 시 캐리/롤다운 base) 계산
+  // 1차 패스: 값·스테일·carryOnly (+분해 시 캐리/롤다운, +vol_adjusted 시 순위 풀값 base/σ) 계산
   const raw = rows.map(sector => {
     const curve = curveAtT(series, sector, nodes, maturities, T);
     return cols.map((mat, ci) => {
       const m = colsYears[ci];
       const st = cellStale(series, sector, mat, m, h, nodes, maturities);
-      let val, co = false, base = null, cBp = null, rBp = null;
+      let val, co = false, base = null, cBp = null, rBp = null, poolVal = null, volNull = false, sr = null;
       if (mode === 'excess') {
         base = excessReturn(curve, m, h, 0); // 색·순위 기준(ΔS=0)
         if (base != null) {
           const dS = cellDeltaS({ series, sector, mat, m, curve, hMonths: horizonMonths, scenario, meanRev, backtest });
           val = dS !== 0 ? excessReturn(curve, m, h, dS) : base; // 표시값(ΔS 반영)
         } else { val = carry(curve, m, h); co = val != null; } // 롤다운 미측정 → 캐리만(†), ΔS 무효
-        // 랭크 풀: 스테일·carryOnly 제외 full-excess의 base(ΔS=0) (수정 ①·전제)
-        if (sector !== KTB && !st && !co && base != null) excessPool.push(base);
+        // 순위 풀 값(스테일·carryOnly 제외): vol_adjusted=base/σ_h, absolute=base. σ null·준동결이면 순위 제외(volNull).
+        if (sector !== KTB && !st && !co && base != null) {
+          let mask = staleMask(series[`${sector}_${mat}`] || []);
+          if (mat === '3월') mask = combineMask(mask, staleMask(series[`${KTB}_3월`] || []));
+          const spBp = bpSeriesOf(series, `${sector}_${mat}`);
+          sr = staleRatio(spBp, mask, '1y'); // 250d 스테일 비율(신뢰도 게이트·진단, 양 basis 공통 산출)
+          if (volAdj) {
+            if (sr != null && sr >= STALE_HEAVY_RATIO) volNull = true; // 준동결 → σ 분모 자격 미달, 순위 제외
+            else { const sigma = spreadVol(spBp, mask, horizonMonths); if (sigma == null || !(sigma > 0)) volNull = true; else poolVal = base / sigma; }
+          } else poolVal = base;
+          if (poolVal != null) excessPool.push(poolVal);
+        }
         if (wantDecomp && base != null) { cBp = carry(curve, m, h); rBp = reval(curve, m, h, 0); } // 분해=항상 ΔS=0
       } else { // pctile — 1년 %ile, 스테일 제외 모수
         const lab = `${sector}_${mat}`;
@@ -156,40 +174,41 @@ export function buildHeatmap(DATA, { mode = 'excess', horizonMonths = 1, scenari
         if (mat === '3월' && sector !== KTB) mask = combineMask(mask, staleMask(series[`${KTB}_3월`] || []));
         val = pctile(bpSeriesOf(series, lab), mask, '1y');
       }
-      return { val, st, co, base, cBp, rBp, m, mat };
+      return { val, st, co, base, cBp, rBp, poolVal, volNull, sr, m, mat };
     });
   });
 
-  // 2차 패스: 텍스트·분해 2줄·색 z (국고행·스테일·carryOnly 셀은 무채색·순위 제외 z=null)
+  // 2차 패스: 텍스트·분해 2줄·색 z. σ 부족(volNull)은 스테일과 동일 취급('*' 재사용·순위 제외).
   for (let r = 0; r < rows.length; r++) {
     const isKtb = rows[r] === KTB;
-    const vrow = [], trow = [], t2row = [], srow = [], zrow = [], corow = [];
+    const vrow = [], trow = [], t2row = [], srow = [], zrow = [], rvrow = [], corow = [], srrow = [];
     for (let c = 0; c < cols.length; c++) {
-      const { val, st, co, base, cBp, rBp } = raw[r][c];
-      vrow.push(val); srow.push(st); corow.push(co);
+      const { val, st, co, base, cBp, rBp, poolVal, volNull, sr } = raw[r][c];
+      const stEff = st || volNull; // 표시 스테일 = 실스테일 ∪ σ부족 ∪ 준동결(≥STALE_HEAVY_RATIO)
+      vrow.push(val); srow.push(stEff); corow.push(co); rvrow.push(poolVal); srrow.push(sr);
       let txt = '—';
       if (val != null && Number.isFinite(val)) txt = mode === 'excess' ? (val >= 0 ? '+' : '') + val.toFixed(0) : String(Math.round(val));
       trow.push(txt);
-      // 분해 2줄째: 스테일=생략(null) · carryOnly='캐리만' · 그 외=base 캐리+롤다운. off면 항상 null.
+      // 분해 2줄째: 스테일(σ부족 포함)=생략(null) · carryOnly='캐리만' · 그 외=base 캐리+롤다운. off면 항상 null.
       let t2 = null;
       if (wantDecomp && val != null && Number.isFinite(val)) {
-        if (st) t2 = null;
+        if (stEff) t2 = null;
         else if (co) t2 = '캐리만';
         else if (cBp != null && rBp != null) t2 = fmtDecomp(cBp, rBp);
       }
       t2row.push(t2);
-      // 색 z: 국고행/스테일/carryOnly/무값 → null(무채색). excess는 base(ΔS=0) 순위, pctile은 값.
+      // 색 z: 국고행/스테일/σ부족/carryOnly/무값 → null(무채색). excess는 풀값(poolVal) 순위, pctile은 값.
       let z = null;
-      if (!isKtb && !st && !co) {
-        if (mode === 'excess' && base != null && Number.isFinite(base)) z = base < 0 ? -1 : rankPct(excessPool, base);
+      if (!isKtb && !stEff && !co) {
+        if (mode === 'excess' && base != null && Number.isFinite(base)) z = base < 0 ? -1 : rankPct(excessPool, poolVal);
         else if (mode !== 'excess' && val != null && Number.isFinite(val)) z = val;
       }
       zrow.push(z);
     }
-    value.push(vrow); text.push(trow); text2.push(t2row); stale.push(srow); zColor.push(zrow); carryOnly.push(corow);
+    value.push(vrow); text.push(trow); text2.push(t2row); stale.push(srow); zColor.push(zrow); rankVal.push(rvrow); carryOnly.push(corow); staleRatio250.push(srrow);
   }
 
-  return { rows, cols, colsYears, mode, horizon: horizonMonths, value, text, text2, zColor, stale, carryOnly, ktbRowIndex: 0 };
+  return { rows, cols, colsYears, mode, horizon: horizonMonths, value, text, text2, zColor, rankVal, stale, staleRatio250, carryOnly, ktbRowIndex: 0 };
 }
 
 // ── 드릴다운 조립 ──

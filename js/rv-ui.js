@@ -1,12 +1,12 @@
 // rv-ui.js — Curve RV 화면 오케스트레이션 (Phase 3: 시나리오 ΔS + 평균회귀).
 //   계산·조립은 rv-heatmap.js(순수), 렌더는 rv-chart.js. 데이터: FENRIR_SERIES['credit-spread']
 //   + ['curve-rv-backtest']. 시나리오는 localStorage(팀 비공유). 셀 색·순위는 항상 ΔS=0 기준.
-import { buildHeatmap, buildDrilldown } from './rv-heatmap.js';
+import { buildHeatmap, buildDrilldown, RANK_BASIS } from './rv-heatmap.js';
 import { renderHeatmap, renderHistory } from './rv-chart.js';
 
 const LS_KEY = 'curve-rv-scenario';
 let DATA, BT, CREDIT;
-const state = { mode: 'excess', horizon: 1, sel: null, scenario: { mode: 'none', uniform: 0, perSector: {} }, meanRev: false, decompose: false };
+const state = { mode: 'excess', horizon: 1, sel: null, scenario: { mode: 'none', uniform: 0, perSector: {} }, meanRev: false, decompose: false, rankBasis: RANK_BASIS };
 
 const num0 = (v) => (typeof v === 'number' && Number.isFinite(v)) ? (v >= 0 ? '+' : '') + v.toFixed(0) : '—';
 const num1 = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v.toFixed(1) : '—';
@@ -14,13 +14,14 @@ const sgn1 = (v) => (typeof v === 'number' && Number.isFinite(v)) ? (v >= 0 ? '+
 const pct0 = (v) => (typeof v === 'number' && Number.isFinite(v)) ? String(Math.round(v)) : '—';
 const BUCKET_KO = { low: '저', mid: '중', high: '고' };
 
-function save() { try { localStorage.setItem(LS_KEY, JSON.stringify({ scenario: state.scenario, meanRev: state.meanRev, decompose: state.decompose })); } catch { /* noop */ } }
+function save() { try { localStorage.setItem(LS_KEY, JSON.stringify({ scenario: state.scenario, meanRev: state.meanRev, decompose: state.decompose, rankBasis: state.rankBasis })); } catch { /* noop */ } }
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     if (s && s.scenario && ['none', 'uniform', 'perSector'].includes(s.scenario.mode)) state.scenario = { mode: s.scenario.mode, uniform: Number(s.scenario.uniform) || 0, perSector: s.scenario.perSector || {} };
     if (s && typeof s.meanRev === 'boolean') state.meanRev = s.meanRev;
     if (s && typeof s.decompose === 'boolean') state.decompose = s.decompose;
+    if (s && ['vol_adjusted', 'absolute'].includes(s.rankBasis)) state.rankBasis = s.rankBasis;
   } catch { /* noop */ }
   if (state.scenario.mode !== 'none') state.meanRev = false; // 상호배제
 }
@@ -37,6 +38,7 @@ export function resolveHeatmapOpts(st, bt) {
     opts.meanRev = !!st.meanRev && !active; // 상호배제 — 둘 다 스프레드 변화 기대치라 동시=이중계산
     opts.scenario = active ? st.scenario : null;
     opts.decompose = !!st.decompose; // 분해 2줄째(캐리+롤다운) — 색·순위 무관, 항상 base(ΔS=0)
+    opts.rankBasis = st.rankBasis;    // 색·순위 기준: vol_adjusted(base/σ) | absolute(base)
   }
   return opts;
 }
@@ -52,8 +54,10 @@ function drawHeatmap() {
 function syncControls() {
   document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === state.mode));
   document.querySelectorAll('[data-hz]').forEach(b => b.classList.toggle('active', +b.dataset.hz === state.horizon));
+  document.querySelectorAll('[data-basis]').forEach(b => b.classList.toggle('active', b.dataset.basis === state.rankBasis));
   const excess = state.mode === 'excess';
   document.getElementById('rv-hz-group').style.display = excess ? '' : 'none';
+  document.getElementById('rv-basis-group').style.display = excess ? '' : 'none';
   document.getElementById('rv-mr-group').style.display = excess ? '' : 'none';
   document.getElementById('rv-decomp-group').style.display = excess ? '' : 'none';
   document.getElementById('rv-decompose').checked = state.decompose;
@@ -76,7 +80,8 @@ function syncControls() {
     const mrApplied = state.meanRev && !scenActive(); // resolveHeatmapOpts와 동일 조건
     let suffix = mrApplied ? ' +과거 회귀 경향' : '';
     if (mrApplied && state.decompose) suffix += ' (분해는 캐리+롤다운만)'; // 2줄 합≠1줄 안내
-    hl.textContent = `국고 대비 초과수익 (bp) · ${state.horizon}개월 보유 기준 · 캐리+롤다운${suffix}`;
+    const basisTxt = state.rankBasis === 'vol_adjusted' ? '변동성 조정' : '절대 bp';
+    hl.textContent = `국고 대비 초과수익 (bp) · ${state.horizon}개월 보유 기준 · 캐리+롤다운${suffix} · 색 = ${basisTxt} 순위`;
   } else {
     hl.textContent = '스프레드 레벨의 1년 히스토리 백분위 (스테일 제외)';
   }
@@ -151,6 +156,7 @@ export function initCurveRV() {
 
   document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => { state.mode = b.dataset.mode; drawHeatmap(); if (state.sel) drawDrilldown(); }));
   document.querySelectorAll('[data-hz]').forEach(b => b.addEventListener('click', () => { state.horizon = +b.dataset.hz; drawHeatmap(); if (state.sel) drawDrilldown(); }));
+  document.querySelectorAll('[data-basis]').forEach(b => b.addEventListener('click', () => { state.rankBasis = b.dataset.basis; save(); drawHeatmap(); }));
 
   // 평균회귀 토글 (상호배제)
   document.getElementById('rv-meanrev').addEventListener('change', (e) => {

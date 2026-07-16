@@ -143,6 +143,13 @@
         <button data-hz="6">6개월</button>
       </div>
     </div>
+    <div class="ctrl-group" id="rv-basis-group" title="색·순위 기준. 리스크 조정 = (캐리+롤다운)/해당 보유기간 스프레드 변동성 → 변동성 대비 매력도. 절대 bp = 기대수익 크기 그대로">
+      <span class="ctrl-label">순위 기준</span>
+      <div class="seg">
+        <button data-basis="vol_adjusted" class="active">리스크 조정</button>
+        <button data-basis="absolute">절대 bp</button>
+      </div>
+    </div>
     <div class="ctrl-group" id="rv-mr-group">
       <label class="mr-toggle" title="현재 스프레드 수준(저/중/고)에서 과거 비슷한 상황의 평균 변화를 기대수익에 가산. 시나리오 사용 중엔 비활성(이중 계산 방지)"><input type="checkbox" id="rv-meanrev" /> <span>과거 회귀 경향 반영</span></label>
     </div>
@@ -179,7 +186,7 @@
       <span><span class="swatch" style="background:#1f4a2e"></span>상위 25~50%(연초록)</span>
       <span><span class="swatch" style="background:#484f58"></span>하위 50%(무채색)</span>
       <span><span class="swatch" style="background:#8b1a1a"></span>음수(적색)</span>
-      <span>국고 행=참조 · <b>*</b>=스테일(순위·색 제외) · <b>†</b>=캐리만</span>
+      <span>국고 행=참조 · <b>*</b>=스테일/변동성 부족(순위·색 제외) · <b>†</b>=캐리만</span>
     </div>
     <div class="legend-inline" id="rv-legend-pctile" style="display:none">
       <span><span class="swatch" style="background:#8b1a1a"></span>낮은 %ile · 타이트=위험</span>

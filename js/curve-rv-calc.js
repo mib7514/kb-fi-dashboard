@@ -130,3 +130,24 @@ export function curveAt(series, sector, nodes, maturities, t) {
   });
   return { nodes, values };
 }
+
+// ── 변동성(리스크 조정 순위용) ─────────────────────────────────
+// h개월(21h 영업일) 스프레드 변화 Δ = s[i] − s[i−21h] 의 표본 표준편차(bp). 최근 window 영업일에서 산출.
+//   스테일 끼인 변화분(양 끝 중 하나라도 스테일)은 제외 — 동결값 diff는 실변동 아님. 유효 관측 <30이면 null.
+//   seriesBp: bp 시계열(null 포함), mask: staleMask 결과(boolean[]). 반환 bp(σ) 또는 null.
+export function spreadVol(seriesBp, mask, h, window = 250) {
+  const lag = Math.round(21 * h);
+  const n = seriesBp.length;
+  const from = Math.max(lag, n - window);
+  const diffs = [];
+  for (let i = from; i < n; i++) {
+    const a = seriesBp[i], b = seriesBp[i - lag];
+    if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b)) continue;
+    if (mask && (mask[i] || mask[i - lag])) continue; // 스테일 끼인 변화분 제외
+    diffs.push(a - b);
+  }
+  if (diffs.length < 30) return null;
+  const mean = diffs.reduce((s, x) => s + x, 0) / diffs.length;
+  let v = 0; for (const x of diffs) v += (x - mean) * (x - mean);
+  return Math.sqrt(v / (diffs.length - 1)); // 표본 표준편차(n−1)
+}
