@@ -122,6 +122,7 @@ function isoWeek(iso) {
 function save() {
   try {
     const persist = structuredClone(state);
+    delete persist.date; // 판단일 미저장 — 로드 시 오늘로 초기화(§ load 참조)
     if (persist.v2 && persist.v2.mode !== 'detail') delete persist.v2.cells;
     // follow 섹터는 스프레드 축에서 파생 → 확률 미저장(플래그만). custom 만 확률 저장.
     if (persist.sectors) for (const k of NONSHARED_SECTORS) {
@@ -137,7 +138,7 @@ function load() {
   if (s && s.rate && s.spread) {
     RATE_KEYS.forEach(k => { if (Number.isFinite(+s.rate[k])) state.rate[k] = +s.rate[k]; });
     SPREAD_KEYS.forEach(k => { if (Number.isFinite(+s.spread[k])) state.spread[k] = +s.spread[k]; });
-    if (typeof s.date === 'string') state.date = s.date;
+    // 판단일(state.date)은 복원하지 않음 — 매 로드 오늘로 초기화(주간 판단 = 현재 세션 값, 과거일 고정 버그 방지).
     const v2 = validV2(s.v2);
     if (v2) state.v2 = v2;                    // ⑥ 작업본(24칸+w) 복원 — 우선
     const sec = validSectors(s.sectors);
@@ -891,7 +892,12 @@ async function copySnippet() {
 
 // ── RG-4 채점 원장 ──
 const CREDIT_SECTORS = ['공사채', '은행채', '카드채', '여전채'];  // 비공유 신용섹터(국고=rate·회사=spread 제외)
-function todayISO() { try { return new Date().toISOString().slice(0, 10); } catch { return null; } }
+// 로컬(실행 TZ=KST) 오늘 YYYY-MM-DD. toISOString()은 UTC라 자정~09시에 하루 밀림 → 로컬 필드 조립.
+function localTodayISO() {
+  try { const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; } catch { return null; }
+}
+function todayISO() { return localTodayISO(); }
 function ledger() { return window.RG_LEDGER || { judgments: {}, scores: {} }; }
 
 // 미결 창: judgments 중 scores 없는 주차. 만기(判+1M)·D-day, 만기순 정렬.
@@ -1027,7 +1033,7 @@ function renderDashboard() {
 export function initRg() {
   if (!$('rg-heatmap')) return;
   load();
-  if (!state.date) { try { state.date = new Date().toISOString().slice(0, 10); } catch { state.date = ''; } }
+  if (!state.date) state.date = localTodayISO() || ''; // 판단일 초기값 = 로컬 오늘 (1회)
 
   // 입력 셀 1회 생성 후 값 주입
   $('rg-rate-inputs').innerHTML = buildInputs('rate', RATE_KEYS, RATE_LABEL);
@@ -1200,14 +1206,18 @@ export function initRg() {
   $('rg-rate-norm').addEventListener('click', () => normAxis('rate', RATE_KEYS));
   $('rg-spread-norm').addEventListener('click', () => normAxis('spread', SPREAD_KEYS));
 
-  // 판단일
-  if (dateEl) dateEl.addEventListener('input', () => { state.date = dateEl.value; save(); renderConfirmed(); });
+  // 판단일 — input/change 둘 다 청취(달력 선택 시 브라우저별 발화 이벤트 차이 대비). 값은 재렌더가 덮어쓰지 않음.
+  if (dateEl) {
+    const onDate = () => { state.date = dateEl.value; save(); renderConfirmed(); };
+    dateEl.addEventListener('input', onDate);
+    dateEl.addEventListener('change', onDate);
+  }
 
   // 초기화(기본값 복원) — 확률·판단일·v2(앵커 모드+앵커 재seed+w) 전부 기본값
   $('rg-reset').addEventListener('click', () => {
     Object.assign(state, structuredClone(DEFAULTS));
     v2DetailDirty = false;
-    if (!state.date) { try { state.date = new Date().toISOString().slice(0, 10); } catch { state.date = ''; } }
+    if (!state.date) state.date = localTodayISO() || ''; // 초기화 시에도 로컬 오늘
     if (dateEl) dateEl.value = state.date;
     if (wEl) { wEl.value = state.v2.w; const wv = $('rg-w-val'); if (wv) wv.textContent = state.v2.w + '%'; }
     writeInputs(); renderOutputs();
