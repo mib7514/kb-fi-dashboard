@@ -29,9 +29,9 @@ function excessColorscale([a, b, c]) {
   ];
 }
 
-// ── 히트맵 ── data: { rows, cols, z(null=무채색), text, stale, carryOnly, mode, ktbRowIndex }
+// ── 히트맵 ── data: { rows, cols, z(null=무채색), text, text2(분해 2줄째|null), stale, carryOnly, mode, ktbRowIndex }
 export function renderHeatmap(el, data, onSelect) {
-  const { rows, cols, z, text, stale, carryOnly, mode, ktbRowIndex } = data;
+  const { rows, cols, z, text, text2, stale, carryOnly, mode, ktbRowIndex } = data;
   const isExcess = mode === 'excess';
   const trace = {
     type: 'heatmap', x: cols, y: rows, z,
@@ -52,6 +52,9 @@ export function renderHeatmap(el, data, onSelect) {
     const grey = r === ktbRowIndex || isStale || isCarryOnly;
     if (isStale) t += '*';
     if (isCarryOnly) t += '†';
+    // 분해 2줄째(소형) — text2가 있으면 줄바꿈해 이어붙임. 색은 1줄과 동조(grey/무채).
+    const t2 = text2 && text2[r] ? text2[r][c] : null;
+    if (t2) t += `<br><span style="font-size:8.5px;color:${grey ? COLORS.grey : COLORS.muted}">${t2}</span>`;
     annotations.push({
       x: cols[c], y: rows[r], xref: 'x', yref: 'y', text: t,
       showarrow: false, font: { size: 10.5, family: FONT, color: grey ? COLORS.grey : COLORS.white },

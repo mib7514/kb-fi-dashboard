@@ -97,6 +97,31 @@ async function main() {
   console.log(`▶ 적색 음수: ${dist.neg}${pctOf(dist.neg)}`);
   console.log(`▶ 순위 제외(스테일/carryOnly, 회색만): ${dist.excluded}`);
 
+  // ── 분해 표시 on: 셀 2줄 텍스트 샘플 5개 (상위 테두리 g1 셀 포함) ──
+  const hdD = H.buildHeatmap(DATA, { mode: 'excess', horizonMonths: 1, decompose: true });
+  const pick = [];
+  // 1) g1(상위10% 테두리) 셀 하나
+  outer: for (let r = 1; r < hdD.rows.length; r++) for (let c = 0; c < hdD.cols.length; c++)
+    if (H.excessBand(hdD.zColor[r][c]) === 'g1') { pick.push({ r, c, tag: 'g1·테두리' }); break outer; }
+  // 2) carryOnly(†) 셀 하나 (2줄=캐리만)
+  co: for (let r = 1; r < hdD.rows.length; r++) for (let c = 0; c < hdD.cols.length; c++)
+    if (hdD.carryOnly[r][c]) { pick.push({ r, c, tag: 'carryOnly†' }); break co; }
+  // 3) 스테일 셀 하나 (2줄 생략=null 확인)
+  stl: for (let r = 1; r < hdD.rows.length; r++) for (let c = 0; c < hdD.cols.length; c++)
+    if (hdD.stale[r][c]) { pick.push({ r, c, tag: '스테일(2줄생략)' }); break stl; }
+  // 4~5) 롤다운 부호 다른 일반 셀 2개 (양/음)
+  for (const wantNeg of [false, true]) {
+    gen: for (let r = 1; r < hdD.rows.length; r++) for (let c = 0; c < hdD.cols.length; c++) {
+      const t2 = hdD.text2[r][c];
+      if (!t2 || t2 === '캐리만' || hdD.stale[r][c]) continue;
+      const isNeg = t2.slice(1).includes('−'); // 연결부호가 − (롤다운 음수)
+      if (isNeg === wantNeg && !pick.some(p => p.r === r && p.c === c)) { pick.push({ r, c, tag: wantNeg ? '롤다운 음수' : '롤다운 양수' }); break gen; }
+    }
+  }
+  console.log('\n════ 분해 표시 on: 셀 2줄 텍스트 샘플 (1줄=기대수익 / 2줄=캐리±롤다운) ════');
+  pick.slice(0, 5).forEach(({ r, c, tag }) =>
+    console.log(`   ${hdD.rows[r]} ${hdD.cols[c]} [${tag}]: 1줄 "${hdD.text[r][c]}" / 2줄 ${hdD.text2[r][c] == null ? '(없음)' : `"${hdD.text2[r][c]}"`}`));
+
   console.log('');
   console.log(fail === 0 ? '✅ 게이트 2 전 통과' : `⛔ 게이트 2 실패 ${fail}건`);
   if (fail) process.exit(1);
