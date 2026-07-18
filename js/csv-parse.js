@@ -90,11 +90,19 @@ export function parseKosisCsv(text) {
 }
 
 // 힌트(account/transform)로 특정 행 자동 매칭. 없으면 null.
+// KOSIS 계정항목 라벨은 공백 변형이 있을 수 있어(예: "식료품 및 에너지 제외지수"
+// vs 힌트 "식료품및에너지제외지수") 비교 전 모든 공백을 제거해 정규화한다.
+// 총지수처럼 공백이 없는 라벨은 정규화해도 동일하므로 헤드라인 매칭에는 영향 없음.
+function normKey(s) {
+  return (s || '').replace(/\s+/g, '');
+}
 export function matchRow(parsed, hint) {
   if (!hint) return null;
+  const wantAccount = hint.account ? normKey(hint.account) : null;
+  const wantTransform = hint.transform ? normKey(hint.transform) : null;
   return parsed.rows.find((row) => {
-    const okAccount = !hint.account || row.account === hint.account;
-    const okTransform = !hint.transform || row.transform === hint.transform;
+    const okAccount = !wantAccount || normKey(row.account) === wantAccount;
+    const okTransform = !wantTransform || normKey(row.transform) === wantTransform;
     return okAccount && okTransform;
   }) ?? null;
 }

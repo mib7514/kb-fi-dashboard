@@ -114,6 +114,10 @@
   .er-eff { color: var(--forecast); text-align: right; font-size: 10px; }
 
   .empty { color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+  .notice { grid-column: 1 / -1; background: var(--panel); border: 1px dashed var(--border-2); border-radius: 9px; padding: 18px 20px; font-size: 13px; color: var(--text); }
+  .notice-sub { color: var(--muted); font-size: 12px; }
+  .notice .k { font-family: var(--mono); color: var(--accent); }
+  .method-note { font-size: 11px; color: var(--muted); font-family: var(--mono); margin: -6px 0 18px; }
   .legend-note { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.7; }
   .legend-note .k { font-family: var(--mono); }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
@@ -144,6 +148,10 @@
   <!-- 컨트롤 -->
   <div class="controls">
     <div class="ctrl-group">
+      <span class="ctrl-label">시리즈</span>
+      <div class="seg" id="series-tabs"></div>
+    </div>
+    <div class="ctrl-group">
       <span class="ctrl-label">시즈널 윈도우</span>
       <div class="seg">
         <button data-window="5">5년</button>
@@ -168,6 +176,9 @@
       </div>
     </div>
   </div>
+
+  <!-- 방법론 버전 각주 (헤드라인·근원 공통) -->
+  <div class="method-note" id="method-note"></div>
 
   <!-- 연평균 y-y 요약 (전망 경로 기준) -->
   <div class="annual-head">
@@ -211,8 +222,8 @@
       <span class="dot" style="background:#f0883e"></span>전망 &nbsp;
       <span class="dot" style="background:#8b949e"></span>시즈널 가이드 &nbsp;
       <span class="dot" style="background:#3fb950"></span>목표 2%<br>
-      시즈널 가이드는 각 전망 시점 기준 최근 <span class="k">N년</span> 같은 달 m-m의 rolling 평균.
-      윈도우를 바꾸면 가이드와 전망이 함께 갱신됨.
+      시즈널 가이드는 최종 실적 시점 기준 최근 <span class="k">N년</span> 같은 달 m-m의 고정 계절창 평균
+      (전망 전 구간에 동일 창 적용 · 전망 방법론 v1). 윈도우를 바꾸면 가이드와 전망이 함께 갱신됨.
     </div>
   </div>
 </div>
@@ -221,8 +232,11 @@
 <script type="module" src="js/nav.js"></script>
 <!-- vendor -->
 <script src="vendor/plotly.min.js"></script>
-<!-- data (window.KR_CPI_DATA / META) -->
+<!-- data (window.FENRIR_SERIES 자기등록) -->
 <script src="data/kr-cpi-headline.js"></script>
+<!-- 근원(식료품·에너지 제외). 파일이 아직 없으면 로드 실패해도 무시되고
+     근원 탭은 "데이터 파일 없음" 안내를 표시 (헤드라인은 정상 동작). -->
+<script src="data/kr-cpi-core.js"></script>
 <!-- app (ES module) -->
 <script type="module">
   import { initForecast } from './js/forecast-ui.js';
