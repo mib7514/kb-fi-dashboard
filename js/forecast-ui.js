@@ -10,7 +10,10 @@ import { getSeriesData, getConfig } from './series-config.js';
 const SERIES = [
   { id: 'kr-cpi-headline', label: '헤드라인' },
   { id: 'kr-cpi-core', label: '근원(식료품·에너지 제외)' },
+  { id: 'kr-cpi-lifecost', label: '생활물가' },
 ];
+// 전망 방법론 지위가 '참고용'인 시리즈 (게이트 미봉인). v1 엔진은 동일 적용하되 각주로 구분.
+const REFERENCE_SERIES = new Set(['kr-cpi-lifecost']);
 const SERIES_IDS = SERIES.map((s) => s.id);
 const LS_KEY = 'kr-inflation-forecast';
 
@@ -136,10 +139,17 @@ function renderMissing() {
   renderMethodology();
 }
 
-// 방법론 버전 각주 (헤드라인·근원 공통 — 같은 엔진).
+// 방법론 버전 각주. 헤드라인·근원은 봉인된 v1, 생활물가는 '참고용'으로 시각 구분.
 function renderMethodology() {
   const el = document.getElementById('method-note');
-  if (el) el.textContent = `전망 방법론 v1 · 계절평균(${state.windowYears}yr 고정창)`;
+  if (!el) return;
+  if (REFERENCE_SERIES.has(state.seriesId)) {
+    el.className = 'method-note method-note-ref';
+    el.textContent = '전망 방법론 v1 · 참고용 — 전망 적합성 백테스트 판정 전, 게이트 미봉인';
+  } else {
+    el.className = 'method-note';
+    el.textContent = `전망 방법론 v1 · 계절평균(${state.windowYears}yr 고정창)`;
+  }
 }
 
 // ── 연평균 y-y 요약 카드 ──

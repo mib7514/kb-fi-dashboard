@@ -22,6 +22,16 @@ export const SERIES_CONFIG = {
     frequency: 'monthly',
     kosis_hint: { account: '식료품및에너지제외지수', transform: '원자료' },
   },
+  'kr-cpi-lifecost': {
+    series_id: 'kr-cpi-lifecost',
+    display_name: 'KR 생활물가지수',
+    source: 'kosis',
+    unit: '2020=100',
+    value_type: 'index',
+    frequency: 'monthly',
+    // 정확 일치 우선 — '전월세포함 생활물가지수' 등 파생 라벨과 오매칭 방지.
+    kosis_hint: { account: '생활물가지수', transform: '원자료' },
+  },
   'us-cpi-headline': {
     series_id: 'us-cpi-headline',
     display_name: 'US CPI All Items (NSA)',

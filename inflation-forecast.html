@@ -118,6 +118,27 @@
   .notice-sub { color: var(--muted); font-size: 12px; }
   .notice .k { font-family: var(--mono); color: var(--accent); }
   .method-note { font-size: 11px; color: var(--muted); font-family: var(--mono); margin: -6px 0 18px; }
+  /* 참고용(게이트 미봉인) 시리즈 각주 — 봉인 v1과 시각 구분 */
+  .method-note-ref {
+    color: var(--forecast); background: rgba(240,136,62,0.10);
+    border: 1px dashed var(--forecast); border-radius: 6px;
+    padding: 5px 10px; display: inline-block; margin: -2px 0 18px;
+  }
+
+  /* 생활물가 실적 스프레드 (전망 없음) */
+  .lifecost { margin-top: 34px; padding-top: 24px; border-top: 1px solid var(--border-2); }
+  .lifecost-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .lifecost-head h2 { font-size: 15px; margin: 0; }
+  .tag-actual { font-size: 10px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--border-2); color: var(--muted); }
+  .lifecost-conclusion { font-size: 14px; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--forecast); border-radius: 8px; padding: 12px 15px; margin-bottom: 16px; line-height: 1.5; }
+  .lifecost-conclusion strong { font-family: var(--mono); }
+  .dir-확대 { color: var(--forecast); }
+  .dir-축소 { color: var(--ok); }
+  .dir-유지 { color: var(--muted); }
+  .stat-accent { border-color: var(--forecast); }
+  .lifecost-controls { display: flex; align-items: center; gap: 8px; margin: 2px 2px 10px; }
+  .lifecost-note { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-top: 12px; }
+
   .legend-note { font-size: 11px; color: var(--muted); margin-top: 14px; line-height: 1.7; }
   .legend-note .k { font-family: var(--mono); }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
@@ -226,6 +247,28 @@
       (전망 전 구간에 동일 창 적용 · 전망 방법론 v1). 윈도우를 바꾸면 가이드와 전망이 함께 갱신됨.
     </div>
   </div>
+
+  <!-- 생활물가 실적 스프레드 (전망 없음 · 실적 전용) -->
+  <div class="lifecost" id="lifecost-spread">
+    <div class="lifecost-head">
+      <h2>생활물가 체감 괴리</h2>
+      <span class="tag-actual">실적 전용 · 전망 없음</span>
+    </div>
+    <div class="lifecost-conclusion" id="lifecost-conclusion"></div>
+    <div class="stats" id="lifecost-cards"></div>
+    <div class="chart-card">
+      <div class="lifecost-controls">
+        <span class="ctrl-label">표시 기간</span>
+        <div class="seg" id="lifecost-range">
+          <button data-lrange="5y" class="active">5년</button>
+          <button data-lrange="10y">10년</button>
+          <button data-lrange="all">전체</button>
+        </div>
+      </div>
+      <div class="chart-box" id="lifecost-chart"></div>
+    </div>
+    <div class="lifecost-note">실적 전용 · 전망 없음 (전망 적합성은 백테스트로 판정 예정)</div>
+  </div>
 </div>
 
 <!-- 공통 내비게이션 -->
@@ -237,10 +280,14 @@
 <!-- 근원(식료품·에너지 제외). 파일이 아직 없으면 로드 실패해도 무시되고
      근원 탭은 "데이터 파일 없음" 안내를 표시 (헤드라인은 정상 동작). -->
 <script src="data/kr-cpi-core.js"></script>
+<!-- 생활물가(실적 스프레드용). 파일 없으면 로드 실패해도 무시되고 섹션은 "데이터 없음" 안내. -->
+<script src="data/kr-cpi-lifecost.js"></script>
 <!-- app (ES module) -->
 <script type="module">
   import { initForecast } from './js/forecast-ui.js';
+  import { initLifecost } from './js/lifecost-spread.js';
   initForecast();
+  initLifecost();
 </script>
 </body>
 </html>
