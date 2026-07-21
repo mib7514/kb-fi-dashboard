@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "note": "미국 하이퍼스케일러/AI 회사채 발행 이벤트 로그. 수동 편집·커밋(localStorage 아님). 미상 필드는 null.",
+    "fields": {
+      "date": "발행일 YYYY-MM-DD 또는 YYYY-MM(일 미상)",
+      "issuer": "발행사",
+      "size_bn": "규모 $bn (미상 null)",
+      "tranches": "트랜치 수 (미상 null)",
+      "concession_bp": "신규발행 프리미엄 bp [min,max] 또는 단일값 (미상 null)",
+      "coverage_x": "청약배수 x (미상 null)",
+      "note": "비고"
+    }
+  },
+  "events": [
+    {
+      "date": "2026-07-07",
+      "issuer": "Amazon",
+      "size_bn": 25,
+      "tranches": 8,
+      "concession_bp": [18, 21],
+      "coverage_x": 2.5,
+      "note": "2026년 세 번째 딜, 연간 누적 $92bn"
+    },
+    {
+      "date": "2026-03",
+      "issuer": "Amazon",
+      "size_bn": null,
+      "tranches": null,
+      "concession_bp": null,
+      "coverage_x": 3.2,
+      "note": null
+    },
+    {
+      "date": "2025-10",
+      "issuer": "Meta",
+      "size_bn": 30,
+      "tranches": null,
+      "concession_bp": null,
+      "coverage_x": null,
+      "note": null
+    }
+  ]
+}

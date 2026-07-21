@@ -6,6 +6,7 @@
 //   Phase 2 = 카드 6 + 차트 3 + 룩백 토글. Phase 3(이벤트 마커·로그 테이블)은 후속.
 
 const DATA_URL = 'data/us-credit-spread.json';
+const EVENTS_URL = 'data/us-issuance-events.json';
 const LS_KEY = 'us-credit-spread';
 const LOOKBACKS = ['1y', 'all'];
 const LOOKBACK_LABEL = { '1y': '1Y', all: '전체' };
@@ -20,6 +21,7 @@ const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 const state = { lookback: '1y' };
 let DATA = null;
+let EVENTS = [];
 
 const fmt = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : x.toFixed(d));
 const signed = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : (x >= 0 ? '+' : '') + x.toFixed(d));
@@ -89,26 +91,85 @@ const line = (obj, name, color) => {
     hovertemplate: `%{x|%Y-%m-%d}<br>${name} %{y:.1f}bp<extra></extra>` };
 };
 
-// 차트 1 — IG vs HY OAS (단일축)
+// ── 발행 이벤트 오버레이 ──
+// 월만 있는 날짜('YYYY-MM')는 15일로 플롯. 전체 날짜는 그대로.
+const evPlotDate = (d) => (d && d.length === 7 ? `${d}-15` : d);
+// 이벤트 툴팁(발행사·규모·트랜치·concession·coverage)
+function evTip(ev) {
+  const sz = ev.size_bn == null ? '—' : `$${ev.size_bn}bn`;
+  const tr = ev.tranches == null ? '' : ` · ${ev.tranches}트랜치`;
+  const con = ev.concession_bp == null ? '—'
+    : (Array.isArray(ev.concession_bp) ? `${ev.concession_bp[0]}–${ev.concession_bp[1]}bp` : `${ev.concession_bp}bp`);
+  const cov = ev.coverage_x == null ? '—' : `${ev.coverage_x}x`;
+  return `<b>${ev.issuer}</b> ${ev.date}<br>규모 ${sz}${tr}<br>concession ${con} · coverage ${cov}`;
+}
+// traces(플롯될 시리즈) 기준 가시 x범위·yMax 계산 → {shapes, markerTrace}. 이벤트 없으면 shapes:[], markerTrace:null.
+function eventOverlay(traces) {
+  if (!EVENTS.length || !traces.length || !traces[0].x.length) return { shapes: [], markerTrace: null };
+  const firstX = traces[0].x[0], lastX = traces[0].x[traces[0].x.length - 1];
+  const yMax = Math.max(...traces.flatMap((t) => t.y.filter((v) => v != null)));
+  const evs = EVENTS.map((ev) => ({ ev, px: evPlotDate(ev.date) }))
+    .filter(({ px }) => px >= firstX && px <= lastX);
+  if (!evs.length) return { shapes: [], markerTrace: null };
+  const shapes = evs.map(({ px }) => ({
+    type: 'line', xref: 'x', yref: 'paper', x0: px, x1: px, y0: 0, y1: 1,
+    line: { color: C.muted, width: 1, dash: 'dot' }, layer: 'below',
+  }));
+  const markerTrace = {
+    x: evs.map(({ px }) => px), y: evs.map(() => yMax), mode: 'markers', name: '발행',
+    marker: { color: C.purple, size: 9, symbol: 'triangle-down', line: { width: 1, color: '#0d1117' } },
+    text: evs.map(({ ev }) => evTip(ev)), hovertemplate: '%{text}<extra></extra>',
+  };
+  return { shapes, markerTrace };
+}
+// 차트 1 — IG vs HY OAS (단일축, 마커 없음)
 function renderMain() {
   Plotly.newPlot('chart-main',
     [line(ser('ig_oas'), 'IG OAS', C.accent), line(ser('hy_oas'), 'HY OAS', C.amber)],
     baseLayout(), { displayModeBar: false, responsive: true });
 }
-// 차트 2 — 등급별 OAS (AAA/AA/A/BBB, 위험도 순 난색화)
+// 차트 2 — 등급별 OAS (AAA/AA/A/BBB, 위험도 순 난색화) + 발행 마커
 function renderGrades() {
-  Plotly.newPlot('chart-grades', [
+  const traces = [
     line(ser('aaa'), 'AAA', C.accent), line(ser('aa'), 'AA', C.up),
     line(ser('a'), 'A', C.amber), line(ser('bbb'), 'BBB', C.red),
-  ], baseLayout(), { displayModeBar: false, responsive: true });
+  ];
+  const { shapes, markerTrace } = eventOverlay(traces);
+  if (markerTrace) traces.push(markerTrace);
+  Plotly.newPlot('chart-grades', traces, baseLayout({ shapes }), { displayModeBar: false, responsive: true });
 }
-// 차트 3 — 파생 스프레드 (BBB−A, A−AA, 장기−전체)
+// 차트 3 — 파생 스프레드 (BBB−A, A−AA, 장기−전체) + 발행 마커
 function renderDerived() {
-  Plotly.newPlot('chart-derived', [
+  const traces = [
     line(der('bbb_minus_a'), 'BBB − A', C.amber),
     line(der('a_minus_aa'), 'A − AA', C.accent),
     line(der('long_minus_all'), 'IG 15Y+ − 전체', C.purple),
-  ], baseLayout(), { displayModeBar: false, responsive: true });
+  ];
+  const { shapes, markerTrace } = eventOverlay(traces);
+  if (markerTrace) traces.push(markerTrace);
+  Plotly.newPlot('chart-derived', traces, baseLayout({ shapes }), { displayModeBar: false, responsive: true });
+}
+// ── 발행 이벤트 로그 테이블 (최근순) ──
+function renderEventTable() {
+  const el = document.getElementById('event-log');
+  if (!el) return;
+  if (!EVENTS.length) { el.innerHTML = '<div class="cap" style="padding:8px">이벤트 없음</div>'; return; }
+  const rows = [...EVENTS].sort((a, b) => (a.date < b.date ? 1 : -1)).map((ev) => {
+    const con = ev.concession_bp == null ? '—'
+      : (Array.isArray(ev.concession_bp) ? `${ev.concession_bp[0]}–${ev.concession_bp[1]}` : `${ev.concession_bp}`);
+    return `<tr>
+      <td class="mono">${ev.date}</td><td>${ev.issuer}</td>
+      <td class="mono num">${ev.size_bn == null ? '—' : ev.size_bn}</td>
+      <td class="mono num">${ev.tranches == null ? '—' : ev.tranches}</td>
+      <td class="mono num">${con}</td>
+      <td class="mono num">${ev.coverage_x == null ? '—' : ev.coverage_x}</td>
+      <td class="evt-note">${ev.note == null ? '—' : ev.note}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table class="evt"><thead><tr>
+    <th>날짜</th><th>발행사</th><th class="num">$bn</th><th class="num">트랜치</th>
+    <th class="num">concession(bp)</th><th class="num">coverage(x)</th><th>비고</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderControls() {
@@ -126,7 +187,7 @@ function renderControls() {
 }
 
 function renderCharts() { renderMain(); renderGrades(); renderDerived(); }
-function renderAll() { renderCards(); renderCharts(); renderControls(); }
+function renderAll() { renderCards(); renderCharts(); renderControls(); renderEventTable(); }
 
 function save() {
   try { localStorage.setItem(LS_KEY, JSON.stringify({ kind: LS_KEY, version: 1, lookback: state.lookback })); } catch { /* noop */ }
@@ -157,6 +218,11 @@ export async function initCreditSpread() {
     return;
   }
   DATA = await res.json();
+  // 발행 이벤트는 부재 허용(마커·테이블만 비고 실패해도 차트는 렌더).
+  try {
+    const er = await fetch(EVENTS_URL, { cache: 'no-cache' });
+    if (er && er.ok) { const ej = await er.json(); EVENTS = Array.isArray(ej.events) ? ej.events : []; }
+  } catch { EVENTS = []; }
   wire();
   renderAll();
 }
