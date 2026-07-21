@@ -1,0 +1,49 @@
+name: US Credit Spread data (FRED)
+
+# 미국 크레딧 스프레드(CS 모듈): BAML(ICE BofA) OAS 7종 + 파생 스프레드 4종을
+# FRED에서 주 1회 자동 적재. 데이터가 실제로 바뀐 경우에만 커밋(diff 없으면 skip).
+
+on:
+  schedule:
+    # 주 1회 목요일 16:00 UTC. BAML OAS(일간, 영업일 마감 후 익영업일 FRED 갱신)를 주간 주기로 커버.
+    # 시각·concurrency group 분리로 기존 워크플로와 충돌 없음:
+    #   us-inflation(화 15:00) · gg1(수 23:10) · taylor(평일 22:45) · diffusion(매월 12·15일 00:00).
+    - cron: '0 16 * * 4'
+  workflow_dispatch: {}          # 수동 트리거 (secret 등록 후 1회 검증용)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: us-credit-spread
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch FRED BAML OAS → data/us-credit-spread.json
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: node scripts/fetch-us-credit-spread.mjs
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- data/us-credit-spread.json; then
+            echo "갱신분 없음 — 커밋 skip."
+            exit 0
+          fi
+          ASOF=$(node -e "process.stdout.write(require('./data/us-credit-spread.json').meta.updated_at)")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/us-credit-spread.json
+          git commit -m "data: US 크레딧 스프레드(FRED BAML OAS) ${ASOF} 갱신"
+          git push
