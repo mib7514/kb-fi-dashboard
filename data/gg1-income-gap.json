@@ -1,0 +1,1641 @@
+{
+  "meta": {
+    "module": "GG-1",
+    "updated_at": "2026-06-01T00:00:00Z",
+    "last_monthly": "2026-06",
+    "last_quarter": "2026Q1",
+    "source": "ECOS",
+    "series_codes": {
+      "tot": "403Y005/A (순상품교역조건지수, M)",
+      "export_price": "402Y014/*AA·계약통화기준(C) (수출물가 총지수, M)",
+      "import_price": "401Y015/*AA·계약통화기준(C) (수입물가 총지수, M)",
+      "gdp": "200Y106/1400 (실질 GDP, 원계열, Q)",
+      "gdi": "200Y106/1600 (실질 GDI, 원계열, Q)"
+    },
+    "notes": "y/y=원계열 전년동기비. 월간 tot/export/import·분기 gdp/gdi 는 레벨→y/y 계산. export/import y/y 는 교역조건(순상품)의 줄다리기 분해용 보조지표(계약통화기준, 환율효과 제거) — 순상품교역조건과 정확 일치 아님(가중·연쇄식 차이). gap_actual_pp=gdi_yoy−gdp_yoy. updated_at 은 wall-clock 아닌 최신 월간 vintage 파생(파일 불변성). β/갭 프록시 필드는 GG-1b 추가."
+  },
+  "monthly": [
+    {
+      "date": "2011-07",
+      "tot_index": 92.2,
+      "tot_yoy_pct": -11.98,
+      "export_price_yoy_pct": 5.92,
+      "import_price_yoy_pct": 20.68
+    },
+    {
+      "date": "2011-08",
+      "tot_index": 91.39,
+      "tot_yoy_pct": -12.46,
+      "export_price_yoy_pct": 5.91,
+      "import_price_yoy_pct": 17.06
+    },
+    {
+      "date": "2011-09",
+      "tot_index": 91.41,
+      "tot_yoy_pct": -10.8,
+      "export_price_yoy_pct": 4.67,
+      "import_price_yoy_pct": 15.6
+    },
+    {
+      "date": "2011-10",
+      "tot_index": 90.51,
+      "tot_yoy_pct": -10.93,
+      "export_price_yoy_pct": 2.36,
+      "import_price_yoy_pct": 10.96
+    },
+    {
+      "date": "2011-11",
+      "tot_index": 91.39,
+      "tot_yoy_pct": -9.1,
+      "export_price_yoy_pct": 1.34,
+      "import_price_yoy_pct": 9.8
+    },
+    {
+      "date": "2011-12",
+      "tot_index": 89.7,
+      "tot_yoy_pct": -9.89,
+      "export_price_yoy_pct": -1.18,
+      "import_price_yoy_pct": 5.64
+    },
+    {
+      "date": "2012-01",
+      "tot_index": 91.03,
+      "tot_yoy_pct": -6.54,
+      "export_price_yoy_pct": -0.58,
+      "import_price_yoy_pct": 4.97
+    },
+    {
+      "date": "2012-02",
+      "tot_index": 91.3,
+      "tot_yoy_pct": -6.28,
+      "export_price_yoy_pct": -1.14,
+      "import_price_yoy_pct": 4.49
+    },
+    {
+      "date": "2012-03",
+      "tot_index": 90.11,
+      "tot_yoy_pct": -6.4,
+      "export_price_yoy_pct": -2.97,
+      "import_price_yoy_pct": 3.2
+    },
+    {
+      "date": "2012-04",
+      "tot_index": 88.28,
+      "tot_yoy_pct": -7.23,
+      "export_price_yoy_pct": -5.01,
+      "import_price_yoy_pct": -2.6
+    },
+    {
+      "date": "2012-05",
+      "tot_index": 88.36,
+      "tot_yoy_pct": -2.99,
+      "export_price_yoy_pct": -5.84,
+      "import_price_yoy_pct": -4.05
+    },
+    {
+      "date": "2012-06",
+      "tot_index": 89.67,
+      "tot_yoy_pct": -2.47,
+      "export_price_yoy_pct": -7.07,
+      "import_price_yoy_pct": -7.89
+    },
+    {
+      "date": "2012-07",
+      "tot_index": 93.49,
+      "tot_yoy_pct": 1.4,
+      "export_price_yoy_pct": -6.5,
+      "import_price_yoy_pct": -7.52
+    },
+    {
+      "date": "2012-08",
+      "tot_index": 93.42,
+      "tot_yoy_pct": 2.22,
+      "export_price_yoy_pct": -5.02,
+      "import_price_yoy_pct": -3.91
+    },
+    {
+      "date": "2012-09",
+      "tot_index": 91.49,
+      "tot_yoy_pct": 0.09,
+      "export_price_yoy_pct": -3.49,
+      "import_price_yoy_pct": -2.38
+    },
+    {
+      "date": "2012-10",
+      "tot_index": 90.3,
+      "tot_yoy_pct": -0.23,
+      "export_price_yoy_pct": -2.11,
+      "import_price_yoy_pct": -1.97
+    },
+    {
+      "date": "2012-11",
+      "tot_index": 91.18,
+      "tot_yoy_pct": -0.23,
+      "export_price_yoy_pct": -2.44,
+      "import_price_yoy_pct": -3.78
+    },
+    {
+      "date": "2012-12",
+      "tot_index": 92.18,
+      "tot_yoy_pct": 2.76,
+      "export_price_yoy_pct": -1.02,
+      "import_price_yoy_pct": -2.74
+    },
+    {
+      "date": "2013-01",
+      "tot_index": 92.95,
+      "tot_yoy_pct": 2.11,
+      "export_price_yoy_pct": -1,
+      "import_price_yoy_pct": -3.28
+    },
+    {
+      "date": "2013-02",
+      "tot_index": 93.05,
+      "tot_yoy_pct": 1.92,
+      "export_price_yoy_pct": -1.96,
+      "import_price_yoy_pct": -4.61
+    },
+    {
+      "date": "2013-03",
+      "tot_index": 92.15,
+      "tot_yoy_pct": 2.26,
+      "export_price_yoy_pct": -3.42,
+      "import_price_yoy_pct": -7.98
+    },
+    {
+      "date": "2013-04",
+      "tot_index": 93.07,
+      "tot_yoy_pct": 5.43,
+      "export_price_yoy_pct": -4.01,
+      "import_price_yoy_pct": -7.51
+    },
+    {
+      "date": "2013-05",
+      "tot_index": 94.27,
+      "tot_yoy_pct": 6.69,
+      "export_price_yoy_pct": -1.52,
+      "import_price_yoy_pct": -4.8
+    },
+    {
+      "date": "2013-06",
+      "tot_index": 95.13,
+      "tot_yoy_pct": 6.09,
+      "export_price_yoy_pct": 0.98,
+      "import_price_yoy_pct": -0.79
+    },
+    {
+      "date": "2013-07",
+      "tot_index": 95.45,
+      "tot_yoy_pct": 2.1,
+      "export_price_yoy_pct": 0.23,
+      "import_price_yoy_pct": -1.77
+    },
+    {
+      "date": "2013-08",
+      "tot_index": 94.92,
+      "tot_yoy_pct": 1.61,
+      "export_price_yoy_pct": -0.59,
+      "import_price_yoy_pct": -3.02
+    },
+    {
+      "date": "2013-09",
+      "tot_index": 94.17,
+      "tot_yoy_pct": 2.93,
+      "export_price_yoy_pct": -0.95,
+      "import_price_yoy_pct": -3.77
+    },
+    {
+      "date": "2013-10",
+      "tot_index": 93.78,
+      "tot_yoy_pct": 3.85,
+      "export_price_yoy_pct": -0.53,
+      "import_price_yoy_pct": -2.85
+    },
+    {
+      "date": "2013-11",
+      "tot_index": 94.17,
+      "tot_yoy_pct": 3.28,
+      "export_price_yoy_pct": 0.1,
+      "import_price_yoy_pct": -1.68
+    },
+    {
+      "date": "2013-12",
+      "tot_index": 94.4,
+      "tot_yoy_pct": 2.41,
+      "export_price_yoy_pct": 0.16,
+      "import_price_yoy_pct": -0.63
+    },
+    {
+      "date": "2014-01",
+      "tot_index": 92.82,
+      "tot_yoy_pct": -0.14,
+      "export_price_yoy_pct": -1.51,
+      "import_price_yoy_pct": -2.14
+    },
+    {
+      "date": "2014-02",
+      "tot_index": 93.73,
+      "tot_yoy_pct": 0.73,
+      "export_price_yoy_pct": -2.04,
+      "import_price_yoy_pct": -3
+    },
+    {
+      "date": "2014-03",
+      "tot_index": 93.38,
+      "tot_yoy_pct": 1.33,
+      "export_price_yoy_pct": -1.57,
+      "import_price_yoy_pct": -1.66
+    },
+    {
+      "date": "2014-04",
+      "tot_index": 93.62,
+      "tot_yoy_pct": 0.59,
+      "export_price_yoy_pct": -0.78,
+      "import_price_yoy_pct": -0.3
+    },
+    {
+      "date": "2014-05",
+      "tot_index": 93.82,
+      "tot_yoy_pct": -0.48,
+      "export_price_yoy_pct": -0.75,
+      "import_price_yoy_pct": 0.43
+    },
+    {
+      "date": "2014-06",
+      "tot_index": 93.88,
+      "tot_yoy_pct": -1.31,
+      "export_price_yoy_pct": -0.47,
+      "import_price_yoy_pct": 1.34
+    },
+    {
+      "date": "2014-07",
+      "tot_index": 93.66,
+      "tot_yoy_pct": -1.88,
+      "export_price_yoy_pct": -0.1,
+      "import_price_yoy_pct": 0.69
+    },
+    {
+      "date": "2014-08",
+      "tot_index": 94.14,
+      "tot_yoy_pct": -0.82,
+      "export_price_yoy_pct": -0.41,
+      "import_price_yoy_pct": -1.78
+    },
+    {
+      "date": "2014-09",
+      "tot_index": 94.84,
+      "tot_yoy_pct": 0.71,
+      "export_price_yoy_pct": -1.31,
+      "import_price_yoy_pct": -3.65
+    },
+    {
+      "date": "2014-10",
+      "tot_index": 95.01,
+      "tot_yoy_pct": 1.31,
+      "export_price_yoy_pct": -2.78,
+      "import_price_yoy_pct": -6.17
+    },
+    {
+      "date": "2014-11",
+      "tot_index": 97.04,
+      "tot_yoy_pct": 3.05,
+      "export_price_yoy_pct": -4.05,
+      "import_price_yoy_pct": -9.43
+    },
+    {
+      "date": "2014-12",
+      "tot_index": 98.04,
+      "tot_yoy_pct": 3.86,
+      "export_price_yoy_pct": -7.3,
+      "import_price_yoy_pct": -15.43
+    },
+    {
+      "date": "2015-01",
+      "tot_index": 100.8,
+      "tot_yoy_pct": 8.6,
+      "export_price_yoy_pct": -9.33,
+      "import_price_yoy_pct": -19.86
+    },
+    {
+      "date": "2015-02",
+      "tot_index": 105.41,
+      "tot_yoy_pct": 12.46,
+      "export_price_yoy_pct": -8.79,
+      "import_price_yoy_pct": -18.31
+    },
+    {
+      "date": "2015-03",
+      "tot_index": 103.89,
+      "tot_yoy_pct": 11.26,
+      "export_price_yoy_pct": -8.49,
+      "import_price_yoy_pct": -18.34
+    },
+    {
+      "date": "2015-04",
+      "tot_index": 104.61,
+      "tot_yoy_pct": 11.74,
+      "export_price_yoy_pct": -8.03,
+      "import_price_yoy_pct": -18.6
+    },
+    {
+      "date": "2015-05",
+      "tot_index": 105.79,
+      "tot_yoy_pct": 12.76,
+      "export_price_yoy_pct": -7.62,
+      "import_price_yoy_pct": -17.93
+    },
+    {
+      "date": "2015-06",
+      "tot_index": 105.1,
+      "tot_yoy_pct": 11.95,
+      "export_price_yoy_pct": -8.66,
+      "import_price_yoy_pct": -19.26
+    },
+    {
+      "date": "2015-07",
+      "tot_index": 104.71,
+      "tot_yoy_pct": 11.8,
+      "export_price_yoy_pct": -10.77,
+      "import_price_yoy_pct": -21.17
+    },
+    {
+      "date": "2015-08",
+      "tot_index": 104.99,
+      "tot_yoy_pct": 11.53,
+      "export_price_yoy_pct": -12.71,
+      "import_price_yoy_pct": -22.89
+    },
+    {
+      "date": "2015-09",
+      "tot_index": 106.64,
+      "tot_yoy_pct": 12.44,
+      "export_price_yoy_pct": -13.26,
+      "import_price_yoy_pct": -22.66
+    },
+    {
+      "date": "2015-10",
+      "tot_index": 106.59,
+      "tot_yoy_pct": 12.19,
+      "export_price_yoy_pct": -12.56,
+      "import_price_yoy_pct": -20.05
+    },
+    {
+      "date": "2015-11",
+      "tot_index": 105.87,
+      "tot_yoy_pct": 9.1,
+      "export_price_yoy_pct": -12.17,
+      "import_price_yoy_pct": -18.64
+    },
+    {
+      "date": "2015-12",
+      "tot_index": 105.73,
+      "tot_yoy_pct": 7.84,
+      "export_price_yoy_pct": -10.84,
+      "import_price_yoy_pct": -16.19
+    },
+    {
+      "date": "2016-01",
+      "tot_index": 106.24,
+      "tot_yoy_pct": 5.4,
+      "export_price_yoy_pct": -10.19,
+      "import_price_yoy_pct": -14.33
+    },
+    {
+      "date": "2016-02",
+      "tot_index": 108.73,
+      "tot_yoy_pct": 3.15,
+      "export_price_yoy_pct": -11.3,
+      "import_price_yoy_pct": -16.08
+    },
+    {
+      "date": "2016-03",
+      "tot_index": 109.58,
+      "tot_yoy_pct": 5.48,
+      "export_price_yoy_pct": -10.28,
+      "import_price_yoy_pct": -13.67
+    },
+    {
+      "date": "2016-04",
+      "tot_index": 107.63,
+      "tot_yoy_pct": 2.89,
+      "export_price_yoy_pct": -10.26,
+      "import_price_yoy_pct": -12.37
+    },
+    {
+      "date": "2016-05",
+      "tot_index": 106.94,
+      "tot_yoy_pct": 1.09,
+      "export_price_yoy_pct": -10.55,
+      "import_price_yoy_pct": -11.93
+    },
+    {
+      "date": "2016-06",
+      "tot_index": 105.96,
+      "tot_yoy_pct": 0.82,
+      "export_price_yoy_pct": -9.81,
+      "import_price_yoy_pct": -10.39
+    },
+    {
+      "date": "2016-07",
+      "tot_index": 105.18,
+      "tot_yoy_pct": 0.45,
+      "export_price_yoy_pct": -7.82,
+      "import_price_yoy_pct": -8.32
+    },
+    {
+      "date": "2016-08",
+      "tot_index": 106.37,
+      "tot_yoy_pct": 1.31,
+      "export_price_yoy_pct": -4.79,
+      "import_price_yoy_pct": -4.55
+    },
+    {
+      "date": "2016-09",
+      "tot_index": 106.95,
+      "tot_yoy_pct": 0.29,
+      "export_price_yoy_pct": -2.39,
+      "import_price_yoy_pct": -2.74
+    },
+    {
+      "date": "2016-10",
+      "tot_index": 108.48,
+      "tot_yoy_pct": 1.77,
+      "export_price_yoy_pct": 0.33,
+      "import_price_yoy_pct": 0.42
+    },
+    {
+      "date": "2016-11",
+      "tot_index": 106.44,
+      "tot_yoy_pct": 0.54,
+      "export_price_yoy_pct": 2.35,
+      "import_price_yoy_pct": 1.9
+    },
+    {
+      "date": "2016-12",
+      "tot_index": 108.21,
+      "tot_yoy_pct": 2.35,
+      "export_price_yoy_pct": 5.73,
+      "import_price_yoy_pct": 8.03
+    },
+    {
+      "date": "2017-01",
+      "tot_index": 105.38,
+      "tot_yoy_pct": -0.81,
+      "export_price_yoy_pct": 8.9,
+      "import_price_yoy_pct": 14.73
+    },
+    {
+      "date": "2017-02",
+      "tot_index": 105.67,
+      "tot_yoy_pct": -2.81,
+      "export_price_yoy_pct": 11.62,
+      "import_price_yoy_pct": 15.88
+    },
+    {
+      "date": "2017-03",
+      "tot_index": 104.71,
+      "tot_yoy_pct": -4.44,
+      "export_price_yoy_pct": 9.92,
+      "import_price_yoy_pct": 11.76
+    },
+    {
+      "date": "2017-04",
+      "tot_index": 106.67,
+      "tot_yoy_pct": -0.89,
+      "export_price_yoy_pct": 10.53,
+      "import_price_yoy_pct": 11.02
+    },
+    {
+      "date": "2017-05",
+      "tot_index": 105.65,
+      "tot_yoy_pct": -1.21,
+      "export_price_yoy_pct": 9.43,
+      "import_price_yoy_pct": 8.49
+    },
+    {
+      "date": "2017-06",
+      "tot_index": 105.74,
+      "tot_yoy_pct": -0.21,
+      "export_price_yoy_pct": 8.42,
+      "import_price_yoy_pct": 5.88
+    },
+    {
+      "date": "2017-07",
+      "tot_index": 108.12,
+      "tot_yoy_pct": 2.8,
+      "export_price_yoy_pct": 9.04,
+      "import_price_yoy_pct": 6.7
+    },
+    {
+      "date": "2017-08",
+      "tot_index": 108.59,
+      "tot_yoy_pct": 2.09,
+      "export_price_yoy_pct": 8.96,
+      "import_price_yoy_pct": 7.71
+    },
+    {
+      "date": "2017-09",
+      "tot_index": 107.83,
+      "tot_yoy_pct": 0.82,
+      "export_price_yoy_pct": 8.81,
+      "import_price_yoy_pct": 8.91
+    },
+    {
+      "date": "2017-10",
+      "tot_index": 106.94,
+      "tot_yoy_pct": -1.42,
+      "export_price_yoy_pct": 7.41,
+      "import_price_yoy_pct": 6.44
+    },
+    {
+      "date": "2017-11",
+      "tot_index": 106.68,
+      "tot_yoy_pct": 0.23,
+      "export_price_yoy_pct": 7.28,
+      "import_price_yoy_pct": 8.86
+    },
+    {
+      "date": "2017-12",
+      "tot_index": 104.45,
+      "tot_yoy_pct": -3.47,
+      "export_price_yoy_pct": 5.71,
+      "import_price_yoy_pct": 6.61
+    },
+    {
+      "date": "2018-01",
+      "tot_index": 104.21,
+      "tot_yoy_pct": -1.11,
+      "export_price_yoy_pct": 6.07,
+      "import_price_yoy_pct": 6.99
+    },
+    {
+      "date": "2018-02",
+      "tot_index": 101.98,
+      "tot_yoy_pct": -3.49,
+      "export_price_yoy_pct": 4.08,
+      "import_price_yoy_pct": 4.99
+    },
+    {
+      "date": "2018-03",
+      "tot_index": 102.59,
+      "tot_yoy_pct": -2.02,
+      "export_price_yoy_pct": 3.81,
+      "import_price_yoy_pct": 7.64
+    },
+    {
+      "date": "2018-04",
+      "tot_index": 103.1,
+      "tot_yoy_pct": -3.35,
+      "export_price_yoy_pct": 3.61,
+      "import_price_yoy_pct": 8.84
+    },
+    {
+      "date": "2018-05",
+      "tot_index": 101.28,
+      "tot_yoy_pct": -4.14,
+      "export_price_yoy_pct": 5.53,
+      "import_price_yoy_pct": 12.54
+    },
+    {
+      "date": "2018-06",
+      "tot_index": 99,
+      "tot_yoy_pct": -6.37,
+      "export_price_yoy_pct": 5.67,
+      "import_price_yoy_pct": 14.45
+    },
+    {
+      "date": "2018-07",
+      "tot_index": 99.33,
+      "tot_yoy_pct": -8.13,
+      "export_price_yoy_pct": 4.88,
+      "import_price_yoy_pct": 13.05
+    },
+    {
+      "date": "2018-08",
+      "tot_index": 99.73,
+      "tot_yoy_pct": -8.16,
+      "export_price_yoy_pct": 4.29,
+      "import_price_yoy_pct": 11.21
+    },
+    {
+      "date": "2018-09",
+      "tot_index": 100.32,
+      "tot_yoy_pct": -6.96,
+      "export_price_yoy_pct": 3.51,
+      "import_price_yoy_pct": 11.16
+    },
+    {
+      "date": "2018-10",
+      "tot_index": 98.65,
+      "tot_yoy_pct": -7.75,
+      "export_price_yoy_pct": 2.54,
+      "import_price_yoy_pct": 11.42
+    },
+    {
+      "date": "2018-11",
+      "tot_index": 95.88,
+      "tot_yoy_pct": -10.12,
+      "export_price_yoy_pct": -1.11,
+      "import_price_yoy_pct": 4.12
+    },
+    {
+      "date": "2018-12",
+      "tot_index": 98.18,
+      "tot_yoy_pct": -6,
+      "export_price_yoy_pct": -3.51,
+      "import_price_yoy_pct": -0.23
+    },
+    {
+      "date": "2019-01",
+      "tot_index": 99.14,
+      "tot_yoy_pct": -4.87,
+      "export_price_yoy_pct": -6.08,
+      "import_price_yoy_pct": -2.69
+    },
+    {
+      "date": "2019-02",
+      "tot_index": 99.26,
+      "tot_yoy_pct": -2.67,
+      "export_price_yoy_pct": -5.56,
+      "import_price_yoy_pct": 0.43
+    },
+    {
+      "date": "2019-03",
+      "tot_index": 97.39,
+      "tot_yoy_pct": -5.07,
+      "export_price_yoy_pct": -5.3,
+      "import_price_yoy_pct": 0.32
+    },
+    {
+      "date": "2019-04",
+      "tot_index": 96.72,
+      "tot_yoy_pct": -6.19,
+      "export_price_yoy_pct": -6.02,
+      "import_price_yoy_pct": -0.27
+    },
+    {
+      "date": "2019-05",
+      "tot_index": 95.16,
+      "tot_yoy_pct": -6.04,
+      "export_price_yoy_pct": -7.99,
+      "import_price_yoy_pct": -4
+    },
+    {
+      "date": "2019-06",
+      "tot_index": 94.39,
+      "tot_yoy_pct": -4.66,
+      "export_price_yoy_pct": -9,
+      "import_price_yoy_pct": -7.01
+    },
+    {
+      "date": "2019-07",
+      "tot_index": 96.49,
+      "tot_yoy_pct": -2.86,
+      "export_price_yoy_pct": -9.22,
+      "import_price_yoy_pct": -5.13
+    },
+    {
+      "date": "2019-08",
+      "tot_index": 95.13,
+      "tot_yoy_pct": -4.61,
+      "export_price_yoy_pct": -10.56,
+      "import_price_yoy_pct": -6.89
+    },
+    {
+      "date": "2019-09",
+      "tot_index": 96.33,
+      "tot_yoy_pct": -3.98,
+      "export_price_yoy_pct": -10.67,
+      "import_price_yoy_pct": -7.74
+    },
+    {
+      "date": "2019-10",
+      "tot_index": 95.36,
+      "tot_yoy_pct": -3.34,
+      "export_price_yoy_pct": -11.3,
+      "import_price_yoy_pct": -9.84
+    },
+    {
+      "date": "2019-11",
+      "tot_index": 95.5,
+      "tot_yoy_pct": -0.4,
+      "export_price_yoy_pct": -9.44,
+      "import_price_yoy_pct": -5.1
+    },
+    {
+      "date": "2019-12",
+      "tot_index": 95.5,
+      "tot_yoy_pct": -2.73,
+      "export_price_yoy_pct": -7.31,
+      "import_price_yoy_pct": -1
+    },
+    {
+      "date": "2020-01",
+      "tot_index": 94.18,
+      "tot_yoy_pct": -5,
+      "export_price_yoy_pct": -5.74,
+      "import_price_yoy_pct": -0.64
+    },
+    {
+      "date": "2020-02",
+      "tot_index": 93.36,
+      "tot_yoy_pct": -5.94,
+      "export_price_yoy_pct": -7.42,
+      "import_price_yoy_pct": -6.32
+    },
+    {
+      "date": "2020-03",
+      "tot_index": 94.42,
+      "tot_yoy_pct": -3.05,
+      "export_price_yoy_pct": -10.35,
+      "import_price_yoy_pct": -14.18
+    },
+    {
+      "date": "2020-04",
+      "tot_index": 99.56,
+      "tot_yoy_pct": 2.94,
+      "export_price_yoy_pct": -12.42,
+      "import_price_yoy_pct": -19.96
+    },
+    {
+      "date": "2020-05",
+      "tot_index": 104.66,
+      "tot_yoy_pct": 9.98,
+      "export_price_yoy_pct": -11.46,
+      "import_price_yoy_pct": -15.9
+    },
+    {
+      "date": "2020-06",
+      "tot_index": 103.2,
+      "tot_yoy_pct": 9.33,
+      "export_price_yoy_pct": -8.24,
+      "import_price_yoy_pct": -9.88
+    },
+    {
+      "date": "2020-07",
+      "tot_index": 101.02,
+      "tot_yoy_pct": 4.69,
+      "export_price_yoy_pct": -7.19,
+      "import_price_yoy_pct": -10.77
+    },
+    {
+      "date": "2020-08",
+      "tot_index": 101.53,
+      "tot_yoy_pct": 6.73,
+      "export_price_yoy_pct": -5.29,
+      "import_price_yoy_pct": -9.41
+    },
+    {
+      "date": "2020-09",
+      "tot_index": 101.79,
+      "tot_yoy_pct": 5.67,
+      "export_price_yoy_pct": -4.87,
+      "import_price_yoy_pct": -10.53
+    },
+    {
+      "date": "2020-10",
+      "tot_index": 102.67,
+      "tot_yoy_pct": 7.67,
+      "export_price_yoy_pct": -3.51,
+      "import_price_yoy_pct": -8.92
+    },
+    {
+      "date": "2020-11",
+      "tot_index": 103.05,
+      "tot_yoy_pct": 7.91,
+      "export_price_yoy_pct": -0.94,
+      "import_price_yoy_pct": -7.24
+    },
+    {
+      "date": "2020-12",
+      "tot_index": 102.71,
+      "tot_yoy_pct": 7.55,
+      "export_price_yoy_pct": 1.39,
+      "import_price_yoy_pct": -4.66
+    },
+    {
+      "date": "2021-01",
+      "tot_index": 100.69,
+      "tot_yoy_pct": 6.91,
+      "export_price_yoy_pct": 3.13,
+      "import_price_yoy_pct": -1.47
+    },
+    {
+      "date": "2021-02",
+      "tot_index": 99.42,
+      "tot_yoy_pct": 6.49,
+      "export_price_yoy_pct": 6.96,
+      "import_price_yoy_pct": 5.53
+    },
+    {
+      "date": "2021-03",
+      "tot_index": 97.77,
+      "tot_yoy_pct": 3.55,
+      "export_price_yoy_pct": 13.3,
+      "import_price_yoy_pct": 16.39
+    },
+    {
+      "date": "2021-04",
+      "tot_index": 98.96,
+      "tot_yoy_pct": -0.6,
+      "export_price_yoy_pct": 20.39,
+      "import_price_yoy_pct": 24.49
+    },
+    {
+      "date": "2021-05",
+      "tot_index": 100.19,
+      "tot_yoy_pct": -4.27,
+      "export_price_yoy_pct": 21.93,
+      "import_price_yoy_pct": 23.17
+    },
+    {
+      "date": "2021-06",
+      "tot_index": 99.33,
+      "tot_yoy_pct": -3.75,
+      "export_price_yoy_pct": 21.07,
+      "import_price_yoy_pct": 22.29
+    },
+    {
+      "date": "2021-07",
+      "tot_index": 97.77,
+      "tot_yoy_pct": -3.22,
+      "export_price_yoy_pct": 22.52,
+      "import_price_yoy_pct": 24.65
+    },
+    {
+      "date": "2021-08",
+      "tot_index": 96.5,
+      "tot_yoy_pct": -4.95,
+      "export_price_yoy_pct": 21.56,
+      "import_price_yoy_pct": 25.13
+    },
+    {
+      "date": "2021-09",
+      "tot_index": 97.24,
+      "tot_yoy_pct": -4.47,
+      "export_price_yoy_pct": 21.39,
+      "import_price_yoy_pct": 27.69
+    },
+    {
+      "date": "2021-10",
+      "tot_index": 96.1,
+      "tot_yoy_pct": -6.4,
+      "export_price_yoy_pct": 22.42,
+      "import_price_yoy_pct": 32.56
+    },
+    {
+      "date": "2021-11",
+      "tot_index": 92.75,
+      "tot_yoy_pct": -10,
+      "export_price_yoy_pct": 19.21,
+      "import_price_yoy_pct": 28.54
+    },
+    {
+      "date": "2021-12",
+      "tot_index": 92.05,
+      "tot_yoy_pct": -10.38,
+      "export_price_yoy_pct": 15.05,
+      "import_price_yoy_pct": 21.47
+    },
+    {
+      "date": "2022-01",
+      "tot_index": 93.69,
+      "tot_yoy_pct": -6.95,
+      "export_price_yoy_pct": 13.28,
+      "import_price_yoy_pct": 21.64
+    },
+    {
+      "date": "2022-02",
+      "tot_index": 91.98,
+      "tot_yoy_pct": -7.48,
+      "export_price_yoy_pct": 12.72,
+      "import_price_yoy_pct": 22.73
+    },
+    {
+      "date": "2022-03",
+      "tot_index": 91.76,
+      "tot_yoy_pct": -6.15,
+      "export_price_yoy_pct": 15.34,
+      "import_price_yoy_pct": 27.38
+    },
+    {
+      "date": "2022-04",
+      "tot_index": 88.44,
+      "tot_yoy_pct": -10.63,
+      "export_price_yoy_pct": 12.19,
+      "import_price_yoy_pct": 25.04
+    },
+    {
+      "date": "2022-05",
+      "tot_index": 89.98,
+      "tot_yoy_pct": -10.19,
+      "export_price_yoy_pct": 10.98,
+      "import_price_yoy_pct": 23.25
+    },
+    {
+      "date": "2022-06",
+      "tot_index": 89.42,
+      "tot_yoy_pct": -9.98,
+      "export_price_yoy_pct": 10.25,
+      "import_price_yoy_pct": 19.89
+    },
+    {
+      "date": "2022-07",
+      "tot_index": 86.82,
+      "tot_yoy_pct": -11.2,
+      "export_price_yoy_pct": 3.28,
+      "import_price_yoy_pct": 12.56
+    },
+    {
+      "date": "2022-08",
+      "tot_index": 88.12,
+      "tot_yoy_pct": -8.68,
+      "export_price_yoy_pct": 1.19,
+      "import_price_yoy_pct": 10.73
+    },
+    {
+      "date": "2022-09",
+      "tot_index": 87.6,
+      "tot_yoy_pct": -9.91,
+      "export_price_yoy_pct": -1.35,
+      "import_price_yoy_pct": 7.58
+    },
+    {
+      "date": "2022-10",
+      "tot_index": 88.89,
+      "tot_yoy_pct": -7.5,
+      "export_price_yoy_pct": -3.63,
+      "import_price_yoy_pct": 2.1
+    },
+    {
+      "date": "2022-11",
+      "tot_index": 88.09,
+      "tot_yoy_pct": -5.02,
+      "export_price_yoy_pct": -4.27,
+      "import_price_yoy_pct": 1.27
+    },
+    {
+      "date": "2022-12",
+      "tot_index": 87.46,
+      "tot_yoy_pct": -4.99,
+      "export_price_yoy_pct": -4.73,
+      "import_price_yoy_pct": 0.95
+    },
+    {
+      "date": "2023-01",
+      "tot_index": 88.72,
+      "tot_yoy_pct": -5.3,
+      "export_price_yoy_pct": -4.65,
+      "import_price_yoy_pct": -1.45
+    },
+    {
+      "date": "2023-02",
+      "tot_index": 87.73,
+      "tot_yoy_pct": -4.62,
+      "export_price_yoy_pct": -7.24,
+      "import_price_yoy_pct": -5.14
+    },
+    {
+      "date": "2023-03",
+      "tot_index": 87.05,
+      "tot_yoy_pct": -5.13,
+      "export_price_yoy_pct": -11.63,
+      "import_price_yoy_pct": -12.01
+    },
+    {
+      "date": "2023-04",
+      "tot_index": 87.96,
+      "tot_yoy_pct": -0.54,
+      "export_price_yoy_pct": -13.13,
+      "import_price_yoy_pct": -11.64
+    },
+    {
+      "date": "2023-05",
+      "tot_index": 87.27,
+      "tot_yoy_pct": -3.01,
+      "export_price_yoy_pct": -15.16,
+      "import_price_yoy_pct": -15.59
+    },
+    {
+      "date": "2023-06",
+      "tot_index": 89.22,
+      "tot_yoy_pct": -0.22,
+      "export_price_yoy_pct": -16.35,
+      "import_price_yoy_pct": -16.98
+    },
+    {
+      "date": "2023-07",
+      "tot_index": 90.85,
+      "tot_yoy_pct": 4.64,
+      "export_price_yoy_pct": -11.9,
+      "import_price_yoy_pct": -12.38
+    },
+    {
+      "date": "2023-08",
+      "tot_index": 91.48,
+      "tot_yoy_pct": 3.81,
+      "export_price_yoy_pct": -8.38,
+      "import_price_yoy_pct": -9.16
+    },
+    {
+      "date": "2023-09",
+      "tot_index": 91.11,
+      "tot_yoy_pct": 4.01,
+      "export_price_yoy_pct": -5.41,
+      "import_price_yoy_pct": -5.76
+    },
+    {
+      "date": "2023-10",
+      "tot_index": 89.48,
+      "tot_yoy_pct": 0.66,
+      "export_price_yoy_pct": -5.05,
+      "import_price_yoy_pct": -5.25
+    },
+    {
+      "date": "2023-11",
+      "tot_index": 88.92,
+      "tot_yoy_pct": 0.94,
+      "export_price_yoy_pct": -4.24,
+      "import_price_yoy_pct": -5.19
+    },
+    {
+      "date": "2023-12",
+      "tot_index": 89.03,
+      "tot_yoy_pct": 1.8,
+      "export_price_yoy_pct": -3.32,
+      "import_price_yoy_pct": -4.29
+    },
+    {
+      "date": "2024-01",
+      "tot_index": 90.95,
+      "tot_yoy_pct": 2.51,
+      "export_price_yoy_pct": -2.15,
+      "import_price_yoy_pct": -4.25
+    },
+    {
+      "date": "2024-02",
+      "tot_index": 91.34,
+      "tot_yoy_pct": 4.11,
+      "export_price_yoy_pct": -0.13,
+      "import_price_yoy_pct": -3.98
+    },
+    {
+      "date": "2024-03",
+      "tot_index": 91.8,
+      "tot_yoy_pct": 5.46,
+      "export_price_yoy_pct": 0.7,
+      "import_price_yoy_pct": -1.78
+    },
+    {
+      "date": "2024-04",
+      "tot_index": 92.66,
+      "tot_yoy_pct": 5.34,
+      "export_price_yoy_pct": 3.48,
+      "import_price_yoy_pct": 0.28
+    },
+    {
+      "date": "2024-05",
+      "tot_index": 91.35,
+      "tot_yoy_pct": 4.68,
+      "export_price_yoy_pct": 5.17,
+      "import_price_yoy_pct": 2.75
+    },
+    {
+      "date": "2024-06",
+      "tot_index": 92.09,
+      "tot_yoy_pct": 3.22,
+      "export_price_yoy_pct": 5.97,
+      "import_price_yoy_pct": 3.98
+    },
+    {
+      "date": "2024-07",
+      "tot_index": 93,
+      "tot_yoy_pct": 2.37,
+      "export_price_yoy_pct": 5.78,
+      "import_price_yoy_pct": 3.3
+    },
+    {
+      "date": "2024-08",
+      "tot_index": 91.83,
+      "tot_yoy_pct": 0.38,
+      "export_price_yoy_pct": 2.72,
+      "import_price_yoy_pct": -0.74
+    },
+    {
+      "date": "2024-09",
+      "tot_index": 92.35,
+      "tot_yoy_pct": 1.36,
+      "export_price_yoy_pct": 0.26,
+      "import_price_yoy_pct": -4.36
+    },
+    {
+      "date": "2024-10",
+      "tot_index": 92.96,
+      "tot_yoy_pct": 3.89,
+      "export_price_yoy_pct": 0.75,
+      "import_price_yoy_pct": -3.29
+    },
+    {
+      "date": "2024-11",
+      "tot_index": 92.84,
+      "tot_yoy_pct": 4.41,
+      "export_price_yoy_pct": 0.93,
+      "import_price_yoy_pct": -2.73
+    },
+    {
+      "date": "2024-12",
+      "tot_index": 93.25,
+      "tot_yoy_pct": 4.74,
+      "export_price_yoy_pct": 1.27,
+      "import_price_yoy_pct": -1.7
+    },
+    {
+      "date": "2025-01",
+      "tot_index": 93.89,
+      "tot_yoy_pct": 3.23,
+      "export_price_yoy_pct": -0.38,
+      "import_price_yoy_pct": -1.89
+    },
+    {
+      "date": "2025-02",
+      "tot_index": 92.26,
+      "tot_yoy_pct": 1.01,
+      "export_price_yoy_pct": -1.49,
+      "import_price_yoy_pct": -3.06
+    },
+    {
+      "date": "2025-03",
+      "tot_index": 92.61,
+      "tot_yoy_pct": 0.88,
+      "export_price_yoy_pct": -2.41,
+      "import_price_yoy_pct": -4.92
+    },
+    {
+      "date": "2025-04",
+      "tot_index": 93.65,
+      "tot_yoy_pct": 1.07,
+      "export_price_yoy_pct": -5.07,
+      "import_price_yoy_pct": -7.92
+    },
+    {
+      "date": "2025-05",
+      "tot_index": 94.54,
+      "tot_yoy_pct": 3.49,
+      "export_price_yoy_pct": -4.92,
+      "import_price_yoy_pct": -7.51
+    },
+    {
+      "date": "2025-06",
+      "tot_index": 95.77,
+      "tot_yoy_pct": 4,
+      "export_price_yoy_pct": -4.18,
+      "import_price_yoy_pct": -6.24
+    },
+    {
+      "date": "2025-07",
+      "tot_index": 94.74,
+      "tot_yoy_pct": 1.87,
+      "export_price_yoy_pct": -4.52,
+      "import_price_yoy_pct": -6.17
+    },
+    {
+      "date": "2025-08",
+      "tot_index": 94.35,
+      "tot_yoy_pct": 2.74,
+      "export_price_yoy_pct": -3.74,
+      "import_price_yoy_pct": -4.84
+    },
+    {
+      "date": "2025-09",
+      "tot_index": 95.3,
+      "tot_yoy_pct": 3.19,
+      "export_price_yoy_pct": -2.14,
+      "import_price_yoy_pct": -3.42
+    },
+    {
+      "date": "2025-10",
+      "tot_index": 96.54,
+      "tot_yoy_pct": 3.85,
+      "export_price_yoy_pct": 0.09,
+      "import_price_yoy_pct": -3.98
+    },
+    {
+      "date": "2025-11",
+      "tot_index": 98.24,
+      "tot_yoy_pct": 5.82,
+      "export_price_yoy_pct": 1.85,
+      "import_price_yoy_pct": -2.68
+    },
+    {
+      "date": "2025-12",
+      "tot_index": 97.96,
+      "tot_yoy_pct": 5.05,
+      "export_price_yoy_pct": 2.21,
+      "import_price_yoy_pct": -2.17
+    },
+    {
+      "date": "2026-01",
+      "tot_index": 102.26,
+      "tot_yoy_pct": 8.91,
+      "export_price_yoy_pct": 6.99,
+      "import_price_yoy_pct": -1.76
+    },
+    {
+      "date": "2026-02",
+      "tot_index": 104.28,
+      "tot_yoy_pct": 13.03,
+      "export_price_yoy_pct": 10.14,
+      "import_price_yoy_pct": 0.68
+    },
+    {
+      "date": "2026-03",
+      "tot_index": 113.76,
+      "tot_yoy_pct": 22.84,
+      "export_price_yoy_pct": 26.65,
+      "import_price_yoy_pct": 17.94
+    },
+    {
+      "date": "2026-04",
+      "tot_index": 107.08,
+      "tot_yoy_pct": 14.34,
+      "export_price_yoy_pct": 37.31,
+      "import_price_yoy_pct": 17.48
+    },
+    {
+      "date": "2026-05",
+      "tot_index": 112.14,
+      "tot_yoy_pct": 18.62,
+      "export_price_yoy_pct": 37.96,
+      "import_price_yoy_pct": 18.18
+    },
+    {
+      "date": "2026-06",
+      "tot_index": 110.69,
+      "tot_yoy_pct": 15.58,
+      "export_price_yoy_pct": 34.05,
+      "import_price_yoy_pct": 9.45
+    }
+  ],
+  "quarterly": [
+    {
+      "quarter": "2011Q2",
+      "gdp_yoy_pct": 3.84,
+      "gdi_yoy_pct": 1.15,
+      "gap_actual_pp": -2.69
+    },
+    {
+      "quarter": "2011Q3",
+      "gdp_yoy_pct": 3.11,
+      "gdi_yoy_pct": 0.67,
+      "gap_actual_pp": -2.44
+    },
+    {
+      "quarter": "2011Q4",
+      "gdp_yoy_pct": 2.57,
+      "gdi_yoy_pct": 0.67,
+      "gap_actual_pp": -1.9
+    },
+    {
+      "quarter": "2012Q1",
+      "gdp_yoy_pct": 2.53,
+      "gdi_yoy_pct": 2.45,
+      "gap_actual_pp": -0.08
+    },
+    {
+      "quarter": "2012Q2",
+      "gdp_yoy_pct": 2.56,
+      "gdi_yoy_pct": 1.86,
+      "gap_actual_pp": -0.7
+    },
+    {
+      "quarter": "2012Q3",
+      "gdp_yoy_pct": 2.45,
+      "gdi_yoy_pct": 2.95,
+      "gap_actual_pp": 0.5
+    },
+    {
+      "quarter": "2012Q4",
+      "gdp_yoy_pct": 2.65,
+      "gdi_yoy_pct": 3.24,
+      "gap_actual_pp": 0.59
+    },
+    {
+      "quarter": "2013Q1",
+      "gdp_yoy_pct": 2.33,
+      "gdi_yoy_pct": 3.22,
+      "gap_actual_pp": 0.89
+    },
+    {
+      "quarter": "2013Q2",
+      "gdp_yoy_pct": 3.05,
+      "gdi_yoy_pct": 4.76,
+      "gap_actual_pp": 1.71
+    },
+    {
+      "quarter": "2013Q3",
+      "gdp_yoy_pct": 3.69,
+      "gdi_yoy_pct": 4.43,
+      "gap_actual_pp": 0.74
+    },
+    {
+      "quarter": "2013Q4",
+      "gdp_yoy_pct": 4.02,
+      "gdi_yoy_pct": 4.8,
+      "gap_actual_pp": 0.78
+    },
+    {
+      "quarter": "2014Q1",
+      "gdp_yoy_pct": 3.78,
+      "gdi_yoy_pct": 4.62,
+      "gap_actual_pp": 0.84
+    },
+    {
+      "quarter": "2014Q2",
+      "gdp_yoy_pct": 3.58,
+      "gdi_yoy_pct": 3.71,
+      "gap_actual_pp": 0.13
+    },
+    {
+      "quarter": "2014Q3",
+      "gdp_yoy_pct": 2.97,
+      "gdi_yoy_pct": 2.7,
+      "gap_actual_pp": -0.27
+    },
+    {
+      "quarter": "2014Q4",
+      "gdp_yoy_pct": 2.59,
+      "gdi_yoy_pct": 3.52,
+      "gap_actual_pp": 0.93
+    },
+    {
+      "quarter": "2015Q1",
+      "gdp_yoy_pct": 2.66,
+      "gdi_yoy_pct": 6.42,
+      "gap_actual_pp": 3.76
+    },
+    {
+      "quarter": "2015Q2",
+      "gdp_yoy_pct": 1.93,
+      "gdi_yoy_pct": 5.9,
+      "gap_actual_pp": 3.97
+    },
+    {
+      "quarter": "2015Q3",
+      "gdp_yoy_pct": 3.46,
+      "gdi_yoy_pct": 7.5,
+      "gap_actual_pp": 4.04
+    },
+    {
+      "quarter": "2015Q4",
+      "gdp_yoy_pct": 3.59,
+      "gdi_yoy_pct": 7.01,
+      "gap_actual_pp": 3.42
+    },
+    {
+      "quarter": "2016Q1",
+      "gdp_yoy_pct": 3,
+      "gdi_yoy_pct": 5.54,
+      "gap_actual_pp": 2.54
+    },
+    {
+      "quarter": "2016Q2",
+      "gdp_yoy_pct": 3.85,
+      "gdi_yoy_pct": 5.33,
+      "gap_actual_pp": 1.48
+    },
+    {
+      "quarter": "2016Q3",
+      "gdp_yoy_pct": 3,
+      "gdi_yoy_pct": 3.73,
+      "gap_actual_pp": 0.73
+    },
+    {
+      "quarter": "2016Q4",
+      "gdp_yoy_pct": 2.85,
+      "gdi_yoy_pct": 3.78,
+      "gap_actual_pp": 0.93
+    },
+    {
+      "quarter": "2017Q1",
+      "gdp_yoy_pct": 3.46,
+      "gdi_yoy_pct": 2.55,
+      "gap_actual_pp": -0.91
+    },
+    {
+      "quarter": "2017Q2",
+      "gdp_yoy_pct": 3.01,
+      "gdi_yoy_pct": 2.72,
+      "gap_actual_pp": -0.29
+    },
+    {
+      "quarter": "2017Q3",
+      "gdp_yoy_pct": 4.1,
+      "gdi_yoy_pct": 4.8,
+      "gap_actual_pp": 0.7
+    },
+    {
+      "quarter": "2017Q4",
+      "gdp_yoy_pct": 3.17,
+      "gdi_yoy_pct": 2.71,
+      "gap_actual_pp": -0.46
+    },
+    {
+      "quarter": "2018Q1",
+      "gdp_yoy_pct": 3.2,
+      "gdi_yoy_pct": 2.96,
+      "gap_actual_pp": -0.24
+    },
+    {
+      "quarter": "2018Q2",
+      "gdp_yoy_pct": 3.34,
+      "gdi_yoy_pct": 2.53,
+      "gap_actual_pp": -0.81
+    },
+    {
+      "quarter": "2018Q3",
+      "gdp_yoy_pct": 2.6,
+      "gdi_yoy_pct": 0.72,
+      "gap_actual_pp": -1.88
+    },
+    {
+      "quarter": "2018Q4",
+      "gdp_yoy_pct": 3.55,
+      "gdi_yoy_pct": 1.69,
+      "gap_actual_pp": -1.86
+    },
+    {
+      "quarter": "2019Q1",
+      "gdp_yoy_pct": 1.87,
+      "gdi_yoy_pct": 0.04,
+      "gap_actual_pp": -1.83
+    },
+    {
+      "quarter": "2019Q2",
+      "gdp_yoy_pct": 2.38,
+      "gdi_yoy_pct": -0.04,
+      "gap_actual_pp": -2.42
+    },
+    {
+      "quarter": "2019Q3",
+      "gdp_yoy_pct": 2.22,
+      "gdi_yoy_pct": -0.15,
+      "gap_actual_pp": -2.37
+    },
+    {
+      "quarter": "2019Q4",
+      "gdp_yoy_pct": 2.74,
+      "gdi_yoy_pct": 0.98,
+      "gap_actual_pp": -1.76
+    },
+    {
+      "quarter": "2020Q1",
+      "gdp_yoy_pct": 1.19,
+      "gdi_yoy_pct": -0.39,
+      "gap_actual_pp": -1.58
+    },
+    {
+      "quarter": "2020Q2",
+      "gdp_yoy_pct": -2.64,
+      "gdi_yoy_pct": -1.6,
+      "gap_actual_pp": 1.04
+    },
+    {
+      "quarter": "2020Q3",
+      "gdp_yoy_pct": -0.82,
+      "gdi_yoy_pct": 0.89,
+      "gap_actual_pp": 1.71
+    },
+    {
+      "quarter": "2020Q4",
+      "gdp_yoy_pct": -0.45,
+      "gdi_yoy_pct": 1.52,
+      "gap_actual_pp": 1.97
+    },
+    {
+      "quarter": "2021Q1",
+      "gdp_yoy_pct": 2.72,
+      "gdi_yoy_pct": 3.86,
+      "gap_actual_pp": 1.14
+    },
+    {
+      "quarter": "2021Q2",
+      "gdp_yoy_pct": 6.95,
+      "gdi_yoy_pct": 5.73,
+      "gap_actual_pp": -1.22
+    },
+    {
+      "quarter": "2021Q3",
+      "gdp_yoy_pct": 4.61,
+      "gdi_yoy_pct": 3.22,
+      "gap_actual_pp": -1.39
+    },
+    {
+      "quarter": "2021Q4",
+      "gdp_yoy_pct": 4.49,
+      "gdi_yoy_pct": 1.9,
+      "gap_actual_pp": -2.59
+    },
+    {
+      "quarter": "2022Q1",
+      "gdp_yoy_pct": 3.62,
+      "gdi_yoy_pct": 0.55,
+      "gap_actual_pp": -3.07
+    },
+    {
+      "quarter": "2022Q2",
+      "gdp_yoy_pct": 3.28,
+      "gdi_yoy_pct": -0.21,
+      "gap_actual_pp": -3.49
+    },
+    {
+      "quarter": "2022Q3",
+      "gdp_yoy_pct": 3.66,
+      "gdi_yoy_pct": -1.04,
+      "gap_actual_pp": -4.7
+    },
+    {
+      "quarter": "2022Q4",
+      "gdp_yoy_pct": 1.22,
+      "gdi_yoy_pct": -1.71,
+      "gap_actual_pp": -2.93
+    },
+    {
+      "quarter": "2023Q1",
+      "gdp_yoy_pct": 1.06,
+      "gdi_yoy_pct": -1.14,
+      "gap_actual_pp": -2.2
+    },
+    {
+      "quarter": "2023Q2",
+      "gdp_yoy_pct": 0.69,
+      "gdi_yoy_pct": -0.68,
+      "gap_actual_pp": -1.37
+    },
+    {
+      "quarter": "2023Q3",
+      "gdp_yoy_pct": 1.59,
+      "gdi_yoy_pct": 3.37,
+      "gap_actual_pp": 1.78
+    },
+    {
+      "quarter": "2023Q4",
+      "gdp_yoy_pct": 2.53,
+      "gdi_yoy_pct": 4.34,
+      "gap_actual_pp": 1.81
+    },
+    {
+      "quarter": "2024Q1",
+      "gdp_yoy_pct": 3.65,
+      "gdi_yoy_pct": 6.73,
+      "gap_actual_pp": 3.08
+    },
+    {
+      "quarter": "2024Q2",
+      "gdp_yoy_pct": 2.55,
+      "gdi_yoy_pct": 5.33,
+      "gap_actual_pp": 2.78
+    },
+    {
+      "quarter": "2024Q3",
+      "gdp_yoy_pct": 1.65,
+      "gdi_yoy_pct": 3.02,
+      "gap_actual_pp": 1.37
+    },
+    {
+      "quarter": "2024Q4",
+      "gdp_yoy_pct": 1.06,
+      "gdi_yoy_pct": 2.26,
+      "gap_actual_pp": 1.2
+    },
+    {
+      "quarter": "2025Q1",
+      "gdp_yoy_pct": 0.16,
+      "gdi_yoy_pct": 0.14,
+      "gap_actual_pp": -0.02
+    },
+    {
+      "quarter": "2025Q2",
+      "gdp_yoy_pct": 0.7,
+      "gdi_yoy_pct": 1.6,
+      "gap_actual_pp": 0.9
+    },
+    {
+      "quarter": "2025Q3",
+      "gdp_yoy_pct": 2.09,
+      "gdi_yoy_pct": 2.68,
+      "gap_actual_pp": 0.59
+    },
+    {
+      "quarter": "2025Q4",
+      "gdp_yoy_pct": 1.55,
+      "gdi_yoy_pct": 3.5,
+      "gap_actual_pp": 1.95
+    },
+    {
+      "quarter": "2026Q1",
+      "gdp_yoy_pct": 3.78,
+      "gdi_yoy_pct": 13.18,
+      "gap_actual_pp": 9.4
+    }
+  ]
+}

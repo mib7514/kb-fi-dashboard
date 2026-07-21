@@ -1,0 +1,49 @@
+name: GG-1 국민소득 갭 data (ECOS)
+
+# 순상품교역조건지수·수출입물가(월)·실질 GDP/GDI(분기)를 ECOS 에서 적재해
+# data/gg1-income-gap.json 갱신. 데이터가 실제로 바뀐 경우에만 커밋(diff 없으면 skip).
+
+on:
+  schedule:
+    # 주 1회 수요일 23:10 UTC = KST 목 08:10. 월간 교역조건·분기 GDP/GDI 발표를 주간 주기로 커버.
+    # 시각·concurrency group 분리로 기존 워크플로와 충돌 없음:
+    #   taylor(평일 22:45) · us-inflation(화 15:00) · diffusion(매월 12·15일 00:00).
+    - cron: '10 23 * * 3'
+  workflow_dispatch: {}          # 수동 트리거 (secret 등록 후 1회 검증용)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gg1-income-gap
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch ECOS → data/gg1-income-gap.json
+        env:
+          ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
+        run: node scripts/update-gg1.mjs
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- data/gg1-income-gap.json; then
+            echo "갱신분 없음 — 커밋 skip."
+            exit 0
+          fi
+          ASOF=$(node -e "process.stdout.write(require('./data/gg1-income-gap.json').meta.last_monthly)")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/gg1-income-gap.json
+          git commit -m "data: GG-1 국민소득 갭(ECOS) ${ASOF} 갱신"
+          git push
