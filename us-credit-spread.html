@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>US Credit Spread — IG·HY·OAS | FI Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --red: #f85149; --ok: #3fb950; --amber: #f0883e;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 13px 15px; }
+  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .stat-main { font-size: 23px; font-weight: 600; font-family: var(--mono); letter-spacing: -0.01em; }
+  .stat-unit { font-size: 12px; color: var(--muted); margin-left: 3px; font-weight: 400; }
+  .stat-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
+
+  .controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 2px 0 16px; }
+  .ctrl-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--border-2); border-radius: 7px; overflow: hidden; }
+  .seg button { background: transparent; border: none; color: var(--muted); font-family: var(--mono);
+    font-size: 12px; padding: 6px 14px; cursor: pointer; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+  .seg button:hover:not(.active) { background: var(--panel-2); color: var(--text); }
+
+  .chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px 6px; margin-bottom: 14px; }
+  .chart-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 2px 2px 6px; }
+  .chart-head h2 { font-size: 14px; margin: 0; }
+  .chart-head .cap { font-size: 11.5px; color: var(--muted); }
+  .chart-box { width: 100%; height: 300px; }
+
+  .footnote { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.7; }
+  .footnote .k { font-family: var(--mono); color: var(--text); }
+  .footnote > div { margin-bottom: 4px; }
+
+  .empty { color: var(--muted); font-size: 13px; padding: 24px; text-align: center; line-height: 1.9;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin-top: 16px; }
+  .empty code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="eyebrow">
+    <span class="step">MONITOR</span>
+    <span class="ctx">측정 레이어 · 미국 회사채 스프레드 · 하이퍼스케일러 발행압력</span>
+  </div>
+  <h1>US Credit Spread</h1>
+  <p class="tagline">미국 IG·HY·등급별 OAS와 파생 스프레드(BBB−A · A−AA · 장기−전체)를 z250과 함께 · 매크로 vs 발행/공급 요인 관찰 · 측정만(what the market says)</p>
+
+  <!-- 카드 6종 -->
+  <div class="stats" id="summary"></div>
+
+  <!-- 룩백 토글 -->
+  <div class="controls">
+    <span class="ctrl-label">차트 룩백</span>
+    <div class="seg" id="lookback-seg">
+      <button data-lb="1y" class="active">1Y</button>
+      <button data-lb="all">전체</button>
+    </div>
+  </div>
+
+  <!-- 차트 1 — IG vs HY -->
+  <div class="chart-card">
+    <div class="chart-head">
+      <h2>IG vs HY OAS</h2>
+      <span class="cap">지수 전체 이동 = 매크로 요인</span>
+    </div>
+    <div class="chart-box" id="chart-main"></div>
+  </div>
+
+  <!-- 차트 2 — 등급별 -->
+  <div class="chart-card">
+    <div class="chart-head">
+      <h2>등급별 OAS — AAA / AA / A / BBB</h2>
+      <span class="cap">하이퍼스케일러 등급대(A~AA) 차별화 관찰</span>
+    </div>
+    <div class="chart-box" id="chart-grades"></div>
+  </div>
+
+  <!-- 차트 3 — 파생 스프레드 -->
+  <div class="chart-card">
+    <div class="chart-head">
+      <h2>파생 스프레드 — BBB−A · A−AA · IG 15Y+−전체</h2>
+      <span class="cap">등급·만기 파생이 초과로 벌어지면 발행/공급 요인</span>
+    </div>
+    <div class="chart-box" id="chart-derived"></div>
+  </div>
+
+  <div class="footnote" id="footnote"></div>
+</div>
+
+<!-- 공통 내비게이션 -->
+<script type="module" src="js/nav.js"></script>
+<!-- vendor -->
+<script src="vendor/plotly.min.js"></script>
+<!-- app (ES module) -->
+<script type="module">
+  import { initCreditSpread } from './js/us-credit-spread-ui.js';
+  initCreditSpread();
+</script>
+</body>
+</html>

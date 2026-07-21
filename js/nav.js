@@ -11,6 +11,7 @@ export const NAV_ITEMS = [
   { id: 'taylor', title: 'Taylor 압력', file: 'taylor.html', desc: '수정 Taylor 적정금리 − 기준금리 갭 vs 국고 3년 (ECOS 근원CPI·GDP·기준금리)' },
   { id: 'gg1', title: '국민소득 갭', file: 'gg1-income-gap.html', desc: '교역조건(수출가격÷수입가격)이 국민소득(GDI)에 얹는 %p — 갭 프록시·β 회귀 (ECOS)' },
   { id: 'curve-rv', title: 'Curve RV', file: 'curve-rv.html', desc: '크레딧 스프레드 섹터×만기 상대가치 (캐리·롤·percentile·백테스트)' },
+  { id: 'us-credit-spread', title: 'US Credit Spread', file: 'us-credit-spread.html', desc: '미국 IG·HY·등급별 OAS + 파생 스프레드(BBB−A·A−AA·장기−전체) z250 — 하이퍼스케일러 발행압력 측정 (FRED BAML)' },
   { id: 'onoff', title: 'On/Off 스프레드', file: 'onoff-spread.html', desc: '국고 3년 지표물 커브조정 상대가치 — 세대 이벤트타임 비교' },
   { id: 'carry', title: '캐리 손익분기', file: 'carry-breakeven.html', desc: '레버리지 캐리 vs 금리·스프레드 확대 — 손익분기·시나리오 기대값 (입력형)' },
   { id: 'rg-regime', title: '레짐 판단', file: 'rg-regime.html', desc: '전향적 레짐 히트맵 — 금리·스프레드 방향 확률 → 9셀 결합확률 + 플레이북 (입력형)' },
