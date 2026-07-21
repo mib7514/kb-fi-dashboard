@@ -9,6 +9,7 @@ export const NAV_ITEMS = [
   { id: 'us-inflation', title: 'US 물가전망', file: 'us-inflation.html', desc: 'US CPI/PCE 헤드라인·근원(FRED SA) 시즈널 m-m → y-y 시나리오' },
   { id: 'diffusion', title: '물가 확산', file: 'inflation-diffusion.html', desc: '물가가 얼마나 넓게 오르나 — 오르는 품목 비율(미국 CPI·PCE)로 sticky/착시 판별' },
   { id: 'taylor', title: 'Taylor 압력', file: 'taylor.html', desc: '수정 Taylor 적정금리 − 기준금리 갭 vs 국고 3년 (ECOS 근원CPI·GDP·기준금리)' },
+  { id: 'gg1', title: '국민소득 갭', file: 'gg1-income-gap.html', desc: '교역조건(수출가격÷수입가격)이 국민소득(GDI)에 얹는 %p — 갭 프록시·β 회귀 (ECOS)' },
   { id: 'curve-rv', title: 'Curve RV', file: 'curve-rv.html', desc: '크레딧 스프레드 섹터×만기 상대가치 (캐리·롤·percentile·백테스트)' },
   { id: 'onoff', title: 'On/Off 스프레드', file: 'onoff-spread.html', desc: '국고 3년 지표물 커브조정 상대가치 — 세대 이벤트타임 비교' },
   { id: 'carry', title: '캐리 손익분기', file: 'carry-breakeven.html', desc: '레버리지 캐리 vs 금리·스프레드 확대 — 손익분기·시나리오 기대값 (입력형)' },

@@ -37,3 +37,6 @@ export const ECOS_SERIES = {
 // y/y 산출을 위해 fetch 는 1년 더(=16년) 소급해 base 를 확보하고, 산출은 15년으로 trim.
 export const OUTPUT_YEARS = 15;
 export const LOOKBACK_YEARS = OUTPUT_YEARS + 1; // fetch 소급(=16년): y/y base 확보
+
+// β 이론범위 = (수출+수입)/(2·명목GDP) ≈ 0.35~0.40. sanity 범위·UI 병기용.
+export const BETA_THEORY_RANGE = [0.35, 0.40];
