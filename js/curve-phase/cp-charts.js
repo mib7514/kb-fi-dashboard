@@ -28,29 +28,32 @@ const baseLayout = (extra = {}) => ({
 });
 
 // 끝점 값 라벨(DESIGN.md 필수). 여러 라벨이 겹치면 세로로 최소 간격 벌림.
-function endpointAnnotations(traces) {
+function endpointAnnotations(traces, dp) {
   const pts = traces
     .filter((t) => t.x.length)
     .map((t) => ({ x: t.x[t.x.length - 1], y: t.y[t.y.length - 1], color: t.line.color }))
     .sort((a, b) => b.y - a.y);
   return pts.map((p) => ({
     x: p.x, y: p.y, xref: 'x', yref: 'y',
-    text: `${p.y > 0 ? '+' : ''}${p.y.toFixed(1)}`,
+    text: `${p.y > 0 ? '+' : ''}${p.y.toFixed(dp)}`,
     showarrow: false, xanchor: 'left', xshift: 6,
     font: { family: FONT, size: 10.5, color: p.color },
   }));
 }
 
-// lines: [{ name, color, data:[[date,bp]] }]. divId 에 렌더.
-export function renderSpreadChart(divId, lines, lookback) {
+// lines: [{ name, color, data:[[date,val]] }]. unit: 'bp'(정수1자리)|'%'(2자리). divId 에 렌더.
+export function renderSpreadChart(divId, lines, lookback, unit = 'bp') {
+  const dp = unit === 'bp' ? 1 : 2;
   const traces = lines.map((l) => {
     const d = sliceLookback(l.data, lookback);
     return {
       x: d.map((r) => r[0]), y: d.map((r) => r[1]), name: l.name, mode: 'lines',
       line: { color: l.color, width: 1.7 },
-      hovertemplate: `%{x|%Y-%m-%d}<br>${l.name} %{y:.1f}bp<extra></extra>`,
+      hovertemplate: `%{x|%Y-%m-%d}<br>${l.name} %{y:.${dp}f}${unit}<extra></extra>`,
     };
   });
-  Plotly.newPlot(divId, traces, baseLayout({ annotations: endpointAnnotations(traces) }),
+  Plotly.newPlot(divId,
+    traces,
+    baseLayout({ annotations: endpointAnnotations(traces, dp), yaxis: { gridcolor: C.grid, linecolor: C.axis, zeroline: true, zerolinecolor: C.axis, tickfont: { size: 10 }, title: { text: unit, font: { size: 11 } } } }),
     { displayModeBar: false, responsive: true });
 }

@@ -4,17 +4,20 @@
 //   US 패널(변수1/2/3)·5y5y·분해·판정·오버레이는 Phase 3~6 에서 추가.
 
 import { loadCurveData } from './cp-data.js';
-import { spreadSeries, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
+import { spreadSeries, colSpreadBp, fwd5y5y, seriesDiff, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
 import { C, LOOKBACKS, renderSpreadChart } from './cp-charts.js';
 
 const LS_KEY = 'curve-phase';
 const state = { lookback: '3y' };
-let DATA = null;   // { krYields, krBase }
-let SERIES = null; // { s3:[[date,bp]], s1:[[date,bp]] }
+let DATA = null;   // { krYields, krBase, usYields, usTp }
+let SERIES = null; // KR { s3:[[date,bp]], s1:[[date,bp]] }
+let US = null;     // US { gap:bp, fy:%, tp:%, exp:% }
 
 const fmt = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : x.toFixed(d));
 const signed = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : (x >= 0 ? '+' : '') + x.toFixed(d));
 const pctStr = (p) => (p == null ? '—' : `${Math.round(p)}p`);
+// 60일 변화 → bp 표기(%p 계열은 ×100). 판정(Phase5) ±10bp 임계와 단위 일치.
+const chg60Bp = (chg60, unit) => (chg60 == null ? '—' : `${signed(unit === 'bp' ? chg60 : chg60 * 100, 0)}bp`);
 
 // z 색: |z|<1 중립, z>0 난색, z<0 한색(사이트 규약과 동일).
 function zColor(z) {
@@ -66,10 +69,40 @@ function renderGuide() {
     `<div class="guide-title">변수1 판독 · 3Y−기준 = <b>${pctStr(pct)}</b></div>${rows}`;
 }
 
-function renderChart() {
+function renderKRChart() {
   renderSpreadChart('chart-kr-gap',
     SPREADS.map((s) => ({ name: s.label, color: s.color, data: SERIES[s.key] })),
-    state.lookback);
+    state.lookback, 'bp');
+}
+
+// ── US 패널 (참고·식별용) ──
+// 레벨(%) 카드 헬퍼: 값 + z250 + 60일 변화(bp).
+function levelCard(label, sum) {
+  return `<div class="stat">
+      <div class="stat-label">${label}</div>
+      <div class="stat-main">${fmt(sum.last, 2)}<span class="stat-unit">%</span></div>
+      <div class="stat-sub">z250 ${sum.z == null ? '—' : signed(sum.z, 2)} · Δ60d ${chg60Bp(sum.chg60, '%')}</div>
+    </div>`;
+}
+function renderUSCards() {
+  const gap = summarize(US.gap); // bp — 변수1
+  const gapCard = `<div class="stat">
+      <div class="stat-label">DGS2 − EFFR</div>
+      <div class="stat-main">${fmt(gap.last, 1)}<span class="stat-unit">bp</span></div>
+      <div class="stat-sub">pct <span style="color:${zColor(gap.z)}">${pctStr(gap.pct)}</span> · z250 ${gap.z == null ? '—' : signed(gap.z, 2)}</div>
+    </div>`;
+  document.getElementById('us-summary').innerHTML =
+    gapCard
+    + levelCard('5y5y (2×10Y−5Y)', summarize(US.fy))
+    + levelCard('기대성분 (5y5y−TP)', summarize(US.exp))
+    + levelCard('ACM TP10', summarize(US.tp));
+}
+function renderUSCharts() {
+  renderSpreadChart('chart-us-gap',
+    [{ name: 'DGS2 − EFFR', color: C.accent, data: US.gap }], state.lookback, 'bp');
+  renderSpreadChart('chart-us-decomp',
+    [{ name: '기대성분 (5y5y−TP)', color: C.purple, data: US.exp },
+      { name: 'ACM TP10', color: C.amber, data: US.tp }], state.lookback, '%');
 }
 
 function renderFootnote() {
@@ -83,7 +116,12 @@ function renderFootnote() {
     + `<div>본 게이지는 <span class="k">배달 잔량(기준금리 대비)</span>을 측정하며 <span class="k">서프라이즈 여지</span>와 구분됨. `
     + `역사적 플랫 국면 판독은 '터미널 지속 상향' 조건에서 성립했던 패턴 기반.</div>`
     + `<div>밴드 임계값(≥${BAND_HI}p 잔존 / ≤${BAND_LO}p 소진)은 <span class="k">초기값</span> — 관찰 후 조정 가능.</div>`
-    + `<div>출처: <span class="k">ECOS</span> · 국고채 ${my.updated_at} · 기준금리 ${mb.updated_at}. 측정만 한다 — 해석 없음.</div>`;
+    + `<div><b>US(참고·식별용)</b> — 변수1 <span class="k">DGS2−EFFR</span> pct(KR과 동일). `
+    + `변수2 <span class="k">기대성분 = 5y5y − ACM TP</span>(r* 프록시), 변수3 <span class="k">ACM TP10</span> 직접 관측. `
+    + `5y5y ≈ 2×10Y−5Y(par 단순근사, 레벨편의 존재 → 방향·z 전용). `
+    + `TP는 10Y ACM이라 5y5y와 만기 불일치(호라이즌 프록시). 장단기 분해는 모델 추정치.</div>`
+    + `<div>출처: <span class="k">ECOS</span> · 국고채 ${my.updated_at} · 기준금리 ${mb.updated_at} · `
+    + `<span class="k">FRED</span> US ${DATA.usYields.meta.updated_at} · ACM TP ${DATA.usTp.meta.updated_at}. 측정만 한다 — 해석 없음.</div>`;
 }
 
 function renderControls() {
@@ -92,7 +130,10 @@ function renderControls() {
   });
 }
 
-function renderAll() { renderCards(); renderGuide(); renderChart(); renderControls(); renderFootnote(); }
+function renderCharts() { renderKRChart(); renderUSCharts(); }
+function renderAll() {
+  renderCards(); renderGuide(); renderUSCards(); renderCharts(); renderControls(); renderFootnote();
+}
 
 function save() {
   try { localStorage.setItem(LS_KEY, JSON.stringify({ kind: LS_KEY, version: 1, lookback: state.lookback })); } catch { /* noop */ }
@@ -108,7 +149,7 @@ function wire() {
     const btn = e.target.closest('button'); if (!btn) return;
     const lb = btn.dataset.lb; if (!LOOKBACKS.includes(lb) || lb === state.lookback) return;
     state.lookback = lb; save();
-    renderChart(); renderControls(); // 룩백은 차트 창만(카드·판독은 전기간 고정)
+    renderCharts(); renderControls(); // 룩백은 차트 창만(카드·판독은 전기간 고정)
   });
 }
 
@@ -127,6 +168,11 @@ export async function initCurvePhase() {
     s3: spreadSeries(DATA.krYields.data, baseArr, 'y3'),
     s1: spreadSeries(DATA.krYields.data, baseArr, 'y1'),
   };
+  // US: 변수1 DGS2−EFFR(bp) · 5y5y(%) · TP(%) · 기대성분=5y5y−TP(%)
+  const usRows = DATA.usYields.data;
+  const fy = fwd5y5y(usRows);
+  const tp = DATA.usTp.data.map((r) => [r.date, r.tp10]);
+  US = { gap: colSpreadBp(usRows, 'dgs2', 'effr'), fy, tp, exp: seriesDiff(fy, tp) };
   wire();
   renderAll();
 }

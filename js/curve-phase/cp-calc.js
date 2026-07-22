@@ -60,18 +60,49 @@ export function spreadSeries(yieldRows, baseArr, tenorKey) {
   return out;
 }
 
-// [[date,bp]] → 최신값·percentile(전기간)·z250 요약.
+// [[date,val]] → 최신값·percentile(전기간)·z250·60일 변화 요약. chg60 은 series 원단위(비반올림).
 export function summarize(series, zWindow = 250) {
-  if (!series.length) return { last: null, date: null, pct: null, z: null, n: 0 };
+  if (!series.length) return { last: null, date: null, pct: null, z: null, chg60: null, n: 0 };
   const vals = series.map((d) => d[1]);
   const last = vals[vals.length - 1];
+  const chg60 = vals.length > 60 ? last - vals[vals.length - 1 - 60] : null;
   return {
     last,
     date: series[series.length - 1][0],
     pct: percentile(vals, last),      // 전기간 percentile
     z: zLatest(vals, zWindow),
+    chg60,                            // 60영업일 변화(원단위)
     n: series.length,
   };
+}
+
+// ── US 전용 (같은 파일 내 컬럼 조인 — carry-forward 불필요) ──
+// 한 행의 두 컬럼 차(bp). DGS2−EFFR 등. 결측 행 제외.
+export function colSpreadBp(rows, keyA, keyB) {
+  const out = [];
+  for (const r of rows) {
+    if (r[keyA] == null || r[keyB] == null) continue;
+    out.push([r.date, Math.round((r[keyA] - r[keyB]) * 100 * 10) / 10]);
+  }
+  return out;
+}
+
+// US 5y5y 근사 ≈ 2×10Y − 5Y (%, 레벨). par 커브 단순근사 — 레벨 편의 존재, 방향·z 추적 전용.
+export function fwd5y5y(rows) {
+  const out = [];
+  for (const r of rows) {
+    if (r.dgs10 == null || r.dgs5 == null) continue;
+    out.push([r.date, Math.round((2 * r.dgs10 - r.dgs5) * 1000) / 1000]);
+  }
+  return out;
+}
+
+// 두 [[date,val]] 시계열의 날짜 교집합에서 A−B (레벨). 기대성분 = 5y5y − ACM TP 용.
+export function seriesDiff(a, b) {
+  const mb = new Map(b.map((d) => [d[0], d[1]]));
+  const out = [];
+  for (const [d, v] of a) if (mb.has(d)) out.push([d, Math.round((v - mb.get(d)) * 1000) / 1000]);
+  return out;
 }
 
 // 밴드 분류(결정론 라벨). 변수1 판독 가이드용. 임계값은 초기값(관찰 후 조정, 각주 명기).
