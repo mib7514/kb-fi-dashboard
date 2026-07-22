@@ -13,9 +13,15 @@
 //  - 회사코드 '00000' = 그룹 대표커브 행, 그 외 = 발행사 행. 발행사명은 유일키(중복 시 경고).
 
 import { parseKbondQuotes } from './rv-parser.js';
+import { matchIssuer } from './rv-matcher.js';
+import { KBOND_ABBREVIATIONS } from './rv-abbrev.js';
+import { resolveReference, computeStats, buildAliases } from './rv-engine.js';
 
 const LS_KEY = 'rv-screener-mp';
 const LS_SESSION = 'rv-screener-session';
+
+let ALIASES = null; // 민평 issuers → matchIssuer용 (MP 로드/복원 시 캐시)
+const ensureAliases = () => { if (MP && !ALIASES) ALIASES = buildAliases(MP); return ALIASES; };
 // 테너 라벨은 헤더에서 읽되, 기대 순서 검증용 기준.
 const EXPECT_TENORS = ['3M', '6M', '9M', '1Y', '1.5Y', '2Y', '2.5Y', '3Y', '4Y', '5Y', '7Y', '10Y', '15Y', '20Y', '30Y'];
 
@@ -168,8 +174,10 @@ async function onFile(file) {
     const parsed = parseMinpyeong(buf, file.name);
     if (!parsed.counts.issuers) throw new Error('발행사 행 0 — 형식 확인');
     MP = parsed;
+    ALIASES = null; // 새 민평 → aliases 재빌드
     save();
     renderSummary();
+    renderQuotes(); // 매칭·기준수익률 재계산
   } catch (e) {
     hint.textContent = '';
     const warn = document.getElementById('mp-warn');
@@ -220,37 +228,96 @@ function residualYears(dateStr) {
 }
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
+const bp = (x) => (x == null ? null : Math.round(x * 10) / 10);
+const gapColor = (b) => (b == null ? '' : (b >= 15 ? 'var(--red)' : b <= -15 ? 'var(--ok)' : 'var(--muted)'));
+const METHOD_BADGE = {
+  issuer: '<span class="conf conf-high">발행사</span>',
+  group_fallback: '<span class="conf conf-medium">그룹폴백</span>',
+  unmatched: '<span class="conf conf-low">실패</span>',
+};
+
 function renderQuotes() {
   const res = document.getElementById('q-result');
   const exc = document.getElementById('q-excluded');
   const st = document.getElementById('q-stats');
   const qs = SESSION.quotes;
-  st.textContent = `당일 세션: 호가 ${qs.length}건 · 제외/미파싱 ${SESSION.unparsed.length}건 · ${SESSION.dateKey || todayKey()}`;
+  const today = SESSION.dateKey || todayKey();
+  const hasMP = !!MP;
+  const aliases = hasMP ? ensureAliases() : null;
+
+  st.textContent = `당일 세션: 호가 ${qs.length}건 · 제외/미파싱 ${SESSION.unparsed.length}건 · ${today}`
+    + (hasMP ? ` · 민평 ${MP.asOfLabel}` : ' · 민평 없음(매칭 대기)');
+
+  // 각 호가 → 기준수익률 해석(민평 있을 때만)
+  const rows = qs.map((q) => ({ q, ref: hasMP ? resolveReference(q, MP, aliases, KBOND_ABBREVIATIONS, matchIssuer, today) : null }));
+  const stats = hasMP ? computeStats(rows) : null;
 
   if (!qs.length) {
     res.innerHTML = SESSION.unparsed.length ? '' : '<div class="empty">아직 파싱된 호가가 없습니다. 위 입력창에 붙여넣고 [파싱]을 누르세요.</div>';
-  } else {
-    const rows = [...qs].reverse().map((q) => {
+  } else if (!hasMP) {
+    // 민평 없음 → Phase 2 파싱 뷰(매칭 컬럼 없음)
+    const trs = [...qs].reverse().map((q) => {
       const sd = SIDE[q.side] || { t: q.side, c: '' };
-      const ry = residualYears(q.maturity_date);
+      const ry = bp(residualYears(q.maturity_date, today));
       const sp = q.spread_type == null ? '—' : (q.spread_type === 'flat' ? 'flat' : `${q.spread_type} ${q.spread_value}`);
+      return `<tr><td class="${sd.c}">${sd.t}</td><td>${esc(q.issuer_raw) || '<span style="color:var(--red)">(추출실패)</span>'}</td>
+        <td class="mono">${esc(q.bond_code) || '—'}</td><td class="mono">${esc(q.rating) || '—'}</td>
+        <td class="num">${q.actual_yield ?? '—'}</td><td class="num">${q.minpyeong_yield ?? '—'}</td>
+        <td class="mono">${sp}</td><td class="mono">${q.maturity_date ? `${q.maturity_date}${ry != null ? ` (${ry}y)` : ''}` : '—'}</td>
+        <td><span class="conf conf-${q.parse_confidence}">${q.parse_confidence}</span></td></tr>`;
+    }).join('');
+    res.innerHTML = `<div class="notice" style="margin:0 0 10px">민평을 올리면 발행사 매칭·커브 보간·괴리가 계산됩니다.</div>
+      <div class="sec-title">파싱된 호가 <span class="cap">최신순 · 수량 컬럼 제외</span></div>
+      <table class="q"><thead><tr><th>방향</th><th>발행사(raw)</th><th>종목</th><th>등급</th>
+      <th class="num">실제%</th><th class="num">민평%</th><th>스프레드</th><th>잔존만기</th><th>신뢰도</th></tr></thead><tbody>${trs}</tbody></table>`;
+  } else {
+    // 민평 있음 → 매칭·기준수익률·괴리 뷰. 매칭 성공(발행사/그룹)만 본표, 실패는 별도 섹션.
+    const matched = rows.filter((r) => r.ref.method !== 'unmatched');
+    const failed = rows.filter((r) => r.ref.method === 'unmatched');
+
+    const trs = [...matched].reverse().map(({ q, ref }) => {
+      const sd = SIDE[q.side] || { t: q.side, c: '' };
+      const ry = ref.ry != null ? `${bp(ref.ry)}y` : '—';
+      const rf = ref.refYield != null ? ref.refYield.toFixed(3) : `<span style="color:var(--amber)">기준없음</span>`;
+      const emb = q.minpyeong_yield;
+      const dEmb = (emb != null && ref.refYield != null) ? bp((emb - ref.refYield) * 100) : null;
       return `<tr>
         <td class="${sd.c}">${sd.t}</td>
-        <td>${esc(q.issuer_raw) || '<span style="color:var(--red)">(추출실패)</span>'}</td>
+        <td>${esc(q.issuer_raw)}</td>
+        <td>${esc(ref.canonical || ref.group || '')} ${METHOD_BADGE[ref.method]}</td>
         <td class="mono">${esc(q.bond_code) || '—'}</td>
         <td class="mono">${esc(q.rating) || '—'}</td>
-        <td class="num">${q.actual_yield == null ? '—' : q.actual_yield}</td>
-        <td class="num">${q.minpyeong_yield == null ? '—' : q.minpyeong_yield}</td>
-        <td class="mono">${sp}</td>
-        <td class="mono">${q.maturity_date ? `${q.maturity_date}${ry != null ? ` (${ry}y)` : ''}` : '—'}</td>
+        <td class="mono">${q.maturity_date ? `${q.maturity_date} <span style="color:var(--muted)">${ry}</span>` : '—'}</td>
+        <td class="num">${emb ?? '—'}</td>
+        <td class="num">${rf}</td>
+        <td class="num" style="color:${gapColor(dEmb)}">${dEmb == null ? '—' : (dEmb > 0 ? '+' : '') + dEmb}</td>
         <td><span class="conf conf-${q.parse_confidence}">${q.parse_confidence}</span></td>
       </tr>`;
     }).join('');
-    res.innerHTML = `<div class="sec-title">파싱된 호가 <span class="cap">최신순 · 수량 컬럼 제외(파서가 항상 null)</span></div>
-      <table class="q"><thead><tr>
-        <th>방향</th><th>발행사(raw)</th><th>종목</th><th>등급</th>
-        <th class="num">실제%</th><th class="num">민평%</th><th>스프레드</th><th>잔존만기</th><th>신뢰도</th>
-      </tr></thead><tbody>${rows}</tbody></table>`;
+
+    const statsPanel = `<div class="stats" style="margin-bottom:12px">
+      <div class="stat"><div class="stat-label">매칭률</div>
+        <div class="stat-main" style="font-size:17px">${stats.n ? Math.round((stats.by.issuer + stats.by.group_fallback) / stats.n * 100) : 0}<span class="stat-unit">%</span></div>
+        <div class="stat-sub">발행사 ${stats.by.issuer} · 그룹폴백 ${stats.by.group_fallback} · 실패 ${stats.by.unmatched}</div></div>
+      <div class="stat"><div class="stat-label">기준없음(외삽/결측)</div>
+        <div class="stat-main" style="font-size:17px">${stats.noRef}<span class="stat-unit">건</span></div>
+        <div class="stat-sub">매칭됐으나 보간 불가</div></div>
+      <div class="stat"><div class="stat-label">내장민평 보유</div>
+        <div class="stat-main" style="font-size:17px">${Math.round(stats.embeddedPct)}<span class="stat-unit">%</span></div>
+        <div class="stat-sub">${stats.embeddedCount}/${stats.n} 호가</div></div>
+      <div class="stat"><div class="stat-label">내장민평 − 보간 (bp)</div>
+        <div class="stat-main" style="font-size:17px">${stats.diffMedian == null ? '—' : bp(stats.diffMedian)}<span class="stat-unit">중앙값</span></div>
+        <div class="stat-sub">최대 ${stats.diffMaxAbs == null ? '—' : bp(stats.diffMaxAbs)}bp · ±15↑ ${stats.diffOver15}건 (N=${stats.diffN})</div></div>
+    </div>`;
+
+    res.innerHTML = statsPanel
+      + `<div class="sec-title">매칭·기준수익률 <span class="cap">최신순 · 기준수익률=커브 선형보간(외삽 금지) · 내장민평−보간 = 호가내장 민평 − 보간값</span></div>`
+      + `<table class="q"><thead><tr>
+        <th>방향</th><th>발행사(raw)</th><th>매칭</th><th>종목</th><th>등급</th><th>잔존만기</th>
+        <th class="num">내장민평%</th><th class="num">기준수익률%</th><th class="num">내장−보간bp</th><th>신뢰도</th>
+      </tr></thead><tbody>${trs}</tbody></table>`
+      + (failed.length ? `<div class="sec-title">매칭 실패 <span class="cap">발행사·그룹 모두 매칭 실패 — 버리지 않고 표시</span></div>`
+        + [...failed].reverse().map(({ q }) => `<div class="excluded-line"><span class="why">[매칭실패]</span>${esc(q.issuer_raw)} · ${esc(q.raw_line).slice(0, 60)}</div>`).join('') : '');
   }
 
   if (!SESSION.unparsed.length) { exc.innerHTML = ''; return; }
@@ -279,10 +346,11 @@ function wire() {
     e.target.value = ''; // 같은 파일 재선택 허용
   });
   document.getElementById('mp-clear').addEventListener('click', () => {
-    MP = null;
+    MP = null; ALIASES = null;
     try { localStorage.removeItem(LS_KEY); } catch { /* noop */ }
     document.getElementById('mp-hint').textContent = '인포맥스 4788 화면 내보내기(.xlsx). 브라우저 안에서만 처리 — 서버 전송·저장 없음.';
     renderSummary();
+    renderQuotes(); // 매칭 컬럼 제거
   });
   document.getElementById('q-parse').addEventListener('click', onParse);
   document.getElementById('q-clear-session').addEventListener('click', () => {
