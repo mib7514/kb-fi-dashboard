@@ -11,6 +11,7 @@ export const NAV_ITEMS = [
   { id: 'taylor', title: 'Taylor 압력', file: 'taylor.html', desc: '수정 Taylor 적정금리 − 기준금리 갭 vs 국고 3년 (ECOS 근원CPI·GDP·기준금리)' },
   { id: 'gg1', title: '국민소득 갭', file: 'gg1-income-gap.html', desc: '교역조건(수출가격÷수입가격)이 국민소득(GDI)에 얹는 %p — 갭 프록시·β 회귀 (ECOS)' },
   { id: 'curve-rv', title: 'Curve RV', file: 'curve-rv.html', desc: '크레딧 스프레드 섹터×만기 상대가치 (캐리·롤·percentile·백테스트)' },
+  { id: 'curve-phase', title: 'Curve Phase', file: 'curve-phase.html', desc: '커브 국면 — 프라이싱 갭·r* 재조정·텀프리미엄 3변수로 플랫/스팁 국면 판별 (ECOS+FRED, KR 주력·US 참고)' },
   { id: 'us-credit-spread', title: 'US Credit Spread', file: 'us-credit-spread.html', desc: '미국 IG·HY·등급별 OAS + 파생 스프레드(BBB−A·A−AA·장기−전체) z250 — 하이퍼스케일러 발행압력 측정 (FRED BAML)' },
   { id: 'rv-screener', title: 'RV 스크리너', file: 'rv-screener.html', desc: 'K본드 호가 vs 민평 그리드 상대가치 — 발행사 커브 보간·횡단면 조정괴리로 수급 이상치 판별 (클라이언트 온리)' },
   { id: 'onoff', title: 'On/Off 스프레드', file: 'onoff-spread.html', desc: '국고 3년 지표물 커브조정 상대가치 — 세대 이벤트타임 비교' },

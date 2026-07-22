@@ -50,3 +50,8 @@ export async function loadCurveData() {
     return null;
   }
 }
+
+// 사이클 정의(정적). 부재 허용 — 오버레이만 비고 나머지 렌더. null 반환 시 오버레이 숨김.
+export async function loadCycles() {
+  try { return await fetchJson('data/curve/cycles.json'); } catch { return null; }
+}

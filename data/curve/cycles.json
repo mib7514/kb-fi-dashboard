@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "module": "CP",
+    "note": "사이클 오버레이 정적 정의. t0 = 첫 인상일(T=0). KR=3s10s(10Y−3Y), US=2s10s(10Y−2Y). T−120~T+250 영업일 정렬.",
+    "source": "T=0 — KR: ECOS 기준금리 인상 개시일(데이터 검증) · US: FOMC 인상 결정일",
+    "caption_note": "캡션은 사이클 성격 요약(역사 원형). Δ는 데이터에서 T0→창끝 실측(cp-overlay 산출)."
+  },
+  "kr": [
+    { "id": "2005", "t0": "2005-10-11", "label": "2005-10", "current": false, "caption": "정책 정상화 인상 개시" },
+    { "id": "2010", "t0": "2010-07-09", "label": "2010-07", "current": false, "caption": "금융위기 후 정상화 인상" },
+    { "id": "2021", "t0": "2021-08-26", "label": "2021-08", "current": false, "caption": "완화 축소 선제 인상 — 앞단 급반영" },
+    { "id": "2026", "t0": "2026-07-16", "label": "2026-07 (현재)", "current": true, "caption": "현 사이클 — T=0 2026-07-16" }
+  ],
+  "us": [
+    { "id": "1994", "t0": "1994-02-04", "label": "1994-02", "current": false, "ref": false, "caption": "베어 스팁→베어 플랫, 롱엔드 +240bp" },
+    { "id": "2016", "t0": "2016-12-14", "label": "2016-12", "current": false, "ref": false, "caption": "TP 주도 스팁" },
+    { "id": "2015", "t0": "2015-12-16", "label": "2015-12 (참고)", "current": false, "ref": true, "caption": "첫 리프트오프 — 1회 후 장기 휴지" },
+    { "id": "2022", "t0": "2022-03-16", "label": "2022-03 (참고)", "current": false, "ref": true, "caption": "고인플레 급속 인상 — 강한 베어 플랫/역전" }
+  ]
+}

@@ -82,3 +82,21 @@ export function renderDecompChart(divId, points, comps) {
     baseLayout({ barmode: 'relative', annotations: anno }),
     { displayModeBar: false, responsive: true });
 }
+
+// 사이클 오버레이: x=세션 오프셋(T=0 대비), y=기울기 bp. 현재=굵은 선, 과거=반투명, 참고=점선.
+//   overlays: [{ label, color, current, ref, points:[{offset,bp}] }].
+export function renderOverlayChart(divId, overlays) {
+  const traces = overlays.filter((o) => o.points.length).map((o) => ({
+    x: o.points.map((p) => p.offset), y: o.points.map((p) => p.bp), name: o.label, mode: 'lines',
+    line: { color: o.color, width: o.current ? 2.6 : 1.4, dash: o.ref ? 'dot' : 'solid' },
+    opacity: o.current ? 1 : 0.5,
+    hovertemplate: `T%{x:+d}세션<br>${o.label} %{y:.1f}bp<extra></extra>`,
+  }));
+  const layout = baseLayout({
+    shapes: [{ type: 'line', xref: 'x', yref: 'paper', x0: 0, x1: 0, y0: 0, y1: 1,
+      line: { color: C.axis, width: 1, dash: 'dash' } }],
+    xaxis: { type: 'linear', gridcolor: C.grid, linecolor: C.axis, zeroline: false, tickfont: { size: 10 },
+      title: { text: 'T=0(첫 인상일) 대비 세션(영업일)', font: { size: 11 } } },
+  });
+  Plotly.newPlot(divId, traces, layout, { displayModeBar: false, responsive: true });
+}

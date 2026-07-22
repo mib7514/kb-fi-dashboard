@@ -3,10 +3,11 @@
 //   + 룩백 토글(1y/3y/10y/all, 기본 3y) + 스프레드 시계열 차트 + 판독 가이드(밴드).
 //   US 패널(변수1/2/3)·5y5y·분해·판정·오버레이는 Phase 3~6 에서 추가.
 
-import { loadCurveData } from './cp-data.js';
+import { loadCurveData, loadCycles } from './cp-data.js';
 import { spreadSeries, colSpreadBp, fwd5y5y, seriesDiff, decompKR, decompUS, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
-import { C, LOOKBACKS, renderSpreadChart, renderDecompChart } from './cp-charts.js';
+import { C, LOOKBACKS, renderSpreadChart, renderDecompChart, renderOverlayChart } from './cp-charts.js';
 import { judgeKR, judgeUS, realizedKR } from './cp-judge.js';
+import { buildOverlay } from './cp-overlay.js';
 
 const LS_KEY = 'curve-phase';
 const HIST_KEY = 'cp-judge-history';
@@ -16,6 +17,10 @@ let SERIES = null; // KR { s3:[[date,bp]], s1:[[date,bp]] }
 let KRB = null;    // KR 뒷단 { fy:%, s3010:bp }
 let US = null;     // US { gap:bp, fy:%, tp:%, exp:% }
 let DECOMP = null; // { kr:[{date,front,back,total}], us:[{date,front,backExp,backTp,total}] }
+let OVERLAY = null; // { kr:[...cycles], us:[...cycles] } 또는 null(cycles.json 부재)
+
+// 사이클 색(현재 제외). 현재 사이클은 accent 굵은 선.
+const CYCLE_COLORS = ['#f0883e', '#3fb950', '#a371f7', '#f85149', '#8b949e'];
 
 const fmt = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : x.toFixed(d));
 const signed = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : (x >= 0 ? '+' : '') + x.toFixed(d));
@@ -161,6 +166,32 @@ function renderDecompCharts() {
   ]);
 }
 
+// ── 사이클 오버레이 ──
+function assignColors(overlays) {
+  let i = 0;
+  return overlays.map((o) => ({ ...o, color: o.current ? C.accent : CYCLE_COLORS[i++ % CYCLE_COLORS.length] }));
+}
+function renderCaptions(id, overlays) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = overlays.map((o) => {
+    const d = o.deltaBp == null ? '' : `<span class="cyc-delta">Δ ${signed(o.deltaBp, 1)}bp</span>`;
+    const win = o.lastOffset == null ? '' : ` <span class="cyc-win">(T0→T+${o.lastOffset})</span>`;
+    return `<div class="cyc-row">
+        <span class="cyc-swatch" style="background:${o.color}${o.current ? '' : ';opacity:.55'}"></span>
+        <span class="cyc-lab">${o.label}</span>
+        <span class="cyc-cap">${o.caption}</span>${d}${win}
+      </div>`;
+  }).join('');
+}
+function renderOverlays() {
+  if (!OVERLAY) return;
+  renderOverlayChart('chart-kr-overlay', OVERLAY.kr);
+  renderOverlayChart('chart-us-overlay', OVERLAY.us);
+  renderCaptions('kr-caps', OVERLAY.kr);
+  renderCaptions('us-caps', OVERLAY.us);
+}
+
 // ── US 패널 (참고·식별용) ──
 function renderUSCards() {
   const gap = summarize(US.gap); // bp — 변수1
@@ -217,7 +248,7 @@ function renderCharts() { renderKRChart(); renderKRBackCharts(); renderUSCharts(
 function renderAll() {
   renderVerdict();
   renderCards(); renderGuide(); renderKRBackCards(); renderUSCards();
-  renderCharts(); renderControls(); renderFootnote();
+  renderCharts(); renderOverlays(); renderControls(); renderFootnote();
 }
 
 function save() {
@@ -263,6 +294,14 @@ export async function initCurvePhase() {
   US = { gap: colSpreadBp(usRows, 'dgs2', 'effr'), fy, tp, exp: seriesDiff(fy, tp) };
   // 분해(20d 롤링, 각국 자체 거래일 축 — 크로스 조인 없음)
   DECOMP = { kr: decompKR(krRows, baseArr), us: decompUS(usRows, DATA.usTp.data) };
+  // 사이클 오버레이(cycles.json 부재 허용): KR 3s10s(10Y−3Y) · US 2s10s(10Y−2Y)
+  const cycles = await loadCycles();
+  if (cycles) {
+    OVERLAY = {
+      kr: assignColors(buildOverlay(krRows, 'y10', 'y3', cycles.kr || [])),
+      us: assignColors(buildOverlay(usRows, 'dgs10', 'dgs2', cycles.us || [])),
+    };
+  }
   wire();
   renderAll();
 }
