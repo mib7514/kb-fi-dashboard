@@ -256,21 +256,24 @@ function renderQuotes() {
   if (!qs.length) {
     res.innerHTML = SESSION.unparsed.length ? '' : '<div class="empty">아직 파싱된 호가가 없습니다. 위 입력창에 붙여넣고 [파싱]을 누르세요.</div>';
   } else if (!hasMP) {
-    // 민평 없음 → Phase 2 파싱 뷰(매칭 컬럼 없음)
+    // 민평 미업로드 → 내장민평 기반 원괴리는 계산(그리드 불요), 보간폴백·검증·버킷 조정은 업로드 후 활성.
     const trs = [...qs].reverse().map((q) => {
       const sd = SIDE[q.side] || { t: q.side, c: '' };
       const ry = bp(residualYears(q.maturity_date, today));
       const sp = q.spread_type == null ? '—' : (q.spread_type === 'flat' ? 'flat' : `${q.spread_type} ${q.spread_value}`);
+      const qy = quoteYield(q).y;
+      const rawGap = (qy != null && q.minpyeong_yield != null) ? bp((qy - q.minpyeong_yield) * 100) : null;
       return `<tr><td class="${sd.c}">${sd.t}</td><td>${esc(q.issuer_raw) || '<span style="color:var(--red)">(추출실패)</span>'}</td>
         <td class="mono">${esc(q.bond_code) || '—'}</td><td class="mono">${esc(q.rating) || '—'}</td>
-        <td class="num">${q.actual_yield ?? '—'}</td><td class="num">${q.minpyeong_yield ?? '—'}</td>
+        <td class="num">${q.minpyeong_yield ?? '—'}</td><td class="num">${qy == null ? '—' : qy.toFixed(3)}</td>
+        <td class="num" style="color:${gapColor(rawGap)}">${rawGap == null ? '—' : (rawGap > 0 ? '+' : '') + rawGap}</td>
         <td class="mono">${sp}</td><td class="mono">${q.maturity_date ? `${q.maturity_date}${ry != null ? ` (${ry}y)` : ''}` : '—'}</td>
         <td><span class="conf conf-${q.parse_confidence}">${q.parse_confidence}</span></td></tr>`;
     }).join('');
-    res.innerHTML = `<div class="notice" style="margin:0 0 10px">민평을 올리면 발행사 매칭·커브 보간·괴리가 계산됩니다.</div>
-      <div class="sec-title">파싱된 호가 <span class="cap">최신순 · 수량 컬럼 제외</span></div>
+    res.innerHTML = `<div class="notice" style="margin:0 0 10px">민평 미업로드 — <b>내장민평 기반 괴리는 계산되나 보간 폴백·검증 플래그는 민평 업로드 후 활성화</b>됩니다. (횡단면 버킷 조정괴리·발행사 매칭도 업로드 후)</div>
+      <div class="sec-title">파싱된 호가 <span class="cap">최신순 · 원괴리(내장민평) = 호가수익률 − 내장민평 · 수량 컬럼 제외</span></div>
       <table class="q"><thead><tr><th>방향</th><th>발행사(raw)</th><th>종목</th><th>등급</th>
-      <th class="num">실제%</th><th class="num">민평%</th><th>스프레드</th><th>잔존만기</th><th>신뢰도</th></tr></thead><tbody>${trs}</tbody></table>`;
+      <th class="num">내장민평%</th><th class="num">호가%</th><th class="num">원괴리bp</th><th>스프레드</th><th>잔존만기</th><th>신뢰도</th></tr></thead><tbody>${trs}</tbody></table>`;
   } else {
     // 민평 있음 → 횡단면 판별. 괴리=호가수익률−(내장민평 ?? 보간). 버킷 중앙값 차감→조정괴리.
     const { gaps, bm, offers, bids, unrankable } = crossSectional(rows, quoteYield);

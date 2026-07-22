@@ -27,6 +27,13 @@
   .notice { font-size: 12px; color: var(--amber); background: rgba(240,136,62,0.08);
     border: 1px solid rgba(240,136,62,0.25); border-radius: 8px; padding: 9px 13px; margin-bottom: 18px; }
 
+  details.usage { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 14px; margin-bottom: 18px; }
+  details.usage summary { font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--text); }
+  details.usage ol { margin: 10px 0 6px; padding-left: 20px; font-size: 12.5px; color: var(--muted); line-height: 1.8; }
+  details.usage ol b { color: var(--text); }
+  details.usage .usage-note { font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 8px; }
+  details.usage .mono { font-family: var(--mono); color: var(--text); }
+
   .upload { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
     background: var(--panel); border: 1px dashed var(--border-2); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
   .upload label.btn { font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 7px;
@@ -97,6 +104,16 @@
   <p class="tagline">인포맥스 민평 그리드를 올리고 호가를 붙여넣어, 발행사 커브 대비 괴리를 횡단면(그날 세션)으로 판별 · 방향성 무관, 수급 이상치 탐색 · 측정만</p>
 
   <div class="notice">민평은 전일 기준. 비유동 종목은 민평 자체가 낡았을 수 있어 괴리폭은 참고치.</div>
+
+  <details class="usage">
+    <summary>사용법 (팀원용) — 일일 운용 순서</summary>
+    <ol>
+      <li><b>① 민평 업로드</b> — 하루 1회, 케이본드 컴퓨터에서 인포맥스 <span class="mono">4788</span> 화면을 xlsx로 내보내 올린다. (발행사 커브·그룹 대표커브 적재)</li>
+      <li><b>② 호가 붙여넣기</b> — 장중 K본드 메신저 호가를 수시로 붙여넣고 [파싱]. 같은 날은 세션에 누적되고, 같은 호가는 최신 것으로 갱신된다.</li>
+      <li><b>③ 방향별 리스트 확인</b> — 매도(싸게 나온 순)·매수(비싸게 사려는 순) 조정괴리 순위에서 수급 이상치를 본다. "왜 싸게 나왔나·잡을 만한가"는 사용자 판단.</li>
+    </ol>
+    <div class="usage-note">데이터는 브라우저 밖으로 나가지 않는다(서버·전송·커밋 없음). 세션은 날짜가 바뀌면 자동 초기화된다.</div>
+  </details>
 
   <!-- 민평 업로드 -->
   <div class="upload">
