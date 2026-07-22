@@ -10,6 +10,7 @@ export const NAV_ITEMS = [
   { id: 'diffusion', title: '물가 확산', file: 'inflation-diffusion.html', desc: '물가가 얼마나 넓게 오르나 — 오르는 품목 비율(미국 CPI·PCE)로 sticky/착시 판별' },
   { id: 'taylor', title: 'Taylor 압력', file: 'taylor.html', desc: '수정 Taylor 적정금리 − 기준금리 갭 vs 국고 3년 (ECOS 근원CPI·GDP·기준금리)' },
   { id: 'gg1', title: '국민소득 갭', file: 'gg1-income-gap.html', desc: '교역조건(수출가격÷수입가격)이 국민소득(GDI)에 얹는 %p — 갭 프록시·β 회귀 (ECOS)' },
+  { id: 'ga1', title: '연간 GDP 환산', file: 'gdp-annual.html', desc: '분기 전기비(계절조정) 실적 체인 + 잔여분기 시나리오로 연간 GDP 성장률 순수 산술 환산 (입력형·외부 fetch 없음)' },
   { id: 'curve-rv', title: 'Curve RV', file: 'curve-rv.html', desc: '크레딧 스프레드 섹터×만기 상대가치 (캐리·롤·percentile·백테스트)' },
   { id: 'curve-phase', title: 'Curve Phase', file: 'curve-phase.html', desc: '커브 국면 — 프라이싱 갭·r* 재조정·텀프리미엄 3변수로 플랫/스팁 국면 판별 (ECOS+FRED, KR 주력·US 참고)' },
   { id: 'us-credit-spread', title: 'US Credit Spread', file: 'us-credit-spread.html', desc: '미국 IG·HY·등급별 OAS + 파생 스프레드(BBB−A·A−AA·장기−전체) z250 — 하이퍼스케일러 발행압력 측정 (FRED BAML)' },

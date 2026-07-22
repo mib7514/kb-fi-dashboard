@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>연간 GDP 환산기 | FI Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
+    --border: #21262d; --border-2: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --red: #f85149; --ok: #3fb950; --forecast: #f0883e;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { padding: 28px 22px 80px; line-height: 1.5; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--forecast); color: #08111f; }
+  .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
+  .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+
+  /* 헤드라인 히어로 */
+  .headline { background: linear-gradient(180deg, rgba(240,136,62,0.10), var(--panel)); border: 1px solid var(--border-2);
+    border-radius: 12px; padding: 20px 22px; margin-bottom: 16px; }
+  .hl-kicker { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .hl-kicker .mono { font-family: var(--mono); color: var(--text); }
+  .hl-value { font-size: 46px; font-weight: 700; font-family: var(--mono); letter-spacing: -0.02em; line-height: 1.05; }
+  .hl-unit { font-size: 20px; color: var(--muted); margin-left: 4px; font-weight: 400; }
+  .hl-word { font-size: 16px; font-family: var(--sans); font-weight: 600; margin-left: 12px; vertical-align: middle; color: var(--muted); }
+  .hl-sub { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  /* 이미 확보된 성장 강조 */
+  .secured { margin-bottom: 20px; }
+  .secured-inner { background: var(--panel); border: 1px solid var(--ok); border-radius: 10px; padding: 15px 18px;
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .secured-label { font-size: 13px; color: var(--text); font-weight: 600; }
+  .secured-label .sub { font-size: 11px; color: var(--muted); font-weight: 400; }
+  .secured-value { font-size: 30px; font-weight: 700; font-family: var(--mono); color: var(--ok); letter-spacing: -0.01em; }
+  .secured-value .unit { font-size: 14px; color: var(--muted); margin-left: 2px; font-weight: 400; }
+  .secured-note { font-size: 11px; color: var(--muted); flex-basis: 100%; }
+
+  /* 시나리오 컨트롤 */
+  .section-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 4px 0 8px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chip { background: var(--panel); border: 1px solid var(--border-2); border-radius: 8px; padding: 9px 14px;
+    cursor: pointer; color: var(--muted); font-family: var(--mono); display: flex; flex-direction: column; align-items: center; gap: 2px;
+    transition: border-color .12s, background .12s, color .12s; }
+  .chip:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+  .chip.active { border-color: var(--forecast); background: rgba(240,136,62,0.12); color: var(--text); }
+  .chip-q { font-size: 11px; color: var(--muted); }
+  .chip.active .chip-q { color: var(--forecast); }
+  .chip-a { font-size: 19px; font-weight: 600; }
+  .chip-toggle { flex-direction: row; align-items: center; font-size: 12px; padding: 9px 14px; }
+
+  .custom-wrap { margin-bottom: 20px; }
+  .cin-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+  .cin { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .cin-q { color: var(--text); }
+  .cin input { width: 62px; background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 6px;
+    color: var(--text); font-family: var(--mono); font-size: 13px; padding: 5px 7px; text-align: right; }
+  .cin input:disabled { opacity: 0.4; }
+  .cin-out { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .cin-out b { color: var(--forecast); font-size: 16px; }
+
+  /* 분기 체인 */
+  .chain-card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 14px 16px; margin-bottom: 16px; }
+  .chain-card h2 { font-size: 14px; margin: 0 0 4px; }
+  .chain-card .cap { font-size: 11.5px; color: var(--muted); }
+  .chain { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 8px; margin-top: 12px; }
+  .qcell { border-radius: 8px; padding: 10px 8px; text-align: center; border: 1px solid var(--border); }
+  .qcell.act { background: var(--panel-2); }
+  .qcell.scen { background: rgba(240,136,62,0.08); border-color: rgba(240,136,62,0.4); border-style: dashed; }
+  .qc-q { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .qc-q .tag { font-size: 9px; background: var(--accent); color: #08111f; padding: 0 4px; border-radius: 3px; font-weight: 700; }
+  .qc-v { font-size: 18px; font-weight: 600; font-family: var(--mono); margin: 3px 0; }
+  .qcell.scen .qc-v { color: var(--forecast); }
+  .qc-u { font-size: 10px; color: var(--muted); margin-left: 1px; font-weight: 400; }
+  .qc-t { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .qcell.scen .qc-t { color: var(--forecast); }
+
+  .footnote { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.7; }
+  .footnote .k { font-family: var(--mono); color: var(--text); }
+  .footnote code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
+  .footnote a { color: var(--accent); text-decoration: none; }
+  .footnote a:hover { text-decoration: underline; }
+  .footnote > div { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="eyebrow">
+    <span class="step">ARITHMETIC</span>
+    <span class="ctx">순수 산술 · 분기 전기비 체인 → 연간 GDP 환산</span>
+  </div>
+  <h1>연간 GDP 환산기</h1>
+  <p class="tagline">"이대로 가면 연간 몇 %인가" — 계절조정 실질 GDP 전기비 실적 + 잔여분기 가정을 연쇄로 환산 · 전망 아님, 결정론적 산술 · 외부 데이터 없음</p>
+
+  <!-- 1) 헤드라인 -->
+  <div class="headline" id="headline"></div>
+
+  <!-- 2) 이미 확보된 성장 -->
+  <div class="secured" id="secured"></div>
+
+  <!-- 3) 시나리오 -->
+  <div class="section-label">잔여분기 균일 시나리오 (프리셋)</div>
+  <div class="chips" id="presets"></div>
+
+  <div class="custom-wrap">
+    <div class="section-label">잔여분기 개별 입력 (커스텀)</div>
+    <div id="custom"></div>
+  </div>
+
+  <!-- 4) 분기 체인 -->
+  <div class="chain-card">
+    <div class="chain-head">
+      <h2>분기 전기비 체인 — 실적 vs 가정</h2>
+      <span class="cap">실선 = 한은 공표 실적 · 점선(주황) = 사용자 지정 잔여분기 가정</span>
+    </div>
+    <div class="chain" id="chain"></div>
+  </div>
+
+  <!-- 5) 각주 -->
+  <div class="footnote" id="footnote"></div>
+</div>
+
+<!-- 공통 내비게이션 -->
+<script type="module" src="js/nav.js"></script>
+<!-- app (ES module) -->
+<script type="module">
+  import { initGA1 } from './js/ga1-ui.js';
+  initGA1();
+</script>
+</body>
+</html>

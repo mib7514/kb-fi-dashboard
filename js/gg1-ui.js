@@ -141,7 +141,9 @@ function renderControls() {
     + `<div>줄다리기 차트의 수출·수입물가는 <span class="k">계약통화기준</span>(환율효과 제거) 보조지표 — `
     + `순상품교역조건과 가중·연쇄식 차이로 정확히 일치하진 않는다.</div>`
     + `<div>출처: 전량 ECOS. 순상품교역조건 403Y005 · 수출/수입물가 402Y014·401Y015 · 실질 GDP/GDI 200Y106(원계열). `
-    + `업데이트 <span class="k">${DATA.meta.last_monthly}</span>(월간) · <span class="k">${DATA.meta.last_quarter}</span>(분기).</div>`;
+    + `업데이트 <span class="k">${DATA.meta.last_monthly}</span>(월간) · <span class="k">${DATA.meta.last_quarter}</span>(분기).</div>`
+    + `<div>이 모듈은 갭 항(GDI−GDP)만 측정한다. GDP 레벨 경로 연간 환산은 `
+    + `<a href="gdp-annual.html" style="color:var(--accent);text-decoration:none">연간 GDP 환산기</a> 참조.</div>`;
 }
 
 function renderAll() { renderHeadline(); renderTug(); renderGap(); renderControls(); }
