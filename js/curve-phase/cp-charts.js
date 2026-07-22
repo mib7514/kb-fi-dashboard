@@ -1,0 +1,56 @@
+// cp-charts.js — Curve Phase Monitor 차트 렌더링(Plotly, vendor 전역). ES module.
+//   사이트 공용 토큰·baseLayout 규약 준수. DESIGN.md: 모든 시계열 차트 끝점 값 라벨 필수(동적 바인딩).
+//   Phase 2: 프라이싱 갭 스프레드(bp) 다선 차트. 룩백 슬라이스는 세션수 기준.
+
+export const C = {
+  accent: '#58a6ff', up: '#3fb950', amber: '#f0883e', red: '#f85149', purple: '#a371f7',
+  grid: '#21262d', axis: '#484f58', muted: '#8b949e', text: '#c9d1d9',
+};
+const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+
+// 룩백 → 세션수(영업일). all 은 전체.
+export const LOOKBACKS = ['1y', '3y', '10y', 'all'];
+export const LOOKBACK_LABEL = { '1y': '1Y', '3y': '3Y', '10y': '10Y', all: '전체' };
+const SESSIONS = { '1y': 252, '3y': 756, '10y': 2520 };
+export const sliceLookback = (data, lookback) =>
+  (lookback === 'all' ? data : data.slice(-(SESSIONS[lookback] || data.length)));
+
+const baseLayout = (extra = {}) => ({
+  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+  font: { color: C.muted, family: FONT, size: 11 },
+  margin: { l: 48, r: 54, t: 10, b: 32 }, // r 여유 = 끝점 라벨 공간
+  legend: { orientation: 'h', x: 0, y: 1.1, font: { size: 11 } },
+  hovermode: 'x unified',
+  xaxis: { type: 'date', gridcolor: C.grid, linecolor: C.axis, zeroline: false, tickfont: { size: 10 } },
+  yaxis: { gridcolor: C.grid, linecolor: C.axis, zeroline: true, zerolinecolor: C.axis, tickfont: { size: 10 },
+    title: { text: 'bp', font: { size: 11 } } },
+  ...extra,
+});
+
+// 끝점 값 라벨(DESIGN.md 필수). 여러 라벨이 겹치면 세로로 최소 간격 벌림.
+function endpointAnnotations(traces) {
+  const pts = traces
+    .filter((t) => t.x.length)
+    .map((t) => ({ x: t.x[t.x.length - 1], y: t.y[t.y.length - 1], color: t.line.color }))
+    .sort((a, b) => b.y - a.y);
+  return pts.map((p) => ({
+    x: p.x, y: p.y, xref: 'x', yref: 'y',
+    text: `${p.y > 0 ? '+' : ''}${p.y.toFixed(1)}`,
+    showarrow: false, xanchor: 'left', xshift: 6,
+    font: { family: FONT, size: 10.5, color: p.color },
+  }));
+}
+
+// lines: [{ name, color, data:[[date,bp]] }]. divId 에 렌더.
+export function renderSpreadChart(divId, lines, lookback) {
+  const traces = lines.map((l) => {
+    const d = sliceLookback(l.data, lookback);
+    return {
+      x: d.map((r) => r[0]), y: d.map((r) => r[1]), name: l.name, mode: 'lines',
+      line: { color: l.color, width: 1.7 },
+      hovertemplate: `%{x|%Y-%m-%d}<br>${l.name} %{y:.1f}bp<extra></extra>`,
+    };
+  });
+  Plotly.newPlot(divId, traces, baseLayout({ annotations: endpointAnnotations(traces) }),
+    { displayModeBar: false, responsive: true });
+}
