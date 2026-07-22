@@ -40,6 +40,52 @@
   .verdict .v-hist-title { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; }
   .verdict .v-hist-row { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-bottom: 2px; }
 
+  /* 히어로 */
+  .hero { background: var(--panel); border: 1px solid var(--border-2); border-left-width: 3px; border-radius: 12px; padding: 20px 22px; margin-bottom: 26px; }
+  .hero.tone-flat { border-left-color: var(--accent); }
+  .hero.tone-steep { border-left-color: var(--amber); }
+  .hero.tone-warn { border-left-color: var(--red); }
+  .hero.tone-neutral { border-left-color: var(--muted); }
+  .hero .h-verdict { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+  .hero .h-verdict b { color: var(--text); font-size: 14px; }
+  .hero .h-paren { color: var(--muted); font-weight: 400; }
+  .hero .h-conclusion { font-size: 16px; line-height: 1.6; letter-spacing: -0.01em; }
+  .hero .h-realized { font-size: 13px; margin-top: 12px; font-family: var(--mono); color: var(--text); }
+  .hero .h-diverge { font-size: 12px; margin-top: 8px; color: var(--amber); }
+  .hero .h-dates { font-size: 10.5px; color: var(--muted); margin-top: 10px; font-family: var(--mono); }
+  .hero .h-dates .k { color: var(--text); }
+
+  /* Q 섹션 */
+  .q-sec { margin: 30px 0 0; }
+  .q-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  .q-num { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 5px; background: var(--accent); color: #08111f; }
+  .q-head h2 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
+  .q-blurb { font-size: 13.5px; color: var(--text); line-height: 1.65; margin: 8px 0 14px; }
+  .q-note { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 2px 0 14px; padding-left: 10px; border-left: 2px solid var(--border-2); }
+
+  /* 게이지 */
+  .gauge-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .gauge-card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px 4px; position: relative; }
+  .gauge-title { font-size: 12px; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+  .gauge-box { width: 100%; height: 96px; }
+  .cp-refname { position: absolute; right: 10px; bottom: 6px; font-size: 9.5px; color: var(--muted); font-family: var(--mono); }
+
+  /* 상세 접힘 */
+  details.adv { margin: 6px 0 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); }
+  details.adv > summary { cursor: pointer; font-size: 12px; color: var(--muted); padding: 9px 13px; list-style: none; user-select: none; }
+  details.adv > summary::-webkit-details-marker { display: none; }
+  details.adv > summary::before { content: '▸ '; color: var(--muted); }
+  details.adv[open] > summary::before { content: '▾ '; }
+  details.adv[open] > summary { border-bottom: 1px solid var(--border); color: var(--text); }
+  details.adv .adv-body { padding: 12px; }
+
+  /* 용어 대응표 */
+  table.terms { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.terms th, table.terms td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  table.terms th { font-size: 11px; color: var(--muted); }
+  table.terms td.ref { font-family: var(--mono); color: var(--muted); }
+  table.terms tbody tr:last-child td { border-bottom: none; }
+
   .panel-head { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 12px; }
   .panel-head h2 { font-size: 16px; margin: 0; }
   .panel-head .badge { font-size: 10px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 4px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border-2); }
@@ -98,145 +144,127 @@
     <span class="ctx">측정 레이어 · 커브 국면 · 지금이 역사적으로 플랫/스팁이 나온 국면인가</span>
   </div>
   <h1>Curve Phase</h1>
-  <p class="tagline">기울기 변화를 프라이싱 갭·r* 재조정·텀프리미엄 3변수로 측정 · KR 주력, US 참고·식별용 · 측정만(결정론 밴드 라벨), 포지션 제안 없음</p>
+  <p class="tagline">지금이 역사적으로 커브가 눌리던(플랫)·서던(스팁) 국면인지 세 가지 질문으로 측정 · 한국 중심, 미국은 참고 · 측정만 하고 포지션은 제안하지 않습니다</p>
 
-  <!-- ── 판정 카드 (최상단): KR 라벨 大 + US 부가 小 + 실현(20d) + 기준일 ── -->
-  <div class="verdict" id="verdict"></div>
+  <!-- ── 히어로: 결론 한 문장 + 최근 한 달 실제 움직임 + (괴리 시) 보조문 ── -->
+  <div class="hero" id="hero"></div>
 
-  <!-- ── KR 패널 (주력) — 변수1: 프라이싱 갭 ── -->
-  <div class="panel-head">
-    <h2>KR · 변수1 프라이싱 갭</h2>
-    <span class="badge">주력</span>
-    <span class="sub">단기 구간이 인상 경로를 얼마나 반영했는가</span>
-  </div>
-
-  <!-- 카드: 3Y−기준 · 1Y−기준 · 기준금리 -->
-  <div class="stats" id="summary"></div>
-
-  <!-- 판독 가이드(밴드) -->
-  <div class="guide" id="kr-guide"></div>
-
-  <!-- 룩백 토글 -->
-  <div class="controls">
-    <span class="ctrl-label">차트 룩백</span>
-    <div class="seg" id="lookback-seg">
-      <button data-lb="1y">1Y</button>
-      <button data-lb="3y" class="active">3Y</button>
-      <button data-lb="10y">10Y</button>
-      <button data-lb="all">전체</button>
+  <!-- ── Q1. 단기금리는 남은 인상을 얼마나 반영하고 있나? ── -->
+  <section class="q-sec">
+    <div class="q-head"><span class="q-num">Q1</span><h2>단기금리는 남은 인상을 얼마나 반영하고 있나?</h2></div>
+    <p class="q-blurb" id="q1-blurb"></p>
+    <div class="gauge-wrap">
+      <div class="gauge-card">
+        <div class="gauge-title">3년물 — 인상 반영 게이지</div>
+        <div class="gauge-box" id="gauge-3y"></div>
+        <span class="cp-refname">3Y−기준 pct·z250</span>
+      </div>
+      <div class="gauge-card">
+        <div class="gauge-title">1년물 — 인상 반영 게이지</div>
+        <div class="gauge-box" id="gauge-1y"></div>
+        <span class="cp-refname">1Y−기준 pct·z250</span>
+      </div>
     </div>
-  </div>
+    <details class="adv">
+      <summary>상세 보기 — 스프레드 시계열·원 카드</summary>
+      <div class="adv-body">
+        <div class="controls">
+          <span class="ctrl-label">차트 룩백</span>
+          <div class="seg" id="lookback-seg">
+            <button data-lb="1y">1Y</button>
+            <button data-lb="3y" class="active">3Y</button>
+            <button data-lb="10y">10Y</button>
+            <button data-lb="all">전체</button>
+          </div>
+        </div>
+        <div class="stats" id="summary"></div>
+        <div class="guide" id="kr-guide"></div>
+        <div class="chart-card">
+          <div class="chart-head"><h2>프라이싱 갭 — 3Y−기준 · 1Y−기준</h2><span class="cap">스프레드 확대 = 단기 구간이 인상 경로를 더 반영</span></div>
+          <div class="chart-box" id="chart-kr-gap"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head"><h2>US 참고 — DGS2 − EFFR</h2><span class="cap">미국 단기 구간의 인상 반영(식별용)</span></div>
+          <div class="chart-box" id="chart-us-gap"></div>
+        </div>
+      </div>
+    </details>
+  </section>
 
-  <!-- 차트: 프라이싱 갭 스프레드 -->
-  <div class="chart-card">
-    <div class="chart-head">
-      <h2>프라이싱 갭 — 3Y−기준 · 1Y−기준</h2>
-      <span class="cap">스프레드 확대 = 단기 구간이 인상 경로를 더 반영</span>
+  <!-- ── Q2. 장기금리는 무엇 때문에 움직이고 있나? ── -->
+  <section class="q-sec">
+    <div class="q-head"><span class="q-num">Q2</span><h2>장기금리는 무엇 때문에 움직이고 있나?</h2></div>
+    <p class="q-blurb" id="q2-us-blurb"></p>
+    <div class="chart-card">
+      <div class="chart-head"><h2>미국 — 장기금리 변화 분해 (20일 롤링)</h2><span class="cap">US는 체력 재평가 vs 보유 보상 분리 가능 — 식별 도구</span></div>
+      <div class="chart-box" id="chart-us-decomp2"></div>
     </div>
-    <div class="chart-box" id="chart-kr-gap"></div>
-  </div>
-
-  <!-- ── KR 뒷단 (변수2/3 프록시) + 분해 ── -->
-  <div class="panel-head">
-    <h2>KR · 뒷단 프록시 + 분해</h2>
-    <span class="badge">주력</span>
-    <span class="sub">5y5y·30Y−10Y(TP 프록시) · 기울기 변화의 앞단 vs 뒷단 기여</span>
-  </div>
-
-  <!-- 카드: KR 5y5y · KR 30Y−10Y -->
-  <div class="stats" id="kr-back-summary"></div>
-
-  <!-- 차트: KR 5y5y -->
-  <div class="chart-card">
-    <div class="chart-head">
-      <h2>KR 5y5y — 2×10Y − 5Y</h2>
-      <span class="cap">뒷단 기대+TP 합산(par 단순근사, 방향·z 전용)</span>
+    <p class="q-blurb" id="q2-kr-blurb"></p>
+    <div class="chart-card">
+      <div class="chart-head"><h2>한국 — 커브 기울기 변화 분해 (20일 롤링)</h2><span class="cap">단기 요인 vs 장기 요인(합산)</span></div>
+      <div class="chart-box" id="chart-kr-decomp"></div>
     </div>
-    <div class="chart-box" id="chart-kr-5y5y"></div>
-  </div>
+    <p class="q-note" id="q2-kr-note"></p>
+    <details class="adv">
+      <summary>상세 보기 — 성분 레벨·프록시·원 카드</summary>
+      <div class="adv-body">
+        <div class="stats" id="us-summary"></div>
+        <div class="chart-card">
+          <div class="chart-head"><h2>US 성분 (레벨) — 경제 체력 재평가 vs 보유 보상</h2><span class="cap">기대성분(5y5y−TP) · ACM TP10</span></div>
+          <div class="chart-box" id="chart-us-decomp"></div>
+        </div>
+        <div class="stats" id="kr-back-summary"></div>
+        <div class="chart-card">
+          <div class="chart-head"><h2>KR 사이클 이후 금리 — 5y5y</h2><span class="cap">2×10Y − 5Y (방향·z 전용)</span></div>
+          <div class="chart-box" id="chart-kr-5y5y"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head"><h2>KR 초장기 보유 보상 프록시 — 30Y − 10Y</h2><span class="cap">2012-09 이후 · KR은 공식 TP 부재</span></div>
+          <div class="chart-box" id="chart-kr-3010"></div>
+        </div>
+      </div>
+    </details>
+  </section>
 
-  <!-- 차트: KR 30Y−10Y (TP 프록시) -->
-  <div class="chart-card">
-    <div class="chart-head">
-      <h2>KR 30Y − 10Y — 텀프리미엄 프록시</h2>
-      <span class="cap">2012-09 발행개시 이후 · KR은 공식 TP 시계열 부재</span>
+  <!-- ── Q3. 과거 인상 사이클에서 커브는 어떻게 됐나? ── -->
+  <section class="q-sec">
+    <div class="q-head"><span class="q-num">Q3</span><h2>과거 인상 사이클에서 커브는 어떻게 됐나?</h2></div>
+    <p class="q-blurb" id="q3-blurb"></p>
+    <div class="chart-card">
+      <div class="chart-head"><h2>한국 장단기 격차(10년−3년) — 첫 인상일 T=0 정렬</h2><span class="cap">현재 굵은 선, 과거 반투명 · T−120~T+250 영업일</span></div>
+      <div class="chart-box" id="chart-kr-overlay"></div>
+      <div class="cycle-caps" id="kr-caps"></div>
     </div>
-    <div class="chart-box" id="chart-kr-3010"></div>
-  </div>
-
-  <!-- 차트: KR Δ3s10s 20d 분해 -->
-  <div class="chart-card">
-    <div class="chart-head">
-      <h2>KR Δ3s10s 분해 (20d 롤링) — 앞단 vs 뒷단</h2>
-      <span class="cap">앞단 −Δ(3Y−기준) · 뒷단 잔차 · 합계 = Δ(10Y−3Y)</span>
+    <div class="chart-card">
+      <div class="chart-head"><h2>미국 장단기 격차(10년−2년) — 첫 인상일 T=0 정렬 (참고)</h2><span class="cap">1994-02 / 2016-12 (+참고 2015-12 · 2022-03)</span></div>
+      <div class="chart-box" id="chart-us-overlay"></div>
+      <div class="cycle-caps" id="us-caps"></div>
     </div>
-    <div class="chart-box" id="chart-kr-decomp"></div>
-  </div>
+  </section>
 
-  <!-- ── US 패널 (참고·식별용) — 변수1 + 변수2/3 순수 분리 ── -->
-  <div class="panel-head">
-    <h2>US · 변수1 프라이싱 갭 + 변수2/3 분리</h2>
-    <span class="badge">참고·식별용</span>
-    <span class="sub">r* 재조정(기대성분) vs 텀프리미엄 순수 분리 — KR 고유요인 식별 보조</span>
-  </div>
-
-  <!-- 카드: DGS2−EFFR · 5y5y · 기대성분 · ACM TP10 -->
-  <div class="stats" id="us-summary"></div>
-
-  <!-- 차트: US 변수1 프라이싱 갭 -->
-  <div class="chart-card">
-    <div class="chart-head">
-      <h2>US 프라이싱 갭 — DGS2 − EFFR</h2>
-      <span class="cap">단기 구간의 인상 경로 반영(KR 변수1과 동일 로직)</span>
-    </div>
-    <div class="chart-box" id="chart-us-gap"></div>
-  </div>
-
-  <!-- 차트: 변수2/3 성분 분리 (기대성분 vs TP, 같은 축, 누적 아님) -->
-  <div class="chart-card">
-    <div class="chart-head">
-      <h2>성분 분리 — 기대성분(5y5y−TP) vs ACM TP10</h2>
-      <span class="cap">기대성분↑ = r* 재조정 주도 · TP↑ = 텀프리미엄 주도</span>
-    </div>
-    <div class="chart-box" id="chart-us-decomp"></div>
-  </div>
-
-  <!-- 차트: US Δ2s10s 20d 분해 (뒷단을 기대 vs TP로 2차 분해) -->
-  <div class="chart-card">
-    <div class="chart-head">
-      <h2>US Δ2s10s 분해 (20d 롤링) — 앞단 · 뒷단(기대/TP)</h2>
-      <span class="cap">앞단 −Δ(2Y−EFFR) · 뒷단 기대·TP 2차 분해 · 합계 = Δ(10Y−2Y)</span>
-    </div>
-    <div class="chart-box" id="chart-us-decomp2"></div>
-  </div>
-
-  <!-- ── 사이클 오버레이 — 첫 인상일 T=0 정렬 (KR/US 분리) ── -->
-  <div class="panel-head">
-    <h2>사이클 오버레이</h2>
-    <span class="sub">첫 인상일 T=0 정렬 · T−120~T+250 영업일 · 현재 굵은 선, 과거 반투명, 참고 점선</span>
-  </div>
-
-  <!-- KR 3s10s 오버레이 -->
-  <div class="chart-card">
-    <div class="chart-head">
-      <h2>KR 3s10s — 인상 사이클 정렬</h2>
-      <span class="cap">2005-10 / 2010-07 / 2021-08 / 2026-07(현재)</span>
-    </div>
-    <div class="chart-box" id="chart-kr-overlay"></div>
-    <div class="cycle-caps" id="kr-caps"></div>
-  </div>
-
-  <!-- US 2s10s 오버레이 -->
-  <div class="chart-card">
-    <div class="chart-head">
-      <h2>US 2s10s — 인상 사이클 정렬</h2>
-      <span class="cap">1994-02 / 2016-12 (+참고 2015-12 · 2022-03)</span>
-    </div>
-    <div class="chart-box" id="chart-us-overlay"></div>
-    <div class="cycle-caps" id="us-caps"></div>
-  </div>
-
+  <!-- ── 하단: 판정 이력 · 측정 한계 · 용어 참조 ── -->
+  <div class="panel-head"><h2>판정 이력 · 참고</h2></div>
+  <div class="verdict" id="hist" style="border-left-width:1px;border-left-color:var(--border-2)"></div>
   <div class="footnote" id="footnote"></div>
+  <details class="adv">
+    <summary>용어 참조 — 표시 용어 ↔ 원 지표</summary>
+    <div class="adv-body">
+      <table class="terms">
+        <thead><tr><th>표시 용어</th><th>원 지표(설계)</th></tr></thead>
+        <tbody>
+          <tr><td>단기금리의 인상 반영 게이지</td><td class="ref">변수1 / 3Y·1Y−기준 프라이싱 갭</td></tr>
+          <tr><td>반영 잔량 많음 / 반영 소진</td><td class="ref">잔존(pct≥70) / 소진(pct≤30)</td></tr>
+          <tr><td>단기 요인(누르는 힘) / 장기 요인(세우는 힘)</td><td class="ref">앞단 기여 / 뒷단 기여</td></tr>
+          <tr><td>사이클 이후 금리(5년 뒤 5년)</td><td class="ref">5y5y ≈ 2×10Y−5Y</td></tr>
+          <tr><td>경제 체력 재평가(r* 프록시)</td><td class="ref">기대성분 = 5y5y − TP</td></tr>
+          <tr><td>장기채 보유 보상(기간 프리미엄)</td><td class="ref">TP / ACM THREEFYTP10</td></tr>
+          <tr><td>초장기 보유 보상 프록시</td><td class="ref">30Y − 10Y</td></tr>
+          <tr><td>플랫 / 스팁</td><td class="ref">장단기 격차 축소 / 확대</td></tr>
+          <tr><td>국면 판정 / 최근 한 달 실제 움직임</td><td class="ref">판정 / 실현(20d)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
 </div>
 
 <!-- 공통 내비게이션 -->
