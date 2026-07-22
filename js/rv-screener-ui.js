@@ -15,7 +15,8 @@
 import { parseKbondQuotes } from './rv-parser.js';
 import { matchIssuer } from './rv-matcher.js';
 import { KBOND_ABBREVIATIONS } from './rv-abbrev.js';
-import { resolveReference, computeStats, buildAliases } from './rv-engine.js';
+import { resolveReference, computeStats, buildAliases, quoteYield } from './rv-engine.js';
+import { crossSectional, RV_VALIDATION_THRESHOLD_BP, RV_MIN_BUCKET_SAMPLE } from './rv-cross.js';
 
 const LS_KEY = 'rv-screener-mp';
 const LS_SESSION = 'rv-screener-session';
@@ -271,53 +272,71 @@ function renderQuotes() {
       <table class="q"><thead><tr><th>방향</th><th>발행사(raw)</th><th>종목</th><th>등급</th>
       <th class="num">실제%</th><th class="num">민평%</th><th>스프레드</th><th>잔존만기</th><th>신뢰도</th></tr></thead><tbody>${trs}</tbody></table>`;
   } else {
-    // 민평 있음 → 매칭·기준수익률·괴리 뷰. 매칭 성공(발행사/그룹)만 본표, 실패는 별도 섹션.
-    const matched = rows.filter((r) => r.ref.method !== 'unmatched');
-    const failed = rows.filter((r) => r.ref.method === 'unmatched');
+    // 민평 있음 → 횡단면 판별. 괴리=호가수익률−(내장민평 ?? 보간). 버킷 중앙값 차감→조정괴리.
+    const { gaps, bm, offers, bids, unrankable } = crossSectional(rows, quoteYield);
+    const failed = gaps.filter((g) => g.method === 'unmatched');
 
-    const trs = [...matched].reverse().map(({ q, ref }) => {
-      const sd = SIDE[q.side] || { t: q.side, c: '' };
-      const ry = ref.ry != null ? `${bp(ref.ry)}y` : '—';
-      const rf = ref.refYield != null ? ref.refYield.toFixed(3) : `<span style="color:var(--amber)">기준없음</span>`;
-      const emb = q.minpyeong_yield;
-      const dEmb = (emb != null && ref.refYield != null) ? bp((emb - ref.refYield) * 100) : null;
-      return `<tr>
-        <td class="${sd.c}">${sd.t}</td>
-        <td>${esc(q.issuer_raw)}</td>
-        <td>${esc(ref.canonical || ref.group || '')} ${METHOD_BADGE[ref.method]}</td>
-        <td class="mono">${esc(q.bond_code) || '—'}</td>
-        <td class="mono">${esc(q.rating) || '—'}</td>
-        <td class="mono">${q.maturity_date ? `${q.maturity_date} <span style="color:var(--muted)">${ry}</span>` : '—'}</td>
-        <td class="num">${emb ?? '—'}</td>
-        <td class="num">${rf}</td>
-        <td class="num" style="color:${gapColor(dEmb)}">${dEmb == null ? '—' : (dEmb > 0 ? '+' : '') + dEmb}</td>
-        <td><span class="conf conf-${q.parse_confidence}">${q.parse_confidence}</span></td>
-      </tr>`;
-    }).join('');
-
+    // 통계 패널
     const statsPanel = `<div class="stats" style="margin-bottom:12px">
       <div class="stat"><div class="stat-label">매칭률</div>
         <div class="stat-main" style="font-size:17px">${stats.n ? Math.round((stats.by.issuer + stats.by.group_fallback) / stats.n * 100) : 0}<span class="stat-unit">%</span></div>
         <div class="stat-sub">발행사 ${stats.by.issuer} · 그룹폴백 ${stats.by.group_fallback} · 실패 ${stats.by.unmatched}</div></div>
-      <div class="stat"><div class="stat-label">기준없음(외삽/결측)</div>
-        <div class="stat-main" style="font-size:17px">${stats.noRef}<span class="stat-unit">건</span></div>
-        <div class="stat-sub">매칭됐으나 보간 불가</div></div>
       <div class="stat"><div class="stat-label">내장민평 보유</div>
         <div class="stat-main" style="font-size:17px">${Math.round(stats.embeddedPct)}<span class="stat-unit">%</span></div>
-        <div class="stat-sub">${stats.embeddedCount}/${stats.n} 호가</div></div>
+        <div class="stat-sub">${stats.embeddedCount}/${stats.n} · 기준 1순위</div></div>
       <div class="stat"><div class="stat-label">내장민평 − 보간 (bp)</div>
         <div class="stat-main" style="font-size:17px">${stats.diffMedian == null ? '—' : bp(stats.diffMedian)}<span class="stat-unit">중앙값</span></div>
-        <div class="stat-sub">최대 ${stats.diffMaxAbs == null ? '—' : bp(stats.diffMaxAbs)}bp · ±15↑ ${stats.diffOver15}건 (N=${stats.diffN})</div></div>
+        <div class="stat-sub">최대 ${stats.diffMaxAbs == null ? '—' : bp(stats.diffMaxAbs)}bp · ±${RV_VALIDATION_THRESHOLD_BP}↑ ${stats.diffOver15}건 검증</div></div>
+      <div class="stat"><div class="stat-label">세션 중앙값(베타)</div>
+        <div class="stat-main" style="font-size:17px">${bm.sessionMedian == null ? '—' : (bm.sessionMedian > 0 ? '+' : '') + bp(bm.sessionMedian)}<span class="stat-unit">bp</span></div>
+        <div class="stat-sub">내장민평 기반 N=${bm.sessionCount} · 버킷&lt;${RV_MIN_BUCKET_SAMPLE} 폴백</div></div>
     </div>`;
 
-    res.innerHTML = statsPanel
-      + `<div class="sec-title">매칭·기준수익률 <span class="cap">최신순 · 기준수익률=커브 선형보간(외삽 금지) · 내장민평−보간 = 호가내장 민평 − 보간값</span></div>`
-      + `<table class="q"><thead><tr>
-        <th>방향</th><th>발행사(raw)</th><th>매칭</th><th>종목</th><th>등급</th><th>잔존만기</th>
-        <th class="num">내장민평%</th><th class="num">기준수익률%</th><th class="num">내장−보간bp</th><th>신뢰도</th>
-      </tr></thead><tbody>${trs}</tbody></table>`
+    // 버킷 중앙값 요약(당일 시장 베타 근사) — 표본 많은 순 상위
+    const bucketSummary = Object.keys(bm.bucketMedian)
+      .map((b) => ({ b, m: bm.bucketMedian[b], n: bm.bucketCount[b] }))
+      .sort((a, b) => b.n - a.n).slice(0, 8)
+      .map((x) => `${esc(x.b)} <span class="mono">${x.m > 0 ? '+' : ''}${bp(x.m)}bp</span>(${x.n})`).join(' · ');
+    const sessionHeader = `<div class="footnote" style="margin:0 0 12px">
+      <div>당일 버킷 중앙값(내장민평 기반 = 시장 베타 근사): ${bucketSummary || '—'}</div>
+      <div>매도 ${offers.length} · 매수 ${bids.length} · 괴리계산불가 ${unrankable.length} · 매칭실패 ${failed.length}</div></div>`;
+
+    // RV 행: 발행사·종목·매칭·잔존·기준(값+출처)·호가%·원괴리·버킷중앙·조정괴리(강조)·검증
+    const rvRow = (g) => {
+      const q = g.q;
+      const srcBadge = g.refSource === '내장민평' ? '<span class="conf conf-high">내장민평</span>'
+        : g.refSource === '보간폴백' ? '<span class="conf conf-medium">보간폴백</span>' : '';
+      const medBadge = g.medianSource === '세션폴백' ? ' <span class="conf conf-medium">세션</span>' : '';
+      const adj = g.adjustedGap;
+      const adjHi = (adj != null && Math.abs(adj) >= RV_VALIDATION_THRESHOLD_BP) ? 'var(--accent)' : 'var(--text)';
+      const val = g.validationFlag
+        ? `<span title="내장민평−보간 ${bp(g.validationDiff)}bp (>${RV_VALIDATION_THRESHOLD_BP}bp): 내장민평 낡음/오기 가능" style="color:var(--amber)">⚠</span>` : '';
+      return `<tr>
+        <td>${esc(q.issuer_raw)}</td>
+        <td class="mono">${esc(q.bond_code) || '—'}</td>
+        <td>${METHOD_BADGE[g.method] || ''}</td>
+        <td class="mono">${g.ref && g.ref.ry != null ? bp(g.ref.ry) + 'y' : '—'}</td>
+        <td class="num">${g.reference != null ? g.reference.toFixed(3) : '—'} ${srcBadge}</td>
+        <td class="num">${g.quoteYield != null ? g.quoteYield.toFixed(3) : '—'}</td>
+        <td class="num">${g.rawGap == null ? '—' : (g.rawGap > 0 ? '+' : '') + bp(g.rawGap)}</td>
+        <td class="num">${g.medianUsed == null ? '—' : (g.medianUsed > 0 ? '+' : '') + bp(g.medianUsed)}${medBadge}</td>
+        <td class="num" style="color:${adjHi};font-weight:700">${adj == null ? '—' : (adj > 0 ? '+' : '') + bp(adj)}</td>
+        <td>${val}</td>
+      </tr>`;
+    };
+    const rvHead = `<thead><tr><th>발행사</th><th>종목</th><th>매칭</th><th>잔존</th>
+      <th class="num">기준%</th><th class="num">호가%</th><th class="num">원괴리</th><th class="num">버킷중앙</th><th class="num">조정괴리</th><th>검증</th></tr></thead>`;
+    const rvTable = (list) => `<table class="q">${rvHead}<tbody>${list.map(rvRow).join('')}</tbody></table>`;
+
+    res.innerHTML = statsPanel + sessionHeader
+      + `<div class="sec-title">매도호가 — 싸게 나온 순 <span class="cap">조정괴리 큰 순 · 민평보다 높은 수익률</span></div>`
+      + (offers.length ? rvTable(offers) : '<div class="cap" style="padding:6px">해당 없음</div>')
+      + `<div class="sec-title">매수호가 — 비싸게 사려는 순 <span class="cap">조정괴리 작은(음수) 순 · 보유물 매도 기회</span></div>`
+      + (bids.length ? rvTable(bids) : '<div class="cap" style="padding:6px">해당 없음</div>')
+      + (unrankable.length ? `<div class="sec-title">괴리 계산 불가 <span class="cap">원(won) 스프레드=듀레이션 필요(범위 외) · 기준없음(외삽)</span></div>`
+        + unrankable.map((g) => `<div class="excluded-line"><span class="why">[${esc(g.quoteYieldBasis === '원(듀레이션 필요)' ? '원단위' : (g.reference == null ? '기준없음' : '미상'))}]</span>${esc(g.q.issuer_raw)} · ${esc(g.q.raw_line).slice(0, 60)}</div>`).join('') : '')
       + (failed.length ? `<div class="sec-title">매칭 실패 <span class="cap">발행사·그룹 모두 매칭 실패 — 버리지 않고 표시</span></div>`
-        + [...failed].reverse().map(({ q }) => `<div class="excluded-line"><span class="why">[매칭실패]</span>${esc(q.issuer_raw)} · ${esc(q.raw_line).slice(0, 60)}</div>`).join('') : '');
+        + [...failed].reverse().map((g) => `<div class="excluded-line"><span class="why">[매칭실패]</span>${esc(g.q.issuer_raw)} · ${esc(g.q.raw_line).slice(0, 60)}</div>`).join('') : '');
   }
 
   if (!SESSION.unparsed.length) { exc.innerHTML = ''; return; }
