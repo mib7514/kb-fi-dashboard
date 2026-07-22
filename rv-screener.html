@@ -47,6 +47,37 @@
   .stat-unit { font-size: 12px; color: var(--muted); margin-left: 3px; font-weight: 400; }
   .stat-sub { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 4px; }
 
+  /* 호가 입력 */
+  .qcard { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .qcard h2 { font-size: 14px; margin: 0 0 10px; }
+  textarea#q-text { width: 100%; min-height: 120px; resize: vertical; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border-2); border-radius: 8px; padding: 10px 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
+  .q-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .btn { font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 7px; background: var(--accent); color: #08111f; cursor: pointer; border: none; }
+  .btn:hover { filter: brightness(1.08); }
+  .clear { font-size: 12px; color: var(--muted); background: transparent; border: 1px solid var(--border-2); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+  .clear:hover { color: var(--text); background: var(--panel-2); }
+  .q-actions .hint { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+
+  /* 결과 테이블 */
+  .sec-title { font-size: 13px; font-weight: 600; margin: 18px 0 8px; display: flex; align-items: baseline; gap: 8px; }
+  .sec-title .cap { font-size: 11px; color: var(--muted); font-weight: 400; }
+  table.q { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.q th, table.q td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  table.q th { font-size: 10.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+  table.q td.num { text-align: right; font-family: var(--mono); }
+  table.q td.mono { font-family: var(--mono); }
+  table.q tbody tr:hover { background: var(--panel-2); }
+  .side-offer { color: var(--red); font-weight: 600; }
+  .side-bid { color: var(--ok); font-weight: 600; }
+  .side-interest { color: var(--muted); }
+  .conf { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-family: var(--mono); }
+  .conf-high { background: rgba(63,185,80,0.15); color: var(--ok); }
+  .conf-medium { background: rgba(240,136,62,0.15); color: var(--amber); }
+  .conf-low { background: rgba(139,148,158,0.15); color: var(--muted); }
+  .excluded-line { font-family: var(--mono); font-size: 11.5px; color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .excluded-line .why { color: var(--amber); margin-right: 8px; }
+
   .footnote { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.7; }
   .footnote .k { font-family: var(--mono); color: var(--text); }
   .footnote > div { margin-bottom: 4px; }
@@ -79,6 +110,21 @@
 
   <!-- 요약 카드 / 빈 상태 -->
   <div id="mp-summary"></div>
+
+  <!-- 호가 입력 -->
+  <div class="qcard">
+    <h2>호가 붙여넣기</h2>
+    <textarea id="q-text" placeholder="K본드 메신저 호가 텍스트를 붙여넣고 [파싱]. 같은 날 여러 번 붙여넣으면 누적됩니다."></textarea>
+    <div class="q-actions">
+      <button class="btn" id="q-parse">파싱</button>
+      <button class="clear" id="q-clear-session">세션 비우기</button>
+      <span class="hint" id="q-stats"></span>
+    </div>
+  </div>
+
+  <!-- 파싱 결과 / 제외 라인 -->
+  <div id="q-result"></div>
+  <div id="q-excluded"></div>
 
   <div class="footnote" id="footnote"></div>
 </div>

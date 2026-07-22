@@ -12,11 +12,15 @@
 //  - E블록 순서: 채권그룹 | 발행사 | 평가사 | 15테너 | 회사코드 | …
 //  - 회사코드 '00000' = 그룹 대표커브 행, 그 외 = 발행사 행. 발행사명은 유일키(중복 시 경고).
 
+import { parseKbondQuotes } from './rv-parser.js';
+
 const LS_KEY = 'rv-screener-mp';
+const LS_SESSION = 'rv-screener-session';
 // 테너 라벨은 헤더에서 읽되, 기대 순서 검증용 기준.
 const EXPECT_TENORS = ['3M', '6M', '9M', '1Y', '1.5Y', '2Y', '2.5Y', '3Y', '4Y', '5Y', '7Y', '10Y', '15Y', '20Y', '30Y'];
 
 let MP = null; // { asOfLabel, asOfSource, issuers, groupCurves, dupes, counts }
+let SESSION = { dateKey: null, quotes: [], unparsed: [] }; // 당일 누적 호가
 
 // ── 민평 xlsx → 구조화 ──
 // 반환: { asOfLabel, asOfSource, issuers:{name:{group,code,curve:{tenor:yield}}}, groupCurves:{group:{code,curve}}, dupes:[], counts:{...} }
@@ -59,14 +63,18 @@ function parseMinpyeong(arrayBuffer, fileName) {
     const name = String(r[issuerCol] ?? '').trim();
     if (!name) continue;
     const group = String(r[groupCol] ?? '').trim();
-    const code = codeCol >= 0 ? String(r[codeCol] ?? '').trim() : '';
+    const codeStr = codeCol >= 0 ? String(r[codeCol] ?? '').trim() : '';
+    // 그룹 대표커브 판별: 회사코드가 문자열 '00000'/'0' 또는 숫자 0 (엑셀이 앞자리 0을 숫자로 떨굼) 모두 그룹행.
+    // 빈 셀(Number('')===0)은 제외하기 위해 비어있지 않음 + 수치 0 을 함께 요구.
+    const isRep = codeStr !== '' && Number(codeStr) === 0;
+    const code = codeStr;
     const curve = {};
     for (let t = 0; t < 15; t++) {
       const v = r[tenorStart + t];
       const num = typeof v === 'number' ? v : (v === '' || v == null ? NaN : Number(v));
       if (Number.isFinite(num)) curve[tenors[t]] = num;
     }
-    if (code === '00000') {
+    if (isRep) {
       groupCurves[group] = { code, curve };
       repRows++;
     } else {
@@ -170,6 +178,100 @@ async function onFile(file) {
   }
 }
 
+// ── 호가 세션 (당일 누적, 날짜 바뀌면 초기화, 중복은 최신 갱신) ──
+const todayKey = () => new Date().toISOString().slice(0, 10);
+// 중복 판별 키: 발행사·종목·만기·방향
+const quoteKey = (q) => [q.issuer_raw, q.bond_code, q.maturity_date, q.side].join('|');
+
+function saveSession() {
+  try { localStorage.setItem(LS_SESSION, JSON.stringify({ kind: LS_SESSION, version: 1, session: SESSION })); } catch { /* noop */ }
+}
+function loadSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_SESSION) || 'null');
+    if (s && s.session && s.session.dateKey === todayKey()) SESSION = s.session;
+    else SESSION = { dateKey: todayKey(), quotes: [], unparsed: [] }; // 날짜 바뀌면 자동 초기화
+  } catch { SESSION = { dateKey: todayKey(), quotes: [], unparsed: [] }; }
+}
+
+// 새 파싱분을 세션에 누적. 중복 호가는 위치 유지하며 최신으로 갱신.
+function accumulate(newQuotes, newUnparsed) {
+  if (SESSION.dateKey !== todayKey()) SESSION = { dateKey: todayKey(), quotes: [], unparsed: [] };
+  const idx = new Map(SESSION.quotes.map((q, i) => [quoteKey(q), i]));
+  let added = 0, updated = 0;
+  for (const q of newQuotes) {
+    const k = quoteKey(q);
+    if (idx.has(k)) { SESSION.quotes[idx.get(k)] = q; updated++; }
+    else { idx.set(k, SESSION.quotes.length); SESSION.quotes.push(q); added++; }
+  }
+  const seen = new Set(SESSION.unparsed.map((u) => u.raw));
+  for (const u of newUnparsed) { if (!seen.has(u.raw)) { seen.add(u.raw); SESSION.unparsed.push(u); } }
+  saveSession();
+  return { added, updated };
+}
+
+const SIDE = { offer: { t: '매도(팔)', c: 'side-offer' }, bid: { t: '매수(사)', c: 'side-bid' }, interest: { t: '관심', c: 'side-interest' } };
+// 잔존연수 = (만기일 − 오늘)/365.25 (Phase 3 확정 규칙, 기준일=오늘 단순화)
+function residualYears(dateStr) {
+  if (!dateStr) return null;
+  const ms = new Date(dateStr + 'T00:00:00') - new Date(todayKey() + 'T00:00:00');
+  const y = ms / (365.25 * 864e5);
+  return Number.isFinite(y) ? Math.round(y * 10) / 10 : null;
+}
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+function renderQuotes() {
+  const res = document.getElementById('q-result');
+  const exc = document.getElementById('q-excluded');
+  const st = document.getElementById('q-stats');
+  const qs = SESSION.quotes;
+  st.textContent = `당일 세션: 호가 ${qs.length}건 · 제외/미파싱 ${SESSION.unparsed.length}건 · ${SESSION.dateKey || todayKey()}`;
+
+  if (!qs.length) {
+    res.innerHTML = SESSION.unparsed.length ? '' : '<div class="empty">아직 파싱된 호가가 없습니다. 위 입력창에 붙여넣고 [파싱]을 누르세요.</div>';
+  } else {
+    const rows = [...qs].reverse().map((q) => {
+      const sd = SIDE[q.side] || { t: q.side, c: '' };
+      const ry = residualYears(q.maturity_date);
+      const sp = q.spread_type == null ? '—' : (q.spread_type === 'flat' ? 'flat' : `${q.spread_type} ${q.spread_value}`);
+      return `<tr>
+        <td class="${sd.c}">${sd.t}</td>
+        <td>${esc(q.issuer_raw) || '<span style="color:var(--red)">(추출실패)</span>'}</td>
+        <td class="mono">${esc(q.bond_code) || '—'}</td>
+        <td class="mono">${esc(q.rating) || '—'}</td>
+        <td class="num">${q.actual_yield == null ? '—' : q.actual_yield}</td>
+        <td class="num">${q.minpyeong_yield == null ? '—' : q.minpyeong_yield}</td>
+        <td class="mono">${sp}</td>
+        <td class="mono">${q.maturity_date ? `${q.maturity_date}${ry != null ? ` (${ry}y)` : ''}` : '—'}</td>
+        <td><span class="conf conf-${q.parse_confidence}">${q.parse_confidence}</span></td>
+      </tr>`;
+    }).join('');
+    res.innerHTML = `<div class="sec-title">파싱된 호가 <span class="cap">최신순 · 수량 컬럼 제외(파서가 항상 null)</span></div>
+      <table class="q"><thead><tr>
+        <th>방향</th><th>발행사(raw)</th><th>종목</th><th>등급</th>
+        <th class="num">실제%</th><th class="num">민평%</th><th>스프레드</th><th>잔존만기</th><th>신뢰도</th>
+      </tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  if (!SESSION.unparsed.length) { exc.innerHTML = ''; return; }
+  const ex = SESSION.unparsed.map((u) =>
+    `<div class="excluded-line"><span class="why">[${esc(u.reason)}]</span>${esc(u.raw)}</div>`).join('');
+  exc.innerHTML = `<div class="sec-title">제외·미파싱 라인 <span class="cap">버리지 않고 원문 보존 · CP/CD·일반관심·방향없음</span></div>${ex}`;
+}
+
+function onParse() {
+  const ta = document.getElementById('q-text');
+  const text = ta.value;
+  if (!text.trim()) return;
+  // Phase 2: 매처 미주입(발행사 canonical은 Phase 3). 파싱만.
+  const { quotes, unparsed } = parseKbondQuotes(text);
+  const { added, updated } = accumulate(quotes, unparsed);
+  ta.value = '';
+  renderQuotes();
+  const st = document.getElementById('q-stats');
+  st.textContent = `방금: +${added}건 신규, ${updated}건 갱신 · ` + st.textContent;
+}
+
 function wire() {
   document.getElementById('mp-file').addEventListener('change', (e) => {
     const f = e.target.files && e.target.files[0];
@@ -182,11 +284,19 @@ function wire() {
     document.getElementById('mp-hint').textContent = '인포맥스 4788 화면 내보내기(.xlsx). 브라우저 안에서만 처리 — 서버 전송·저장 없음.';
     renderSummary();
   });
+  document.getElementById('q-parse').addEventListener('click', onParse);
+  document.getElementById('q-clear-session').addEventListener('click', () => {
+    SESSION = { dateKey: todayKey(), quotes: [], unparsed: [] };
+    try { localStorage.removeItem(LS_SESSION); } catch { /* noop */ }
+    renderQuotes();
+  });
 }
 
 export function initRvScreener() {
   load();
+  loadSession();
   wire();
   renderSummary();
+  renderQuotes();
   renderFootnote();
 }
