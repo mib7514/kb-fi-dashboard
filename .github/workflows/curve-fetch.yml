@@ -1,0 +1,57 @@
+name: CP 커브 데이터 (ECOS + FRED)
+
+# 국고채 커브·기준금리(ECOS) + 미국 커브·ACM TP(FRED) 를 적재해 data/curve/*.json 갱신.
+# 데이터가 실제로 바뀐 경우에만 커밋(diff 없으면 skip). 기존 워크플로는 무변경(리스크 격리).
+
+on:
+  schedule:
+    # 평일 22:35 UTC = KST 07:35. ECOS 전일 금리 반영 시각 이후.
+    # 시각·concurrency group 분리로 기존 워크플로와 충돌 없음:
+    #   taylor(평일 22:45) · gg1(수 23:10) · us-inflation(화 15:00) · us-credit(목 16:00).
+    - cron: '35 22 * * 1-5'
+  workflow_dispatch: {}          # 수동 트리거 (KR 백필 검증·게이트 보고용)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: curve-fetch
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch KR (ECOS) → data/curve/kr_*.json
+        env:
+          ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
+        run: node scripts/fetch-curve-kr.mjs
+
+      - name: Fetch US (FRED) → data/curve/us_*.json
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: node scripts/fetch-curve-us.mjs
+
+      - name: Commit if changed
+        run: |
+          # 신규(untracked)·수정 모두 포착하기 위해 status --porcelain 사용.
+          if [ -z "$(git status --porcelain data/curve/)" ]; then
+            echo "갱신분 없음 — 커밋 skip."
+            exit 0
+          fi
+          ASOF=$(node -e "process.stdout.write(require('./data/curve/kr_yields.json').meta.updated_at)")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/curve/
+          git commit -m "data: CP 커브 데이터(ECOS+FRED) ${ASOF} 갱신"
+          # taylor-update 등과 커밋 경합 대비 — 원격 선반영분 위로 rebase 후 push.
+          git pull --rebase origin main
+          git push
