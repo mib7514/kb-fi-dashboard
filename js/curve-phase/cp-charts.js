@@ -83,6 +83,38 @@ export function renderDecompChart(divId, points, comps) {
     { displayModeBar: false, responsive: true });
 }
 
+// Q1 게이지: 가로 바 위 바늘. 역사 범위 min~max, 현재 위치 마커, 30/70 pct 구분선, 좌우 끝 라벨.
+//   g: { min, max, value, t30, t70, leftLabel, rightLabel, valueLabel }.
+export function renderGauge(divId, g) {
+  const { min, max, value, t30, t70, leftLabel, rightLabel, valueLabel } = g;
+  const rect = (x0, x1, color) => ({ type: 'rect', xref: 'x', yref: 'y', x0, x1, y0: 0.3, y1: 0.7, fillcolor: color, line: { width: 0 }, layer: 'below' });
+  const vline = (x) => ({ type: 'line', xref: 'x', yref: 'y', x0: x, x1: x, y0: 0.2, y1: 0.8, line: { color: C.muted, width: 1, dash: 'dot' } });
+  const traces = [{
+    x: [value], y: [0.5], mode: 'markers',
+    marker: { color: C.accent, size: 14, symbol: 'triangle-down', line: { color: '#0d1117', width: 1 } },
+    hovertemplate: `${valueLabel}<extra></extra>`,
+  }];
+  const layout = {
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { color: C.muted, family: FONT, size: 9 },
+    margin: { l: 10, r: 10, t: 20, b: 30 }, showlegend: false,
+    xaxis: { range: [min, max], fixedrange: true, zeroline: false, showgrid: false, tickfont: { size: 9 } },
+    yaxis: { range: [0, 1], visible: false, fixedrange: true },
+    shapes: [
+      rect(min, t30, 'rgba(63,185,80,0.16)'),   // 소진 쪽(누르는 힘 없음)
+      rect(t30, t70, 'rgba(139,148,158,0.10)'),  // 중간
+      rect(t70, max, 'rgba(240,136,62,0.18)'),   // 잔량 쪽(누르는 힘 강함)
+      vline(t30), vline(t70),
+    ],
+    annotations: [
+      { x: value, y: 0.5, yshift: 17, text: valueLabel, showarrow: false, font: { family: FONT, size: 11, color: C.accent } },
+      { xref: 'paper', x: 0, yref: 'paper', y: -0.04, yanchor: 'top', xanchor: 'left', text: leftLabel, showarrow: false, font: { size: 9, color: C.muted } },
+      { xref: 'paper', x: 1, yref: 'paper', y: -0.04, yanchor: 'top', xanchor: 'right', text: rightLabel, showarrow: false, font: { size: 9, color: C.muted } },
+    ],
+  };
+  Plotly.newPlot(divId, traces, layout, { displayModeBar: false, responsive: true, staticPlot: false });
+}
+
 // 사이클 오버레이: x=세션 오프셋(T=0 대비), y=기울기 bp. 현재=굵은 선, 과거=반투명, 참고=점선.
 //   overlays: [{ label, color, current, ref, points:[{offset,bp}] }].
 export function renderOverlayChart(divId, overlays) {
