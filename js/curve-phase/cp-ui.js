@@ -6,8 +6,10 @@
 import { loadCurveData } from './cp-data.js';
 import { spreadSeries, colSpreadBp, fwd5y5y, seriesDiff, decompKR, decompUS, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
 import { C, LOOKBACKS, renderSpreadChart, renderDecompChart } from './cp-charts.js';
+import { judgeKR, judgeUS, realizedKR } from './cp-judge.js';
 
 const LS_KEY = 'curve-phase';
+const HIST_KEY = 'cp-judge-history';
 const state = { lookback: '3y' };
 let DATA = null;   // { krYields, krBase, usYields, usTp }
 let SERIES = null; // KR { s3:[[date,bp]], s1:[[date,bp]] }
@@ -41,6 +43,47 @@ const BANDS = [
   { key: 'mixed', head: `${BAND_LO}–${BAND_HI}p · 혼재`, desc: '단기·장기 정보 혼재' },
   { key: 'exhausted', head: `≤${BAND_LO}p · 소진`, desc: '변수1 소진 — 추가 정보는 장기 구간으로' },
 ];
+
+// ── 판정 이력(localStorage) — vintage(KR 국고채 최신일)별 1건 upsert, 최근 60건 유지 ──
+function loadHistory() { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch { return []; } }
+function upsertHistory(entry) {
+  const h = loadHistory();
+  const i = h.findIndex((e) => e.vintage === entry.vintage);
+  if (i >= 0) h[i] = entry; else h.push(entry);
+  h.sort((a, b) => (a.vintage < b.vintage ? -1 : 1));
+  const trimmed = h.slice(-60);
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(trimmed)); } catch { /* noop */ }
+  return trimmed;
+}
+function historyStrip(hist) {
+  if (hist.length < 2) return '';
+  const rows = hist.slice(-8).reverse().map((e) =>
+    `<div class="v-hist-row"><span class="k">${e.vintage}</span> ${e.krLabel}`
+    + `${e.net == null ? '' : ` · 실현 ${signed(e.net, 1)}bp`}</div>`).join('');
+  return `<div class="v-history"><div class="v-hist-title">판정 이력(최근)</div>${rows}</div>`;
+}
+
+// ── 판정 카드(최상단): KR 라벨 大 + US 부가 小 + 실현(20d) + 지표별 기준일 ──
+function renderVerdict() {
+  const s3 = summarize(SERIES.s3), fy = summarize(KRB.fy), tp = summarize(US.tp), exp = summarize(US.exp);
+  const toBp = (c) => (c == null ? null : c * 100); // %p 계열 chg60 → bp
+  const kr = judgeKR({ v1pct: s3.pct, kr5y5yChg60: toBp(fy.chg60), usTpChg60: toBp(tp.chg60) });
+  const us = judgeUS({ usExpChg60: toBp(exp.chg60), usTpChg60: toBp(tp.chg60) });
+  const real = realizedKR(DECOMP.kr.at(-1));
+  const hist = upsertHistory({
+    vintage: DATA.krYields.meta.updated_at, krKey: kr.key, krLabel: kr.label,
+    usLabel: us.label, net: real ? real.netBp : null,
+  });
+  const el = document.getElementById('verdict');
+  el.className = `verdict tone-${kr.tone}`;
+  el.innerHTML =
+    `<div class="v-eyebrow">판정 (조건 성립) · KR 주력</div>`
+    + `<div class="v-kr">${kr.label}</div>`
+    + `<div class="v-us">US 식별(부가): ${us.label}</div>`
+    + (real ? `<div class="v-real">실현(20d): <b>${signed(real.netBp, 1)}bp ${real.direction}</b>, ${real.dominant} 우세 <span class="v-note">— 판정=조건, 실현=분해 움직임(갈릴 수 있음)</span></div>` : '')
+    + `<div class="v-dates">기준일 · 3Y−기준 <span class="k">${s3.date}</span> · KR 5y5y <span class="k">${fy.date}</span> · US TP <span class="k">${tp.date}</span> · US 기대 <span class="k">${exp.date}</span></div>`
+    + historyStrip(hist);
+}
 
 function renderCards() {
   const baseRate = DATA.krBase.data.at(-1);
@@ -158,6 +201,8 @@ function renderFootnote() {
     + `<div><b>분해(20d 롤링)</b> — KR Δ3s10s = 앞단<span class="k">−Δ(3Y−기준)</span> + 뒷단<span class="k">잔차</span>. `
     + `기준금리 계단 변동은 앞·뒷단에서 상쇄되어 정확 항등식. `
     + `US Δ2s10s = 앞단 + 뒷단(<span class="k">기대</span>·<span class="k">TP</span> 2차 분해, US만 가능). 각국 자체 거래일 축(크로스 조인 없음).</div>`
+    + `<div><b>판정</b> — 판정표는 <span class="k">조건 성립</span>(변수1 pct + 5y5y·TP <span class="k">60d</span>), 실현 요약은 <span class="k">20d</span> 분해 순변화. `
+    + `창 길이가 달라 조건과 실현이 갈릴 수 있음(카드에 병기). 판정은 각국 최신 as-of 스냅샷 — 지표별 기준일 병기. 임계값 초기값(관찰 후 조정).</div>`
     + `<div>출처: <span class="k">ECOS</span> · 국고채 ${my.updated_at} · 기준금리 ${mb.updated_at} · `
     + `<span class="k">FRED</span> US ${DATA.usYields.meta.updated_at} · ACM TP ${DATA.usTp.meta.updated_at}. 측정만 한다 — 해석 없음.</div>`;
 }
@@ -170,6 +215,7 @@ function renderControls() {
 
 function renderCharts() { renderKRChart(); renderKRBackCharts(); renderUSCharts(); renderDecompCharts(); }
 function renderAll() {
+  renderVerdict();
   renderCards(); renderGuide(); renderKRBackCards(); renderUSCards();
   renderCharts(); renderControls(); renderFootnote();
 }

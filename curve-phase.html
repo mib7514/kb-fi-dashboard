@@ -23,6 +23,23 @@
   h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
   .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
 
+  .verdict { background: var(--panel); border: 1px solid var(--border-2); border-left-width: 3px; border-radius: 11px; padding: 16px 20px; margin-bottom: 24px; }
+  .verdict.tone-flat { border-left-color: var(--accent); }
+  .verdict.tone-steep { border-left-color: var(--amber); }
+  .verdict.tone-warn { border-left-color: var(--red); }
+  .verdict.tone-neutral { border-left-color: var(--muted); }
+  .verdict .v-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; color: var(--muted); text-transform: uppercase; margin-bottom: 6px; }
+  .verdict .v-kr { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  .verdict .v-us { font-size: 13px; color: var(--muted); margin-top: 5px; }
+  .verdict .v-real { font-size: 13px; margin-top: 9px; font-family: var(--mono); }
+  .verdict .v-real b { color: var(--text); }
+  .verdict .v-note { color: var(--muted); font-family: var(--sans); font-size: 11px; }
+  .verdict .v-dates { font-size: 10.5px; color: var(--muted); margin-top: 9px; font-family: var(--mono); }
+  .verdict .v-dates .k, .verdict .v-hist-row .k { color: var(--text); }
+  .verdict .v-history { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 9px; }
+  .verdict .v-hist-title { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; }
+  .verdict .v-hist-row { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-bottom: 2px; }
+
   .panel-head { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 12px; }
   .panel-head h2 { font-size: 16px; margin: 0; }
   .panel-head .badge { font-size: 10px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 4px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--border-2); }
@@ -74,6 +91,9 @@
   </div>
   <h1>Curve Phase</h1>
   <p class="tagline">기울기 변화를 프라이싱 갭·r* 재조정·텀프리미엄 3변수로 측정 · KR 주력, US 참고·식별용 · 측정만(결정론 밴드 라벨), 포지션 제안 없음</p>
+
+  <!-- ── 판정 카드 (최상단): KR 라벨 大 + US 부가 小 + 실현(20d) + 기준일 ── -->
+  <div class="verdict" id="verdict"></div>
 
   <!-- ── KR 패널 (주력) — 변수1: 프라이싱 갭 ── -->
   <div class="panel-head">
