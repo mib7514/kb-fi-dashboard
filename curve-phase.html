@@ -108,6 +108,43 @@
     <div class="chart-box" id="chart-kr-gap"></div>
   </div>
 
+  <!-- ── KR 뒷단 (변수2/3 프록시) + 분해 ── -->
+  <div class="panel-head">
+    <h2>KR · 뒷단 프록시 + 분해</h2>
+    <span class="badge">주력</span>
+    <span class="sub">5y5y·30Y−10Y(TP 프록시) · 기울기 변화의 앞단 vs 뒷단 기여</span>
+  </div>
+
+  <!-- 카드: KR 5y5y · KR 30Y−10Y -->
+  <div class="stats" id="kr-back-summary"></div>
+
+  <!-- 차트: KR 5y5y -->
+  <div class="chart-card">
+    <div class="chart-head">
+      <h2>KR 5y5y — 2×10Y − 5Y</h2>
+      <span class="cap">뒷단 기대+TP 합산(par 단순근사, 방향·z 전용)</span>
+    </div>
+    <div class="chart-box" id="chart-kr-5y5y"></div>
+  </div>
+
+  <!-- 차트: KR 30Y−10Y (TP 프록시) -->
+  <div class="chart-card">
+    <div class="chart-head">
+      <h2>KR 30Y − 10Y — 텀프리미엄 프록시</h2>
+      <span class="cap">2012-09 발행개시 이후 · KR은 공식 TP 시계열 부재</span>
+    </div>
+    <div class="chart-box" id="chart-kr-3010"></div>
+  </div>
+
+  <!-- 차트: KR Δ3s10s 20d 분해 -->
+  <div class="chart-card">
+    <div class="chart-head">
+      <h2>KR Δ3s10s 분해 (20d 롤링) — 앞단 vs 뒷단</h2>
+      <span class="cap">앞단 −Δ(3Y−기준) · 뒷단 잔차 · 합계 = Δ(10Y−3Y)</span>
+    </div>
+    <div class="chart-box" id="chart-kr-decomp"></div>
+  </div>
+
   <!-- ── US 패널 (참고·식별용) — 변수1 + 변수2/3 순수 분리 ── -->
   <div class="panel-head">
     <h2>US · 변수1 프라이싱 갭 + 변수2/3 분리</h2>
@@ -136,7 +173,16 @@
     <div class="chart-box" id="chart-us-decomp"></div>
   </div>
 
-  <!-- 판정 엔진·KR 5y5y/분해·사이클 오버레이는 Phase 4~6 에서 추가 -->
+  <!-- 차트: US Δ2s10s 20d 분해 (뒷단을 기대 vs TP로 2차 분해) -->
+  <div class="chart-card">
+    <div class="chart-head">
+      <h2>US Δ2s10s 분해 (20d 롤링) — 앞단 · 뒷단(기대/TP)</h2>
+      <span class="cap">앞단 −Δ(2Y−EFFR) · 뒷단 기대·TP 2차 분해 · 합계 = Δ(10Y−2Y)</span>
+    </div>
+    <div class="chart-box" id="chart-us-decomp2"></div>
+  </div>
+
+  <!-- 판정 엔진·사이클 오버레이는 Phase 5~6 에서 추가 -->
 
   <div class="footnote" id="footnote"></div>
 </div>

@@ -4,14 +4,16 @@
 //   US 패널(변수1/2/3)·5y5y·분해·판정·오버레이는 Phase 3~6 에서 추가.
 
 import { loadCurveData } from './cp-data.js';
-import { spreadSeries, colSpreadBp, fwd5y5y, seriesDiff, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
-import { C, LOOKBACKS, renderSpreadChart } from './cp-charts.js';
+import { spreadSeries, colSpreadBp, fwd5y5y, seriesDiff, decompKR, decompUS, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
+import { C, LOOKBACKS, renderSpreadChart, renderDecompChart } from './cp-charts.js';
 
 const LS_KEY = 'curve-phase';
 const state = { lookback: '3y' };
 let DATA = null;   // { krYields, krBase, usYields, usTp }
 let SERIES = null; // KR { s3:[[date,bp]], s1:[[date,bp]] }
+let KRB = null;    // KR 뒷단 { fy:%, s3010:bp }
 let US = null;     // US { gap:bp, fy:%, tp:%, exp:% }
+let DECOMP = null; // { kr:[{date,front,back,total}], us:[{date,front,backExp,backTp,total}] }
 
 const fmt = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : x.toFixed(d));
 const signed = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : (x >= 0 ? '+' : '') + x.toFixed(d));
@@ -75,7 +77,6 @@ function renderKRChart() {
     state.lookback, 'bp');
 }
 
-// ── US 패널 (참고·식별용) ──
 // 레벨(%) 카드 헬퍼: 값 + z250 + 60일 변화(bp).
 function levelCard(label, sum) {
   return `<div class="stat">
@@ -84,6 +85,40 @@ function levelCard(label, sum) {
       <div class="stat-sub">z250 ${sum.z == null ? '—' : signed(sum.z, 2)} · Δ60d ${chg60Bp(sum.chg60, '%')}</div>
     </div>`;
 }
+// bp 레벨 카드(스프레드): 값(bp) + z250 + 60일 변화(bp).
+function bpCard(label, sum) {
+  return `<div class="stat">
+      <div class="stat-label">${label}</div>
+      <div class="stat-main">${fmt(sum.last, 1)}<span class="stat-unit">bp</span></div>
+      <div class="stat-sub">z250 ${sum.z == null ? '—' : signed(sum.z, 2)} · Δ60d ${chg60Bp(sum.chg60, 'bp')}</div>
+    </div>`;
+}
+
+// ── KR 뒷단 (변수2/3 프록시) — 5y5y · 30Y−10Y ──
+function renderKRBackCards() {
+  document.getElementById('kr-back-summary').innerHTML =
+    levelCard('KR 5y5y (2×10Y−5Y)', summarize(KRB.fy))
+    + bpCard('KR 30Y−10Y (TP 프록시)', summarize(KRB.s3010));
+}
+function renderKRBackCharts() {
+  renderSpreadChart('chart-kr-5y5y', [{ name: 'KR 5y5y', color: C.purple, data: KRB.fy }], state.lookback, '%');
+  renderSpreadChart('chart-kr-3010', [{ name: 'KR 30Y−10Y', color: C.amber, data: KRB.s3010 }], state.lookback, 'bp');
+}
+
+// ── 분해 차트 (20d 롤링, 최근 ~6개월) ──
+function renderDecompCharts() {
+  renderDecompChart('chart-kr-decomp', DECOMP.kr, [
+    { key: 'front', name: '앞단 −Δ(3Y−기준)', color: C.accent },
+    { key: 'back', name: '뒷단 (잔차)', color: C.purple },
+  ]);
+  renderDecompChart('chart-us-decomp2', DECOMP.us, [
+    { key: 'front', name: '앞단 −Δ(2Y−EFFR)', color: C.accent },
+    { key: 'backExp', name: '뒷단·기대', color: C.up },
+    { key: 'backTp', name: '뒷단·TP', color: C.amber },
+  ]);
+}
+
+// ── US 패널 (참고·식별용) ──
 function renderUSCards() {
   const gap = summarize(US.gap); // bp — 변수1
   const gapCard = `<div class="stat">
@@ -120,6 +155,9 @@ function renderFootnote() {
     + `변수2 <span class="k">기대성분 = 5y5y − ACM TP</span>(r* 프록시), 변수3 <span class="k">ACM TP10</span> 직접 관측. `
     + `5y5y ≈ 2×10Y−5Y(par 단순근사, 레벨편의 존재 → 방향·z 전용). `
     + `TP는 10Y ACM이라 5y5y와 만기 불일치(호라이즌 프록시). 장단기 분해는 모델 추정치.</div>`
+    + `<div><b>분해(20d 롤링)</b> — KR Δ3s10s = 앞단<span class="k">−Δ(3Y−기준)</span> + 뒷단<span class="k">잔차</span>. `
+    + `기준금리 계단 변동은 앞·뒷단에서 상쇄되어 정확 항등식. `
+    + `US Δ2s10s = 앞단 + 뒷단(<span class="k">기대</span>·<span class="k">TP</span> 2차 분해, US만 가능). 각국 자체 거래일 축(크로스 조인 없음).</div>`
     + `<div>출처: <span class="k">ECOS</span> · 국고채 ${my.updated_at} · 기준금리 ${mb.updated_at} · `
     + `<span class="k">FRED</span> US ${DATA.usYields.meta.updated_at} · ACM TP ${DATA.usTp.meta.updated_at}. 측정만 한다 — 해석 없음.</div>`;
 }
@@ -130,9 +168,10 @@ function renderControls() {
   });
 }
 
-function renderCharts() { renderKRChart(); renderUSCharts(); }
+function renderCharts() { renderKRChart(); renderKRBackCharts(); renderUSCharts(); renderDecompCharts(); }
 function renderAll() {
-  renderCards(); renderGuide(); renderUSCards(); renderCharts(); renderControls(); renderFootnote();
+  renderCards(); renderGuide(); renderKRBackCards(); renderUSCards();
+  renderCharts(); renderControls(); renderFootnote();
 }
 
 function save() {
@@ -163,16 +202,21 @@ export async function initCurvePhase() {
     return;
   }
   DATA = loaded.data;
+  const krRows = DATA.krYields.data;
   const baseArr = DATA.krBase.data;
   SERIES = {
-    s3: spreadSeries(DATA.krYields.data, baseArr, 'y3'),
-    s1: spreadSeries(DATA.krYields.data, baseArr, 'y1'),
+    s3: spreadSeries(krRows, baseArr, 'y3'),
+    s1: spreadSeries(krRows, baseArr, 'y1'),
   };
+  // KR 뒷단: 5y5y(2×10Y−5Y, %) · 30Y−10Y(TP 프록시, bp, 2012-09~)
+  KRB = { fy: fwd5y5y(krRows, 'y10', 'y5'), s3010: colSpreadBp(krRows, 'y30', 'y10') };
   // US: 변수1 DGS2−EFFR(bp) · 5y5y(%) · TP(%) · 기대성분=5y5y−TP(%)
   const usRows = DATA.usYields.data;
   const fy = fwd5y5y(usRows);
   const tp = DATA.usTp.data.map((r) => [r.date, r.tp10]);
   US = { gap: colSpreadBp(usRows, 'dgs2', 'effr'), fy, tp, exp: seriesDiff(fy, tp) };
+  // 분해(20d 롤링, 각국 자체 거래일 축 — 크로스 조인 없음)
+  DECOMP = { kr: decompKR(krRows, baseArr), us: decompUS(usRows, DATA.usTp.data) };
   wire();
   renderAll();
 }

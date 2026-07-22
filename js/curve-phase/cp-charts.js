@@ -57,3 +57,28 @@ export function renderSpreadChart(divId, lines, lookback, unit = 'bp') {
     baseLayout({ annotations: endpointAnnotations(traces, dp), yaxis: { gridcolor: C.grid, linecolor: C.axis, zeroline: true, zerolinecolor: C.axis, tickfont: { size: 10 }, title: { text: unit, font: { size: 11 } } } }),
     { displayModeBar: false, responsive: true });
 }
+
+// 기울기 변화 분해 누적 막대(bp). points: [{date, total, ...}], comps: [{key,name,color}](누적 대상).
+//   막대는 상대 누적(barmode:relative, +위/−아래), 합계는 선으로 오버레이 + 끝점 라벨.
+export function renderDecompChart(divId, points, comps) {
+  const x = points.map((p) => p.date);
+  const traces = comps.map((c) => ({
+    x, y: points.map((p) => p[c.key]), name: c.name, type: 'bar',
+    marker: { color: c.color },
+    hovertemplate: `%{x|%Y-%m-%d}<br>${c.name} %{y:.1f}bp<extra></extra>`,
+  }));
+  const total = points.map((p) => p.total);
+  traces.push({
+    x, y: total, name: 'Δ 합계', type: 'scatter', mode: 'lines',
+    line: { color: C.text, width: 1.3 },
+    hovertemplate: `%{x|%Y-%m-%d}<br>Δ 합계 %{y:.1f}bp<extra></extra>`,
+  });
+  const anno = x.length ? [{
+    x: x[x.length - 1], y: total[total.length - 1], xref: 'x', yref: 'y',
+    text: `${total[total.length - 1] > 0 ? '+' : ''}${total[total.length - 1].toFixed(1)}`,
+    showarrow: false, xanchor: 'left', xshift: 6, font: { family: FONT, size: 10.5, color: C.text },
+  }] : [];
+  Plotly.newPlot(divId, traces,
+    baseLayout({ barmode: 'relative', annotations: anno }),
+    { displayModeBar: false, responsive: true });
+}

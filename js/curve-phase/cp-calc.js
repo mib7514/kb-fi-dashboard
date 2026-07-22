@@ -87,12 +87,13 @@ export function colSpreadBp(rows, keyA, keyB) {
   return out;
 }
 
-// US 5y5y 근사 ≈ 2×10Y − 5Y (%, 레벨). par 커브 단순근사 — 레벨 편의 존재, 방향·z 추적 전용.
-export function fwd5y5y(rows) {
+// 5y5y 근사 ≈ 2×10Y − 5Y (%, 레벨). par 커브 단순근사 — 레벨 편의 존재, 방향·z 추적 전용.
+//   US: (rows, 'dgs10','dgs5') 기본 · KR: (rows, 'y10','y5').
+export function fwd5y5y(rows, k10 = 'dgs10', k5 = 'dgs5') {
   const out = [];
   for (const r of rows) {
-    if (r.dgs10 == null || r.dgs5 == null) continue;
-    out.push([r.date, Math.round((2 * r.dgs10 - r.dgs5) * 1000) / 1000]);
+    if (r[k10] == null || r[k5] == null) continue;
+    out.push([r.date, Math.round((2 * r[k10] - r[k5]) * 1000) / 1000]);
   }
   return out;
 }
@@ -103,6 +104,51 @@ export function seriesDiff(a, b) {
   const out = [];
   for (const [d, v] of a) if (mb.has(d)) out.push([d, Math.round((v - mb.get(d)) * 1000) / 1000]);
   return out;
+}
+
+// ── 기울기 변화 분해 (window 영업일 롤링, bp) ──
+const bp1 = (x) => Math.round(x * 100 * 10) / 10; // %p→bp, 1자리
+
+// KR Δ(3s10s) 분해:  Δ(10Y−3Y) = 앞단[−Δ(3Y−기준)] + 뒷단[잔차 = Δ(10Y−기준)].
+//   ▸ 뒷단을 '잔차'로 두는 이유: 기준금리는 계단형(정책 결정일에만 점프)이라 Δ기준이 앞·뒷단에
+//     각각 +Δ기준/−Δ기준으로 상쇄되어 소거된다 → 분해는 정확 항등식이고, 앞단은 프라이싱 갭 변화
+//     (3Y−기준)로 깨끗이, 뒷단은 그 나머지로 정의된다. 기준금리 as-of 는 carry-forward(계단).
+//   반환: [{date, front, back, total}] (bp), 최근 nBars개.
+export function decompKR(yieldRows, baseArr, window = 20, nBars = 126) {
+  const rows = yieldRows
+    .filter((r) => r.y3 != null && r.y10 != null)
+    .map((r) => ({ date: r.date, y3: r.y3, y10: r.y10, base: asOfRate(baseArr, r.date) }))
+    .filter((r) => r.base != null);
+  const out = [];
+  for (let i = window; i < rows.length; i++) {
+    const t = rows[i], p = rows[i - window];
+    const total = bp1((t.y10 - t.y3) - (p.y10 - p.y3));
+    const front = bp1(-((t.y3 - t.base) - (p.y3 - p.base)));
+    const back = bp1((t.y10 - t.base) - (p.y10 - p.base));
+    out.push({ date: t.date, front, back, total });
+  }
+  return out.slice(-nBars);
+}
+
+// US Δ(2s10s) 분해 + 뒷단 2차 분해(기대 vs TP, US만 가능):
+//   Δ(10Y−2Y) = 앞단[−Δ(2Y−EFFR)] + 뒷단기대[Δ((10Y−TP)−EFFR)] + 뒷단TP[ΔTP].
+//   (10Y = 기대성분(10Y−TP) + TP. 뒷단 잔차 Δ(10Y−EFFR) 를 기대·TP 로 재분해.) TP 는 날짜 교집합.
+//   반환: [{date, front, backExp, backTp, total}] (bp), 최근 nBars개.
+export function decompUS(usRows, tpRows, window = 20, nBars = 126) {
+  const tpMap = new Map(tpRows.map((r) => [r.date, r.tp10]));
+  const rows = usRows
+    .filter((r) => r.dgs2 != null && r.dgs10 != null && r.effr != null && tpMap.has(r.date))
+    .map((r) => ({ date: r.date, y2: r.dgs2, y10: r.dgs10, effr: r.effr, tp: tpMap.get(r.date) }));
+  const out = [];
+  for (let i = window; i < rows.length; i++) {
+    const t = rows[i], p = rows[i - window];
+    const total = bp1((t.y10 - t.y2) - (p.y10 - p.y2));
+    const front = bp1(-((t.y2 - t.effr) - (p.y2 - p.effr)));
+    const backExp = bp1(((t.y10 - t.tp) - t.effr) - ((p.y10 - p.tp) - p.effr));
+    const backTp = bp1(t.tp - p.tp);
+    out.push({ date: t.date, front, backExp, backTp, total });
+  }
+  return out.slice(-nBars);
 }
 
 // 밴드 분류(결정론 라벨). 변수1 판독 가이드용. 임계값은 초기값(관찰 후 조정, 각주 명기).
