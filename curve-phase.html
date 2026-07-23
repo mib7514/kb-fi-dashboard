@@ -135,6 +135,10 @@
   .empty { color: var(--muted); font-size: 13px; padding: 24px; text-align: center; line-height: 1.9;
     background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin-top: 16px; }
   .empty code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; font-family: var(--mono); }
+
+  /* GC — Global Curve Compare 요약 테이블 */
+  #gc-table td.num, #gc-table th.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  #gc-table th.num { font-family: var(--sans); }
 </style>
 </head>
 <body>
@@ -242,6 +246,47 @@
     </div>
   </section>
 
+  <!-- ── GC. Global Curve Compare — KR/US/JP 3/10·10/30 스프레드 비교 ── -->
+  <section class="q-sec" id="gc-sec">
+    <div class="q-head"><span class="q-num" style="background:var(--amber)">GC</span><h2>Global Curve Compare</h2></div>
+    <p class="q-blurb">KR 커브 움직임이 글로벌 텀프리미엄 동조인지, 국내 고유 수급인지 — 3/10·10/30 스프레드를 KR·US·JP 나란히. 레벨·z·변화폭만 표시(판단 없음).</p>
+    <div id="gc-body">
+      <div class="controls">
+        <span class="ctrl-label">차트 룩백</span>
+        <div class="seg" id="gc-lookback">
+          <button data-lb="1y">1Y</button>
+          <button data-lb="3y" class="active">3Y</button>
+          <button data-lb="5y">5Y</button>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-head">
+          <h2>3/10 스프레드 — KR / US / JP</h2>
+          <div class="seg gc-mode" data-key="s310">
+            <button data-mode="level" class="active">레벨</button>
+            <button data-mode="z">z250</button>
+          </div>
+        </div>
+        <div class="chart-box" id="gc-chart-310"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-head">
+          <h2>10/30 스프레드 — KR / US / JP</h2>
+          <div class="seg gc-mode" data-key="s1030">
+            <button data-mode="level" class="active">레벨</button>
+            <button data-mode="z">z250</button>
+          </div>
+        </div>
+        <div class="chart-box" id="gc-chart-1030"></div>
+      </div>
+      <div class="chart-card" style="padding-bottom:12px">
+        <div class="chart-head"><h2>요약 — 국가 × 스프레드 (최신)</h2><span class="cap" id="gc-asof"></span></div>
+        <table class="terms" id="gc-table"></table>
+      </div>
+      <div class="footnote" id="gc-footnote"></div>
+    </div>
+  </section>
+
   <!-- ── 하단: 판정 이력 · 측정 한계 · 용어 참조 ── -->
   <div class="panel-head"><h2>판정 이력 · 참고</h2></div>
   <div class="verdict" id="hist" style="border-left-width:1px;border-left-color:var(--border-2)"></div>
@@ -275,6 +320,11 @@
 <script type="module">
   import { initCurvePhase } from './js/curve-phase/cp-ui.js';
   initCurvePhase();
+</script>
+<!-- GC — Global Curve Compare (독립 초기화, cp-ui 무영향) -->
+<script type="module">
+  import { initGC3 } from './js/gc/gc-ui.js';
+  initGC3();
 </script>
 </body>
 </html>
