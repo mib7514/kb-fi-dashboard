@@ -1,0 +1,74 @@
+name: GC Global Curve data (FRED+MOF+ECOS)
+
+# Global Curve Compare(GC) 3개국 국채금리(3Y/10Y/30Y) 주 1회 적재 → data/gc/{us,jp,kr}.json.
+# 소스별 실패 격리: US(FRED)/JP(MOF)/KR(ECOS) 각 스텝 continue-on-error →
+#   3개 중 일부 실패해도 나머지 산출물은 커밋된다. 데이터 diff 있을 때만 커밋(불변 append).
+# 기존 워크플로는 무변경(리스크 격리) — GC 전용 별도 파일.
+
+on:
+  schedule:
+    # 주 1회 수 22:20 UTC = 목 07:20 KST. 판단 주기가 주간(명령서 §2).
+    # 시각·concurrency group 분리로 기존 워크플로와 충돌 없음:
+    #   curve-fetch(평일 22:35) · taylor(평일 22:45) · gg1(수 23:10) · us-inflation(화 15:00).
+    - cron: '20 22 * * 3'
+  workflow_dispatch: {}          # 수동 트리거 — KR 전구간 backfill 최초 생성·게이트 검증용.
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gc-fetch
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── 소스별 fetch (continue-on-error: 한 소스 장애가 나머지를 막지 않음) ──
+      - name: Fetch US (FRED) → data/gc/us.json
+        id: us
+        continue-on-error: true
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: node scripts/gc/fetch-us.mjs
+
+      - name: Fetch JP (MOF) → data/gc/jp.json
+        id: jp
+        continue-on-error: true
+        run: node scripts/gc/fetch-jp.mjs
+
+      - name: Fetch KR (ECOS) → data/gc/kr.json
+        id: kr
+        continue-on-error: true
+        env:
+          ECOS_API_KEY: ${{ secrets.ECOS_API_KEY }}
+        run: node scripts/gc/fetch-kr.mjs
+
+      - name: 소스 fetch 결과 요약
+        if: always()
+        run: |
+          echo "US=${{ steps.us.outcome }}  JP=${{ steps.jp.outcome }}  KR=${{ steps.kr.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit if changed
+        run: |
+          # 신규(untracked)·수정 모두 포착. 존재하는 산출물만 스테이징 → 부분 성공도 커밋.
+          if [ -z "$(git status --porcelain data/gc/)" ]; then
+            echo "갱신분 없음 — 커밋 skip."
+            exit 0
+          fi
+          ASOF=$(node -e "const fs=require('fs');const g='data/gc';const ds=fs.readdirSync(g).filter(f=>f.endsWith('.json')).map(f=>require('./'+g+'/'+f).meta.updated).filter(Boolean).sort();process.stdout.write(ds[ds.length-1]||'')")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/gc/
+          git commit -m "data: GC 글로벌 커브(FRED+MOF+ECOS) ${ASOF} 갱신"
+          # 다른 data 워크플로와 push 경합 대비 — 원격 선반영분 위로 rebase 후 push.
+          git pull --rebase origin main
+          git push
