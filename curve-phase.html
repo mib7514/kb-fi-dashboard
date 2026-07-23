@@ -139,6 +139,22 @@
   /* GC — Global Curve Compare 요약 테이블 */
   #gc-table td.num, #gc-table th.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
   #gc-table th.num { font-family: var(--sans); }
+
+  /* GC — z250 도움말(접이식, JS 불필요) */
+  details.gc-help { margin-top: 8px; }
+  details.gc-help > summary { cursor: pointer; font-size: 11px; color: var(--muted); list-style: none; user-select: none; width: fit-content; }
+  details.gc-help > summary::-webkit-details-marker { display: none; }
+  details.gc-help > summary::before { content: '▸ '; }
+  details.gc-help[open] > summary::before { content: '▾ '; }
+  details.gc-help[open] > summary { color: var(--text); }
+  .gc-help-body { margin-top: 8px; padding: 12px 14px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    font-size: 12px; color: var(--muted); line-height: 1.65; }
+  .gc-help-body p { margin: 0 0 8px; }
+  .gc-help-body p:last-child { margin-bottom: 0; }
+  .gc-help-body b { color: var(--text); font-family: var(--mono); }
+  .gc-help-body ul { margin: 8px 0 0; padding-left: 18px; }
+  .gc-help-body li { margin-bottom: 4px; }
+  .gc-help-body li:last-child { margin-bottom: 0; }
 </style>
 </head>
 <body>
@@ -285,6 +301,20 @@
       </div>
       <div class="footnote" id="gc-footnote"></div>
     </div>
+    <details class="gc-help">
+      <summary>z250이란?</summary>
+      <div class="gc-help-body">
+        <p><b>z250</b> = (현재 스프레드 − 최근 250영업일 평균) ÷ 최근 250영업일 표준편차</p>
+        <p>현재 스프레드가 자국의 최근 1년(250영업일) 궤적 대비 평균에서 표준편차 몇 배만큼 떨어져 있는지를 나타냅니다. 예: z = +2.0이면 최근 1년 평균보다 표준편차 2배 높은 수준.</p>
+        <p>국가마다 스프레드의 절대 수준이 다르므로(레벨 비교는 의미가 약함), 각국을 자기 히스토리로 표준화하여 "각자의 평소 대비 이례성"을 같은 척도로 비교하기 위한 지표입니다.</p>
+        <ul>
+          <li>윈도우 250영업일 고정: JP는 YCC 해제 전후 커브 레짐이 달라, 장기 윈도우 사용 시 과거 레짐이 평균·표준편차를 왜곡함. 이를 방지하기 위해 약 1년으로 고정.</li>
+          <li>표본 250개 미만 구간(시리즈 초기 ~1년)은 z 미표시(부분 윈도우 미사용). 차트 좌측 공백은 정상.</li>
+          <li>표준편차는 모집단 방식(÷n), 사이트 내 타 z 지표와 동일 규약.</li>
+          <li>z는 이례성의 측정값이며, 되돌림(평균회귀) 여부를 예측하지 않음.</li>
+        </ul>
+      </div>
+    </details>
   </section>
 
   <!-- ── 하단: 판정 이력 · 측정 한계 · 용어 참조 ── -->
