@@ -140,6 +140,11 @@
   #gc-table td.num, #gc-table th.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
   #gc-table th.num { font-family: var(--sans); }
 
+  /* CP-Q3b — 인상 사이클 성분 분해 테이블 */
+  #q3-decomp td.num, #q3-decomp th.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+  #q3-decomp th.num { font-family: var(--sans); }
+  #q3-decomp tr.q3d-current td { color: var(--muted); font-style: italic; } /* 현재 사이클(부분 창) 흐림 */
+
   /* GC — z250 도움말(접이식, JS 불필요) */
   details.gc-help { margin-top: 8px; }
   details.gc-help > summary { cursor: pointer; font-size: 11px; color: var(--muted); list-style: none; user-select: none; width: fit-content; }
@@ -254,6 +259,11 @@
       <div class="chart-head"><h2>한국 장단기 격차(10년−3년) — 첫 인상일 T=0 정렬</h2><span class="cap">현재 굵은 선, 과거 반투명 · T−120~T+250 영업일</span></div>
       <div class="chart-box" id="chart-kr-overlay"></div>
       <div class="cycle-caps" id="kr-caps"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-head"><h2>인상 사이클 플랫의 성분 분해 — Δ(10Y−3Y) = Δy10 − Δy3</h2><span class="cap">각 사이클 T0→창끝 · 눌림이 3Y 상승(앞단)·10Y 하락(뒷단) 중 무엇으로 구성됐나</span></div>
+      <table class="terms" id="q3-decomp"></table>
+      <div class="footnote" id="q3-decomp-note"></div>
     </div>
     <div class="chart-card">
       <div class="chart-head"><h2>미국 장단기 격차(10년−2년) — 첫 인상일 T=0 정렬 (참고)</h2><span class="cap">1994-02 / 2016-12 (+참고 2015-12 · 2022-03)</span></div>

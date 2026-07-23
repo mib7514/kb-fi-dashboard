@@ -3,7 +3,7 @@
 //   문구는 cp-text.js 로 분리. 원 지표/차트는 <details> 접힘으로 보존(설계자용 2층 구조).
 
 import { loadCurveData, loadCycles } from './cp-data.js';
-import { spreadSeries, colSpreadBp, fwd5y5y, seriesDiff, decompKR, decompUS, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
+import { spreadSeries, colSpreadBp, fwd5y5y, seriesDiff, decompKR, decompUS, decompCycles, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
 import { C, LOOKBACKS, renderSpreadChart, renderDecompChart, renderOverlayChart, renderGauge } from './cp-charts.js';
 import { judgeKR, judgeUS, realizedKR } from './cp-judge.js';
 import { buildOverlay } from './cp-overlay.js';
@@ -21,6 +21,7 @@ let OVERLAY = null; // { kr:[...], us:[...] } 또는 null
 let SNAP = null;    // 스냅샷(요약+판정+실현+Q입력)
 
 const CYCLE_COLORS = ['#f0883e', '#3fb950', '#a371f7', '#f85149', '#8b949e'];
+const Q3_FULL_WINDOW = 250; // = cp-overlay eventAligned post 기본값(창 T+250). 새 창 관례 아님 — 진행 표기 분모.
 
 const fmt = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : x.toFixed(d));
 const signed = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : (x >= 0 ? '+' : '') + x.toFixed(d));
@@ -249,6 +250,34 @@ function renderOverlays() {
   renderCaptions('us-caps', OVERLAY.us);
 }
 
+// ── Q3b: 인상 사이클 플랫의 성분 분해 테이블(측정만) ──
+//   Δs310 은 오버레이 deltaBp 와 바이트 일치(동일 소스·창). 기여 정수·100%초과/음수 있는 그대로.
+function renderQ3Decomp() {
+  const el = document.getElementById('q3-decomp');
+  if (!el || !OVERLAY) return;
+  const rows = decompCycles(OVERLAY.kr, DATA.krYields.data, 'y3', 'y10');
+  const bp = (x) => (x == null ? '—' : `${signed(x, 1)}`);
+  const pc = (x) => (x == null ? '—' : `${x}%`);
+  const body = rows.map((r) => {
+    const win = r.current
+      ? `진행 ${r.lastOffset}일/${Q3_FULL_WINDOW}일`
+      : `T0→T+${r.lastOffset}`;
+    return `<tr${r.current ? ' class="q3d-current"' : ''}>
+        <td>${r.label}</td><td class="num">${win}</td>
+        <td class="num">${bp(r.ds310)}</td>
+        <td class="num">${bp(r.dyShort)}</td><td class="num">${bp(r.dyLong)}</td>
+        <td class="num">${pc(r.shortContrib)}</td><td class="num">${pc(r.longContrib)}</td>
+      </tr>`;
+  }).join('');
+  el.innerHTML = `<thead><tr>
+      <th>사이클</th><th class="num">창</th><th class="num">Δs310</th>
+      <th class="num">Δy3</th><th class="num">Δy10</th><th class="num">3Y 기여</th><th class="num">10Y 기여</th>
+    </tr></thead><tbody>${body}</tbody>`;
+  document.getElementById('q3-decomp-note').innerHTML =
+    '<div>기여율 합 100%. 3Y 기여가 음수면 3Y도 하락했으나 10Y가 더 하락(불플랫), 100% 초과면 10Y도 상승했으나 3Y가 더 상승(베어플랫).</div>'
+    + '<div>Δs310가 +(스팁)인 행은 같은 기여율이 \'스팁에 대한 기여\'로 읽힘 — 10Y 기여가 100% 초과면 3Y도 상승했으나 10Y가 더 상승(스팁 주도).</div>';
+}
+
 function renderControls() {
   document.querySelectorAll('#lookback-seg button').forEach((b) => b.classList.toggle('active', b.dataset.lb === state.lookback));
 }
@@ -267,7 +296,7 @@ function renderFootnote() {
 function renderAll() {
   renderHero(); renderBlurbs(); renderGauges();
   renderCards(); renderGuide(); renderKRBackCards(); renderUSCards();
-  renderDecompCharts(); renderOverlays(); renderLookbackCharts();
+  renderDecompCharts(); renderOverlays(); renderQ3Decomp(); renderLookbackCharts();
   renderControls(); renderHistory(); renderFootnote();
 }
 

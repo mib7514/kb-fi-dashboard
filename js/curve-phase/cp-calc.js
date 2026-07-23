@@ -151,6 +151,32 @@ export function decompUS(usRows, tpRows, window = 20, nBars = 126) {
   return out.slice(-nBars);
 }
 
+// ── 인상 사이클 플랫의 성분 분해 (Q3b) ──
+//   overlays = buildOverlay(...) 결과 배열(각 {label,current,t0Date,points,lastOffset,deltaBp}).
+//   yieldRows = kr_yields.data(오버레이와 동일 소스 → 바이트 일치 보장). T0→창끝(offset lastOffset) 구간에서:
+//     ds310 = Δ(kLong−kShort) = dyLong − dyShort  (yields 0.1bp 그래뉼 → overlay.deltaBp 와 정확 일치, 항등식)
+//     기여: shortContrib = dyShort/(dyShort−dyLong), longContrib = −dyLong/(dyShort−dyLong), 합 100%(정수).
+//       분모(=−ds310) 0 이면 null. 100% 초과·음수 허용(있는 그대로).
+//   반환 [{label,current,lastOffset,t0Date,endDate,ds310,dyShort,dyLong,shortContrib,longContrib}].
+export function decompCycles(overlays, yieldRows, kShort = 'y3', kLong = 'y10') {
+  const byDate = new Map(yieldRows.map((r) => [r.date, r]));
+  return overlays.map((o) => {
+    const endDate = o.points && o.points.length ? o.points[o.points.length - 1].date : null;
+    const a = o.t0Date == null ? null : byDate.get(o.t0Date);
+    const b = endDate == null ? null : byDate.get(endDate);
+    const base = { label: o.label, current: !!o.current, lastOffset: o.lastOffset ?? null, t0Date: o.t0Date ?? null, endDate };
+    if (!a || !b || a[kShort] == null || a[kLong] == null || b[kShort] == null || b[kLong] == null) {
+      return { ...base, ds310: null, dyShort: null, dyLong: null, shortContrib: null, longContrib: null };
+    }
+    const dyShort = bp1(b[kShort] - a[kShort]);
+    const dyLong = bp1(b[kLong] - a[kLong]);
+    const ds310 = bp1((b[kLong] - b[kShort]) - (a[kLong] - a[kShort]));
+    const denom = dyShort - dyLong;
+    const contrib = (num) => (Math.abs(denom) < 1e-9 ? null : Math.round((num / denom) * 100));
+    return { ...base, ds310, dyShort, dyLong, shortContrib: contrib(dyShort), longContrib: contrib(-dyLong) };
+  });
+}
+
 // 밴드 분류(결정론 라벨). 변수1 판독 가이드용. 임계값은 초기값(관찰 후 조정, 각주 명기).
 //   ≥70 잔존(resid) · ≤30 소진(exhausted) · 그 외 혼재(mixed).
 export const BAND_HI = 70;
