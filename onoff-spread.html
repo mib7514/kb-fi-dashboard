@@ -4,14 +4,45 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>On/Off 스프레드 — 국고 3년 지표물 커브조정 RV | FI Dashboard</title>
+<!-- 테마 선적용(FOUC 방지) — body 렌더 전에 html[data-oo-theme] 세팅. 기본 dark. -->
+<script>try{document.documentElement.dataset.ooTheme=localStorage.getItem('oo-theme')==='light'?'light':'dark';}catch(e){document.documentElement.dataset.ooTheme='dark';}</script>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
     --border: #21262d; --border-2: #30363d;
     --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --forecast: #f0883e;
     --ok: #3fb950; --ext: #f85149;
+    /* 텍스트로 쓰이는 액센트(다크는 --accent 와 동일 렌더) */
+    --accent-ink: var(--accent);
+    /* 액센트 배경 위 글자색 */
+    --accent-contrast: #08111f;
+    /* 판정 색 (기간요인 = 보라 계열) */
+    --v-period: #bc8cff; --v-period-bd: #bc8cff55; --v-period-bg: #bc8cff11;
+    --v-conc-bd: #3fb95055; --v-conc-bg: #3fb95011;
+    --v-liq-bd: #f0883e55;  --v-liq-bg: #f0883e11;
+    --v-mix-bd: #58a6ff55;  --v-mix-bg: #58a6ff11;
     --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  /* ── 라이트(화이트) 모드 — KB CI 팔레트: KB Yellow #FFBC00 + KB Gray #60584C + 웜 뉴트럴 ── */
+  [data-oo-theme='light'] {
+    --bg: #faf9f6;          /* 웜 오프화이트 */
+    --panel: #ffffff;
+    --panel-2: #f4f1ea;
+    --border: #e7e2d8;
+    --border-2: #d6cfc1;
+    --text: #26231d;        /* KB Gray 계열 잉크 */
+    --muted: #837b6d;
+    --accent: #ffbc00;      /* KB Yellow — 배경/활성용 */
+    --accent-ink: #8a6b00;  /* 다크 골드 — 흰 배경 위 액센트 텍스트용 */
+    --accent-contrast: #26231d; /* 노랑 위 검정 = KB 시그니처 조합 */
+    --forecast: #d98e04;
+    --ok: #2f8f4e;
+    --ext: #c9453a;
+    --v-period: #7c5cbf; --v-period-bd: #7c5cbf55; --v-period-bg: #7c5cbf14;
+    --v-conc-bd: #2f8f4e55; --v-conc-bg: #2f8f4e14;
+    --v-liq-bd: #d98e0455;  --v-liq-bg: #d98e0414;
+    --v-mix-bd: #8a6b0055;  --v-mix-bg: #8a6b0014;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
@@ -19,10 +50,12 @@
   .wrap { max-width: 1180px; margin: 0 auto; }
 
   .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: var(--accent-contrast); }
   .eyebrow .ctx { font-size: 12px; color: var(--muted); }
   .eyebrow .factory { margin-left: auto; font-size: 12px; color: var(--muted); text-decoration: none; border: 1px solid var(--border-2); border-radius: 6px; padding: 4px 9px; }
   .eyebrow .factory:hover { color: var(--text); border-color: var(--accent); }
+  .eyebrow .theme-toggle { font-size: 12px; line-height: 1.5; color: var(--muted); background: transparent; border: 1px solid var(--border-2); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-family: var(--sans); }
+  .eyebrow .theme-toggle:hover { color: var(--text); border-color: var(--accent); }
   h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
   .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
 
@@ -39,7 +72,7 @@
   .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--border-2); border-radius: 7px; overflow: hidden; }
   .seg button { background: transparent; border: none; color: var(--muted); font-family: var(--mono); font-size: 12px; padding: 6px 12px; cursor: pointer; border-right: 1px solid var(--border); }
   .seg button:last-child { border-right: none; }
-  .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+  .seg button.active { background: var(--accent); color: var(--accent-contrast); font-weight: 600; }
   .seg button:hover:not(.active) { background: var(--panel-2); color: var(--text); }
 
   .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 22px 0 10px; }
@@ -61,21 +94,21 @@
 
   .btn { background: var(--panel-2); border: 1px solid var(--border-2); color: var(--text); font-size: 12px; padding: 7px 13px; border-radius: 7px; cursor: pointer; font-family: var(--sans); font-weight: 600; }
   .btn:hover { border-color: var(--accent); }
-  .btn.accent { background: var(--accent); color: #08111f; border-color: var(--accent); }
+  .btn.accent { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
   .status { margin-top: 8px; font-size: 11px; font-family: var(--mono); color: var(--muted); min-height: 15px; }
   .status.ok { color: var(--ok); } .status.bad { color: var(--ext); }
 
   /* 판정 */
   .verdict-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
   .verdict-main { font-size: 18px; font-weight: 700; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border-2); }
-  .verdict-main.v-period { color: #bc8cff; border-color: #bc8cff55; background: #bc8cff11; }
-  .verdict-main.v-concession { color: var(--ok); border-color: #3fb95055; background: #3fb95011; }
-  .verdict-main.v-liquidity { color: var(--forecast); border-color: #f0883e55; background: #f0883e11; }
-  .verdict-main.v-mixed { color: var(--accent); border-color: #58a6ff55; background: #58a6ff11; }
+  .verdict-main.v-period { color: var(--v-period); border-color: var(--v-period-bd); background: var(--v-period-bg); }
+  .verdict-main.v-concession { color: var(--ok); border-color: var(--v-conc-bd); background: var(--v-conc-bg); }
+  .verdict-main.v-liquidity { color: var(--forecast); border-color: var(--v-liq-bd); background: var(--v-liq-bg); }
+  .verdict-main.v-mixed { color: var(--accent-ink); border-color: var(--v-mix-bd); background: var(--v-mix-bg); }
   .verdict-main.v-none { color: var(--muted); }
   .verdict-badges { display: flex; flex-direction: column; gap: 8px; }
   .verdict-badge { background: var(--panel-2); border: 1px solid var(--border); border-left-width: 3px; border-radius: 7px; padding: 9px 12px; }
-  .verdict-badge.v-period { border-left-color: #bc8cff; }
+  .verdict-badge.v-period { border-left-color: var(--v-period); }
   .verdict-badge.v-concession { border-left-color: var(--ok); }
   .verdict-badge.v-liquidity { border-left-color: var(--forecast); }
   .verdict-badge.v-outlier { border-left-color: var(--ext); }
@@ -84,7 +117,7 @@
   .verdict-badge.v-past { border-left-color: var(--muted); opacity: 0.85; }
   .verdict-sub { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 12px 0 6px; }
   .verdict-past { margin-top: 12px; }
-  .verdict-past summary { font-size: 12px; color: var(--accent); cursor: pointer; padding: 4px 0; }
+  .verdict-past summary { font-size: 12px; color: var(--accent-ink); cursor: pointer; padding: 4px 0; }
   .verdict-past summary:hover { color: var(--text); }
   .verdict-past[open] summary { margin-bottom: 8px; }
   .vb-label { font-size: 13px; font-weight: 600; color: var(--text); }
@@ -102,12 +135,12 @@
   .cmt { background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; padding: 10px 13px; margin-bottom: 8px; }
   .cmt.latest { border-color: var(--accent); }
   .cmt-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); margin-bottom: 5px; }
-  .cmt-tag { color: var(--accent); font-weight: 700; }
+  .cmt-tag { color: var(--accent-ink); font-weight: 700; }
   .cmt-text { font-size: 13px; color: var(--text); white-space: pre-wrap; }
 
   /* OO-9 지표 해설 ("이 화면 읽는 법") */
   .oo-explainer { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; margin: 0 0 20px; }
-  .oo-explainer > summary { cursor: pointer; padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--accent); list-style: none; user-select: none; }
+  .oo-explainer > summary { cursor: pointer; padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--accent-ink); list-style: none; user-select: none; }
   .oo-explainer > summary::-webkit-details-marker { display: none; }
   .oo-explainer > summary::before { content: "▸ "; color: var(--muted); }
   .oo-explainer[open] > summary::before { content: "▾ "; }
@@ -117,10 +150,10 @@
   .ex-body h4 { font-size: 12px; font-weight: 700; color: var(--text); margin: 18px 0 6px; }
   .ex-body h4:first-child { margin-top: 0; }
   .ex-body p { margin: 0 0 8px; color: var(--text); }
-  .ex-eq { font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 6px; padding: 8px 12px; margin: 8px 0; display: inline-block; }
+  .ex-eq { font-family: var(--mono); font-size: 13px; color: var(--accent-ink); background: var(--panel-2); border: 1px solid var(--border-2); border-radius: 6px; padding: 8px 12px; margin: 8px 0; display: inline-block; }
   .ex-body ul { margin: 6px 0 8px; padding-left: 20px; }
   .ex-body li { margin: 0 0 6px; }
-  .ex-x { font-family: var(--mono); font-weight: 600; color: var(--accent); }
+  .ex-x { font-family: var(--mono); font-weight: 600; color: var(--accent-ink); }
   .oo-term { border-bottom: 1px dotted var(--muted); cursor: help; }
   .oo-info { cursor: help; color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 5px; }
 </style>
@@ -131,6 +164,7 @@
     <span class="step">ON/OFF</span>
     <span class="ctx">국고 3년 지표물 · 커브조정 상대가치</span>
     <a class="factory" href="admin.html#onoff" title="세대별 스프레드·입찰일·코멘터리 데이터 생성(로컬 admin)">데이터 공장 →</a>
+    <button class="theme-toggle" id="oo-theme-toggle" type="button" title="라이트/다크 모드 전환 (보고서·캡처용)">🌙 다크</button>
   </div>
   <h1>On/Off-the-run 스프레드</h1>
   <p class="tagline">지표물 fly = [지표−구지표] − [구지표−구구지표]. 세대별 이벤트타임 비교로 리치/저평가를 문맥화 — 원인 판단은 사람 몫.</p>

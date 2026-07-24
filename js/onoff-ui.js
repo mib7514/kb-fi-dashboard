@@ -13,6 +13,7 @@ const $ = id => document.getElementById(id);
 const fmt = (v, u = '') => (typeof v === 'number' && Number.isFinite(v)) ? (v > 0 ? '+' : '') + v.toFixed(1) + u : '—';
 const LS_PROV = 'onoff-provisional';
 const LS_EXPLAIN = 'onoff-explainer-open';
+const LS_THEME = 'oo-theme';
 
 const state = { data: null, gens: [], selected: null, auctions: [], commentary: [], lastSnapshot: null, forwardDays: 60, events: null, provisional: null, prov: null };
 
@@ -209,6 +210,38 @@ function renderAll() {
   renderPanelB();
 }
 
+// 두 차트만 현재 상태 그대로 다시 그린다(상태 재계산 없음) — 테마 전환용.
+function redrawCharts() {
+  const gen = state.gens.find(g => g.tag === state.selected);
+  if (!gen) return;
+  renderDecompose($('oo-chart-a'), state.prov ? state.prov.displayGen : gen, state.events, state.prov ? state.prov.point : null);
+  renderPanelB();
+}
+
+// ── 라이트/다크 토글 (자료·캡처용 · localStorage 'oo-theme' · 기본 dark) ──
+// CSS 는 html[data-oo-theme] 로 전환되고, 차트는 'oo-theme-change' 를 받아 재렌더한다.
+function applyTheme(theme) {
+  const t = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.ooTheme = t;
+  const btn = $('oo-theme-toggle');
+  if (btn) btn.textContent = t === 'light' ? '☀️ 라이트' : '🌙 다크';
+  return t;
+}
+
+function initTheme() {
+  let saved = 'dark';
+  try { saved = localStorage.getItem(LS_THEME) === 'light' ? 'light' : 'dark'; } catch { /* noop */ }
+  applyTheme(saved);
+  const btn = $('oo-theme-toggle');
+  if (btn) btn.addEventListener('click', () => {
+    const next = document.documentElement.dataset.ooTheme === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    try { localStorage.setItem(LS_THEME, next); } catch { /* noop */ }
+    window.dispatchEvent(new CustomEvent('oo-theme-change', { detail: { theme: next } }));
+  });
+  window.addEventListener('oo-theme-change', redrawCharts);
+}
+
 // ── 당일 호가 잠정 입력 (localStorage · 비커밋) ──
 function provStatus(msg, kind) { const s = $('oo-prov-status'); if (s) { s.textContent = msg; s.className = 'status ' + (kind || ''); } }
 
@@ -251,6 +284,7 @@ function loadProvisional() {
 }
 
 export function initOnoff() {
+  initTheme(); // 데이터 없어도 토글은 동작해야 하므로 가드보다 먼저
   const data = window.ONOFF_KTB3Y;
   if (!data || !Array.isArray(data.generations) || !data.generations.length) {
     const app = $('oo-app');

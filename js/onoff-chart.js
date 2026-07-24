@@ -3,39 +3,75 @@
 
 import { flySeries, bandStats, orderGenerations } from './onoff-calc.js';
 
-const COLORS = {
-  fly: '#58a6ff',      // fly (파랑, 주계열)
-  raw: '#8b949e',      // raw (회색)
-  slope: '#f0883e',    // slope (주황)
-  band: 'rgba(88,166,255,0.10)',
-  bandOuter: 'rgba(88,166,255,0.05)', // 외곽 밴드(min–max) — 같은 hue, 내부의 ~50% 진하기
-  median: '#8b949e',
-  current: '#58a6ff',
-  prior: '#6e7681',    // 직전세대 (가는 회색 실선)
-  rich: '#3fb950',     // 0 아래 = 지표물 리치(정상)
-  cheap: '#f0883e',    // 0 위 = 지표물 저평가(이례)
-  grid: '#21262d',
-  axis: '#484f58',
-  text: '#c9d1d9',
-  muted: '#8b949e',
-  zero: '#6e7681',
+// 팔레트 이원화 — dark 는 기존 값 그대로(이동만), light 는 KB CI 기반(KB Gray #60584C + KB Yellow #FFBC00).
+// 렌더 시점에 getColors() 로 읽어야 테마 전환이 반영된다(모듈 로드 시 상수로 굳히지 말 것).
+const PALETTES = {
+  dark: {
+    fly: '#58a6ff',      // fly (파랑, 주계열)
+    raw: '#8b949e',      // raw (회색)
+    slope: '#f0883e',    // slope (주황)
+    band: 'rgba(88,166,255,0.10)',
+    bandOuter: 'rgba(88,166,255,0.05)', // 외곽 밴드(min–max) — 같은 hue, 내부의 ~50% 진하기
+    median: '#8b949e',
+    current: '#58a6ff',
+    prior: '#6e7681',    // 직전세대 (가는 회색 실선)
+    rich: '#3fb950',     // 0 아래 = 지표물 리치(정상)
+    cheap: '#f0883e',    // 0 위 = 지표물 저평가(이례)
+    grid: '#21262d',
+    axis: '#484f58',
+    text: '#c9d1d9',
+    muted: '#8b949e',
+    zero: '#6e7681',
+    outline: 'rgba(139,148,158,0.35)', // 외곽 밴드 윤곽선
+    fwdShade: 'rgba(139,148,158,0.06)', // 포워드 참조 구간 음영
+  },
+  light: {
+    fly: '#60584c',                 // KB Gray — 주계열
+    raw: '#b3ab9c',
+    slope: '#d98e04',
+    band: 'rgba(255,188,0,0.16)',    // KB Yellow 밴드 (25–75%)
+    bandOuter: 'rgba(255,188,0,0.07)', // 외곽 밴드 — 같은 hue 절반 진하기 유지
+    median: '#a39b8c',
+    current: '#60584c',
+    prior: '#c0b9ab',
+    rich: '#2f8f4e',
+    cheap: '#d98e04',
+    grid: '#ebe7de',
+    axis: '#c6bfb1',
+    text: '#3c382f',
+    muted: '#837b6d',
+    zero: '#a39b8c',
+    outline: 'rgba(131,123,109,0.35)',
+    fwdShade: 'rgba(131,123,109,0.06)',
+  },
 };
+function getColors() {
+  return PALETTES[document.documentElement.dataset.ooTheme === 'light' ? 'light' : 'dark'];
+}
+
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const CONFIG = { displayModeBar: false, responsive: true };
 
-const EVENT_COLOR = { 반기말: '#bc8cff', 분기말: '#bc8cff', 입찰: '#3fb950' };
+const EVENT_COLORS = {
+  dark: { 반기말: '#bc8cff', 분기말: '#bc8cff', 입찰: '#3fb950' },
+  light: { 반기말: '#7c5cbf', 분기말: '#7c5cbf', 입찰: '#2f8f4e' },
+};
+function getEventColors() {
+  return EVENT_COLORS[document.documentElement.dataset.ooTheme === 'light' ? 'light' : 'dark'];
+}
 
 // 이벤트 세로선 + 상단 라벨을 layout 에 주입. xOf(e) → x좌표(Panel A: 날짜, Panel B: day).
 function withEvents(layout, events, xOf) {
   if (!events || !events.length) return layout;
+  const C = getColors(), EC = getEventColors();
   const shapes = events.map(e => ({
     type: 'line', xref: 'x', yref: 'paper', x0: xOf(e), x1: xOf(e), y0: 0, y1: 1,
-    line: { color: EVENT_COLOR[e.kind] || COLORS.muted, width: 1, dash: 'dot' }, layer: 'below',
+    line: { color: EC[e.kind] || C.muted, width: 1, dash: 'dot' }, layer: 'below',
   }));
   const annotations = events.map(e => ({
     x: xOf(e), xref: 'x', y: 1, yref: 'paper', yanchor: 'bottom', xanchor: 'center',
     text: `${e.kind}`, hovertext: `${e.kind} ${e.calendar || e.date} · day${e.day}`, showarrow: false,
-    font: { color: EVENT_COLOR[e.kind] || COLORS.muted, size: 9, family: FONT },
+    font: { color: EC[e.kind] || C.muted, size: 9, family: FONT },
   }));
   return { ...layout, shapes: [...(layout.shapes || []), ...shapes], annotations: [...(layout.annotations || []), ...annotations] };
 }
@@ -43,23 +79,25 @@ function withEvents(layout, events, xOf) {
 // 잠정 포인트 트레이스: 마지막 실측 → 잠정으로 점선 연결 + 속빈 다이아몬드 마커.
 // xs/ys = [마지막실측, 잠정] 2점. 마커는 잠정(둘째)만 표시(size 0,11).
 function provisionalTrace(xs, ys, p) {
+  const C = getColors();
   return {
     x: xs, y: ys, name: '오늘 호가 (잠정)', mode: 'lines+markers',
-    line: { color: COLORS.cheap, width: 1.4, dash: 'dot' },
-    marker: { symbol: ['circle', 'diamond-open'], size: [0, 11], color: COLORS.cheap, line: { width: 1.8, color: COLORS.cheap } },
+    line: { color: C.cheap, width: 1.4, dash: 'dot' },
+    marker: { symbol: ['circle', 'diamond-open'], size: [0, 11], color: C.cheap, line: { width: 1.8, color: C.cheap } },
     customdata: [[null, null, ''], [p.raw, p.slope, p.slopeAssumed ? '가정' : '직접']],
     hovertemplate: '오늘 호가(잠정)<br>fly %{y:.1f}bp = raw %{customdata[0]:.1f} − slope %{customdata[1]:.1f} (%{customdata[2]})<extra></extra>',
   };
 }
 
 function baseLayout(title, yTitle, extra = {}) {
+  const C = getColors();
   return {
-    title: { text: title, font: { color: COLORS.text, size: 13, family: FONT }, x: 0, xanchor: 'left' },
+    title: { text: title, font: { color: C.text, size: 13, family: FONT }, x: 0, xanchor: 'left' },
     paper_bgcolor: 'transparent',
     plot_bgcolor: 'transparent',
-    font: { color: COLORS.muted, family: FONT, size: 11 },
-    xaxis: { gridcolor: COLORS.grid, zerolinecolor: COLORS.axis, linecolor: COLORS.axis, tickfont: { size: 10 }, ...(extra.xaxis || {}) },
-    yaxis: { title: { text: yTitle, font: { size: 10 } }, gridcolor: COLORS.grid, zerolinecolor: COLORS.zero, linecolor: COLORS.axis, tickfont: { size: 10 }, ...(extra.yaxis || {}) },
+    font: { color: C.muted, family: FONT, size: 11 },
+    xaxis: { gridcolor: C.grid, zerolinecolor: C.axis, linecolor: C.axis, tickfont: { size: 10 }, ...(extra.xaxis || {}) },
+    yaxis: { title: { text: yTitle, font: { size: 10 } }, gridcolor: C.grid, zerolinecolor: C.zero, linecolor: C.axis, tickfont: { size: 10 }, ...(extra.yaxis || {}) },
     margin: { l: 52, r: 18, t: 34, b: 40 },
     showlegend: extra.showlegend !== undefined ? extra.showlegend : true,
     legend: { orientation: 'h', y: -0.2, font: { size: 10 }, bgcolor: 'transparent' },
@@ -72,27 +110,28 @@ function baseLayout(title, yTitle, extra = {}) {
 // raw/slope 는 범례에 존재하되 기본 숨김(legendonly). hover 에는 fly=raw−slope 관계를 병기해
 // 숨김 상태에서도 세 값이 함께 보인다. y=0 기준으로 위=저평가(이례)/아래=리치(정상) 라벨.
 export function renderDecompose(el, gen, events, provPoint) {
+  const C = getColors();
   const fs = flySeries(gen);
   const cd = fs.dates.map((_, i) => [fs.raw[i], fs.slope[i]]); // hover 병기용 [raw, slope]
   const traces = [
-    { x: fs.dates, y: fs.raw, name: '지표−구지표 스프레드(원시)', mode: 'lines', line: { color: COLORS.raw, width: 1.3, dash: 'dot' }, visible: 'legendonly' },
-    { x: fs.dates, y: fs.slope, name: '커브 기울기 효과', mode: 'lines', line: { color: COLORS.slope, width: 1.3, dash: 'dot' }, visible: 'legendonly' },
+    { x: fs.dates, y: fs.raw, name: '지표−구지표 스프레드(원시)', mode: 'lines', line: { color: C.raw, width: 1.3, dash: 'dot' }, visible: 'legendonly' },
+    { x: fs.dates, y: fs.slope, name: '커브 기울기 효과', mode: 'lines', line: { color: C.slope, width: 1.3, dash: 'dot' }, visible: 'legendonly' },
     {
-      x: fs.dates, y: fs.fly, name: '커브조정 상대가치(fly)', mode: 'lines', line: { color: COLORS.fly, width: 2.8 },
+      x: fs.dates, y: fs.fly, name: '커브조정 상대가치(fly)', mode: 'lines', line: { color: C.fly, width: 2.8 },
       customdata: cd, hovertemplate: 'fly %{y:.1f}bp = raw %{customdata[0]:.1f} − slope %{customdata[1]:.1f}<extra></extra>',
     },
   ];
   if (provPoint) traces.push(provisionalTrace([fs.dates[fs.dates.length - 1], provPoint.date], [fs.fly[fs.fly.length - 1], provPoint.fly], provPoint));
   let layout = baseLayout(`Panel A · 커브조정 상대가치 — ${gen.tag} (vs ${gen.vs} · slope vs ${gen.slopeVs})`, 'bp', {
     hovermode: 'x unified',
-    xaxis: { gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 10 } },
-    yaxis: { title: { text: 'bp', font: { size: 10 } }, gridcolor: COLORS.grid, zerolinecolor: COLORS.zero, zerolinewidth: 1.6, linecolor: COLORS.axis, tickfont: { size: 10 } },
+    xaxis: { gridcolor: C.grid, linecolor: C.axis, tickfont: { size: 10 } },
+    yaxis: { title: { text: 'bp', font: { size: 10 } }, gridcolor: C.grid, zerolinecolor: C.zero, zerolinewidth: 1.6, linecolor: C.axis, tickfont: { size: 10 } },
     layout: { margin: { l: 52, r: 118, t: 34, b: 40 } }, // 우측 여백 = 영역 해석 라벨
   });
   // 영역 해석 라벨(우측 여백)
   layout.annotations = [
-    { xref: 'paper', x: 1.005, xanchor: 'left', yref: 'paper', y: 0.97, yanchor: 'top', align: 'left', text: '▲ 0 위<br>지표물<br>저평가(이례)', showarrow: false, font: { color: COLORS.cheap, size: 9, family: FONT } },
-    { xref: 'paper', x: 1.005, xanchor: 'left', yref: 'paper', y: 0.03, yanchor: 'bottom', align: 'left', text: '▼ 0 아래<br>지표물<br>리치(정상)', showarrow: false, font: { color: COLORS.rich, size: 9, family: FONT } },
+    { xref: 'paper', x: 1.005, xanchor: 'left', yref: 'paper', y: 0.97, yanchor: 'top', align: 'left', text: '▲ 0 위<br>지표물<br>저평가(이례)', showarrow: false, font: { color: C.cheap, size: 9, family: FONT } },
+    { xref: 'paper', x: 1.005, xanchor: 'left', yref: 'paper', y: 0.03, yanchor: 'bottom', align: 'left', text: '▼ 0 아래<br>지표물<br>리치(정상)', showarrow: false, font: { color: C.rich, size: 9, family: FONT } },
   ];
   layout = withEvents(layout, events, e => e.date); // Panel A x=날짜
   Plotly.react(el, traces, layout, CONFIG);
@@ -103,6 +142,7 @@ export function renderDecompose(el, gen, events, provPoint) {
 // (0/20/60). 밴드·median·직전세대는 연장 범위까지, 현재 세대 선은 마지막 관측일(현재 점선)에서 끝.
 // 점선 우측 = 과거 세대 경로(참고용, 예측 아님) 음영 구간. 직전세대 = 정렬상 선택 세대 바로 뒤 세대.
 export function renderEventTime(el, gens, selectedTag, events, forwardDays = 60, provPoint) {
+  const C = getColors();
   const sel = gens.find(g => g.tag === selectedTag);
   if (!sel) { Plotly.react(el, [], baseLayout('Panel B', 'bp'), CONFIG); return; }
   const nowDay = sel.series.length - 1;         // 선택 세대 마지막 관측일 인덱스
@@ -127,49 +167,49 @@ export function renderEventTime(el, gens, selectedTag, events, forwardDays = 60,
   const selIdx = ordered.findIndex(g => g.tag === selectedTag);
   const prior = (selIdx >= 0 && selIdx + 1 < ordered.length) ? ordered[selIdx + 1] : null;
 
-  const OUTLINE = 'rgba(139,148,158,0.35)';
+  const OUTLINE = C.outline;
   const traces = [
     // 외곽 밴드 min–max (같은 hue, 더 옅은 음영 + 가는 윤곽선)
     { x: days, y: mn, name: 'min', mode: 'lines', line: { width: 0.6, color: OUTLINE }, hoverinfo: 'skip', showlegend: false, connectgaps: false },
-    { x: days, y: mx, name: '과거 극단 범위(0–100%)', mode: 'lines', line: { width: 0.6, color: OUTLINE }, fill: 'tonexty', fillcolor: COLORS.bandOuter, hoverinfo: 'skip', connectgaps: false },
+    { x: days, y: mx, name: '과거 극단 범위(0–100%)', mode: 'lines', line: { width: 0.6, color: OUTLINE }, fill: 'tonexty', fillcolor: C.bandOuter, hoverinfo: 'skip', connectgaps: false },
     // 내부 밴드 p25–p75 (기존 진한 음영, 외곽 위에 겹쳐 더 진해짐)
     { x: days, y: lo, name: 'p25', mode: 'lines', line: { width: 0 }, hoverinfo: 'skip', showlegend: false, connectgaps: false },
-    { x: days, y: hi, name: '과거 25–75%', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: COLORS.band, hoverinfo: 'skip', connectgaps: false },
+    { x: days, y: hi, name: '과거 25–75%', mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: C.band, hoverinfo: 'skip', connectgaps: false },
     // median + 밴드 요약 hover(day 단위: min(세대)·p25·median·p75·max(세대))
     {
-      x: days, y: med, name: '과거세대 median', mode: 'lines', line: { color: COLORS.median, width: 1.3, dash: 'dot' }, connectgaps: false,
+      x: days, y: med, name: '과거세대 median', mode: 'lines', line: { color: C.median, width: 1.3, dash: 'dot' }, connectgaps: false,
       customdata: cd, hovertemplate: 'min %{customdata[0]:.1f} (%{customdata[4]}) · p25 %{customdata[1]:.1f} · median %{y:.1f} · p75 %{customdata[2]:.1f} · max %{customdata[3]:.1f} (%{customdata[5]})<extra>과거세대 밴드</extra>',
     },
   ];
   if (prior) {
     traces.push({
       x: prior.series.map((_, i) => i), y: prior.series.map(r => r[3]),
-      name: `직전세대(${prior.tag})`, mode: 'lines', line: { color: COLORS.prior, width: 1.2 },
+      name: `직전세대(${prior.tag})`, mode: 'lines', line: { color: C.prior, width: 1.2 },
       customdata: prior.series.map(r => r[0]), hovertemplate: `day %{x} · ${prior.tag} %{customdata}<br>fly %{y:.1f}bp<extra></extra>`,
     });
   }
   traces.push({
     x: days.slice(0, nowDay + 1), y: selFly, name: `${selectedTag} (선택)`, mode: 'lines+markers',
-    line: { color: COLORS.current, width: 2.2 }, marker: { size: 4 },
+    line: { color: C.current, width: 2.2 }, marker: { size: 4 },
     customdata: selDates, hovertemplate: 'day %{x} · %{customdata}<br>fly %{y:.1f}bp<extra></extra>',
   });
   if (provPoint) traces.push(provisionalTrace([nowDay, nowDay + 1], [selFly[selFly.length - 1], provPoint.fly], provPoint));
 
   let layout = baseLayout(`Panel B · 이벤트타임 세대 비교 — ${selectedTag} vs 과거 ${gens.length - 1}세대`, 'fly bp', {
     hovermode: 'x unified',
-    xaxis: { title: { text: '민평 개시 후 영업일(day)', font: { size: 10 } }, gridcolor: COLORS.grid, linecolor: COLORS.axis, tickfont: { size: 10 }, range: [-0.5, xUpper + 0.5] },
+    xaxis: { title: { text: '민평 개시 후 영업일(day)', font: { size: 10 } }, gridcolor: C.grid, linecolor: C.axis, tickfont: { size: 10 }, range: [-0.5, xUpper + 0.5] },
   });
 
   // 현재 점선 + (연장 시) 우측 음영 + "과거 세대 경로" 주석
-  layout.shapes = [{ type: 'line', xref: 'x', x0: nowDay, x1: nowDay, yref: 'paper', y0: 0, y1: 1, line: { color: COLORS.current, width: 1, dash: 'dash' }, layer: 'below' }];
-  layout.annotations = [{ x: nowDay, xref: 'x', y: 0, yref: 'paper', yanchor: 'top', xanchor: 'right', text: `현재 (day ${nowDay})`, showarrow: false, font: { color: COLORS.current, size: 9, family: FONT } }];
+  layout.shapes = [{ type: 'line', xref: 'x', x0: nowDay, x1: nowDay, yref: 'paper', y0: 0, y1: 1, line: { color: C.current, width: 1, dash: 'dash' }, layer: 'below' }];
+  layout.annotations = [{ x: nowDay, xref: 'x', y: 0, yref: 'paper', yanchor: 'top', xanchor: 'right', text: `현재 (day ${nowDay})`, showarrow: false, font: { color: C.current, size: 9, family: FONT } }];
   if (ext > 0) {
-    layout.shapes.unshift({ type: 'rect', xref: 'x', x0: nowDay, x1: xUpper + 0.5, yref: 'paper', y0: 0, y1: 1, fillcolor: 'rgba(139,148,158,0.06)', line: { width: 0 }, layer: 'below' });
-    layout.annotations.push({ x: (nowDay + xUpper) / 2, xref: 'x', y: 1, yref: 'paper', yanchor: 'bottom', xanchor: 'center', text: '과거 세대 경로 (참고용, 예측 아님)', showarrow: false, font: { color: COLORS.muted, size: 9, family: FONT } });
+    layout.shapes.unshift({ type: 'rect', xref: 'x', x0: nowDay, x1: xUpper + 0.5, yref: 'paper', y0: 0, y1: 1, fillcolor: C.fwdShade, line: { width: 0 }, layer: 'below' });
+    layout.annotations.push({ x: (nowDay + xUpper) / 2, xref: 'x', y: 1, yref: 'paper', yanchor: 'bottom', xanchor: 'center', text: '과거 세대 경로 (참고용, 예측 아님)', showarrow: false, font: { color: C.muted, size: 9, family: FONT } });
   }
 
   layout = withEvents(layout, events, e => e.day); // Panel B x=day 인덱스
   Plotly.react(el, traces, layout, CONFIG);
 }
 
-export { COLORS };
+export { PALETTES, getColors };
