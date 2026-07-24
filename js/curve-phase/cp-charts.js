@@ -2,10 +2,31 @@
 //   사이트 공용 토큰·baseLayout 규약 준수. DESIGN.md: 모든 시계열 차트 끝점 값 라벨 필수(동적 바인딩).
 //   Phase 2: 프라이싱 갭 스프레드(bp) 다선 차트. 룩백 슬라이스는 세션수 기준.
 
-export const C = {
-  accent: '#58a6ff', up: '#3fb950', amber: '#f0883e', red: '#f85149', purple: '#a371f7',
-  grid: '#21262d', axis: '#484f58', muted: '#8b949e', text: '#c9d1d9',
+// 팔레트 이원화 — dark 는 기존 C 값 그대로(이동만), light 는 KB CI 기반(onoff-spread 와 동일 체계).
+// C 는 뮤터블 라이브 객체: 임포트한 모듈이 참조를 유지한 채 applyPalette 로 값만 갈아끼운다.
+// 주의 — 모듈 최상위에서 C.xxx 를 상수에 복사하면 테마 전환이 반영되지 않는다(팔레트 키로 저장할 것).
+const PALETTES = {
+  dark: {
+    accent: '#58a6ff', up: '#3fb950', amber: '#f0883e', red: '#f85149', purple: '#a371f7',
+    grid: '#21262d', axis: '#484f58', muted: '#8b949e', text: '#c9d1d9',
+    gaugeLo: 'rgba(63,185,80,0.16)',    // 소진 쪽(누르는 힘 없음)
+    gaugeMid: 'rgba(139,148,158,0.10)', // 중간
+    gaugeHi: 'rgba(240,136,62,0.18)',   // 잔량 쪽(누르는 힘 강함)
+    markerLine: '#0d1117',              // 게이지 바늘 외곽선 = 배경색
+  },
+  light: {
+    accent: '#60584c', up: '#2f8f4e', amber: '#d98e04', red: '#c9453a', purple: '#7c5cbf',
+    grid: '#ebe7de', axis: '#c6bfb1', muted: '#837b6d', text: '#3c382f',
+    gaugeLo: 'rgba(47,143,78,0.14)',
+    gaugeMid: 'rgba(131,123,109,0.10)',
+    gaugeHi: 'rgba(217,142,4,0.16)',
+    markerLine: '#faf9f6',
+  },
 };
+export const C = { ...PALETTES.dark };
+export function applyPalette(theme) { Object.assign(C, PALETTES[theme === 'light' ? 'light' : 'dark']); }
+export { PALETTES };
+
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 // 룩백 → 세션수(영업일). all 은 전체.
@@ -91,7 +112,7 @@ export function renderGauge(divId, g) {
   const vline = (x) => ({ type: 'line', xref: 'x', yref: 'y', x0: x, x1: x, y0: 0.2, y1: 0.8, line: { color: C.muted, width: 1, dash: 'dot' } });
   const traces = [{
     x: [value], y: [0.5], mode: 'markers',
-    marker: { color: C.accent, size: 14, symbol: 'triangle-down', line: { color: '#0d1117', width: 1 } },
+    marker: { color: C.accent, size: 14, symbol: 'triangle-down', line: { color: C.markerLine, width: 1 } },
     hovertemplate: `${valueLabel}<extra></extra>`,
   }];
   const layout = {
@@ -101,9 +122,9 @@ export function renderGauge(divId, g) {
     xaxis: { range: [min, max], fixedrange: true, zeroline: false, showgrid: false, tickfont: { size: 9 } },
     yaxis: { range: [0, 1], visible: false, fixedrange: true },
     shapes: [
-      rect(min, t30, 'rgba(63,185,80,0.16)'),   // 소진 쪽(누르는 힘 없음)
-      rect(t30, t70, 'rgba(139,148,158,0.10)'),  // 중간
-      rect(t70, max, 'rgba(240,136,62,0.18)'),   // 잔량 쪽(누르는 힘 강함)
+      rect(min, t30, C.gaugeLo),   // 소진 쪽(누르는 힘 없음)
+      rect(t30, t70, C.gaugeMid),  // 중간
+      rect(t70, max, C.gaugeHi),   // 잔량 쪽(누르는 힘 강함)
       vline(t30), vline(t70),
     ],
     annotations: [

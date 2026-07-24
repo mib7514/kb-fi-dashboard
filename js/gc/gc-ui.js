@@ -12,10 +12,27 @@ const SPREADS = [{ key: 's310', label: '3/10', el: 'gc-chart-310' }, { key: 's10
 const LOOKBACKS = { '1y': 1, '3y': 3, '5y': 5 };
 const LS_KEY = 'gc-compare';
 
-// 국가 고정 색: KR 강조(굵게·accent), US/JP 보조.
-const COLOR = { KR: '#58a6ff', US: '#f0883e', JP: '#a371f7' };
+// 국가 고정 색: KR 강조(굵게·accent), US/JP 보조. 테마별 이원화 — dark 는 기존 값 그대로.
+// COLOR/C 는 뮤터블 라이브 객체(참조 유지, 값만 교체). 렌더 함수가 호출 시점에 읽는다.
+// curve-phase 페이지의 'cp-theme-change' 를 독립적으로 수신 — cp-ui 와 상호 참조하지 않는다.
+const PALETTES = {
+  dark: {
+    country: { KR: '#58a6ff', US: '#f0883e', JP: '#a371f7' },
+    chrome: { grid: '#21262d', axis: '#484f58', muted: '#8b949e', text: '#c9d1d9' },
+  },
+  light: {
+    country: { KR: '#60584c', US: '#d98e04', JP: '#7c5cbf' },
+    chrome: { grid: '#ebe7de', axis: '#c6bfb1', muted: '#837b6d', text: '#3c382f' },
+  },
+};
+const COLOR = { ...PALETTES.dark.country };
+const C = { ...PALETTES.dark.chrome };
 const WIDTH = { KR: 2.6, US: 1.6, JP: 1.6 };
-const C = { grid: '#21262d', axis: '#484f58', muted: '#8b949e', text: '#c9d1d9' };
+function applyPalette(theme) {
+  const p = PALETTES[theme === 'light' ? 'light' : 'dark'];
+  Object.assign(COLOR, p.country);
+  Object.assign(C, p.chrome);
+}
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 const state = { lookback: '3y', mode: { s310: 'level', s1030: 'level' } };
@@ -137,6 +154,12 @@ function wire() {
 
 export async function initGC3() {
   loadState();
+  applyPalette(document.documentElement.dataset.cpTheme);
+  window.addEventListener('cp-theme-change', (e) => {
+    applyPalette((e.detail && e.detail.theme) || document.documentElement.dataset.cpTheme);
+    // 표·각주는 CSS 변수로 따라오므로 차트만 다시 그린다. 로드 실패 시 차트 div 자체가 없으므로 건너뛴다.
+    if (GC && Object.keys(GC).length) renderCharts();
+  });
   const entries = await Promise.all(COUNTRIES.map(loadCountry));
   GC = {};
   COUNTRIES.forEach((c, i) => { if (entries[i]) GC[c] = entries[i]; });

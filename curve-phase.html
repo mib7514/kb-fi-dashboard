@@ -4,13 +4,28 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Curve Phase — 플랫/스팁 국면 | FI Dashboard</title>
+<!-- 테마 선적용(FOUC 방지) — body 렌더 전에 html[data-cp-theme] 세팅. 기본 dark. -->
+<script>try{document.documentElement.dataset.cpTheme=localStorage.getItem('cp-theme')==='light'?'light':'dark';}catch(e){document.documentElement.dataset.cpTheme='dark';}</script>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
     --border: #21262d; --border-2: #30363d;
     --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff; --red: #f85149; --ok: #3fb950; --amber: #f0883e;
+    /* 액센트가 텍스트·테두리로 쓰일 때(다크는 --accent 와 동일 렌더) */
+    --accent-ink: var(--accent);
+    /* 액센트 배경 위 글자색 */
+    --accent-contrast: #08111f;
     --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", sans-serif;
+  }
+  /* ── 라이트(화이트) 모드 — KB CI 팔레트 (onoff-spread.html 과 동일 값) ── */
+  [data-cp-theme='light'] {
+    --bg: #faf9f6; --panel: #ffffff; --panel-2: #f4f1ea;
+    --border: #e7e2d8; --border-2: #d6cfc1;
+    --text: #26231d; --muted: #837b6d;
+    --accent: #ffbc00; --accent-ink: #8a6b00;
+    --accent-contrast: #26231d; /* 노랑 위 검정 = KB 시그니처 조합 */
+    --red: #c9453a; --ok: #2f8f4e; --amber: #d98e04;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
@@ -18,13 +33,15 @@
   .wrap { max-width: 1100px; margin: 0 auto; }
 
   .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: #08111f; }
+  .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: var(--accent-contrast); }
   .eyebrow .ctx { font-size: 12px; color: var(--muted); }
+  .eyebrow .theme-toggle { margin-left: auto; font-size: 12px; line-height: 1.5; color: var(--muted); background: transparent; border: 1px solid var(--border-2); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-family: var(--sans); }
+  .eyebrow .theme-toggle:hover { color: var(--text); border-color: var(--accent-ink); }
   h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
   .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
 
   .verdict { background: var(--panel); border: 1px solid var(--border-2); border-left-width: 3px; border-radius: 11px; padding: 16px 20px; margin-bottom: 24px; }
-  .verdict.tone-flat { border-left-color: var(--accent); }
+  .verdict.tone-flat { border-left-color: var(--accent-ink); }
   .verdict.tone-steep { border-left-color: var(--amber); }
   .verdict.tone-warn { border-left-color: var(--red); }
   .verdict.tone-neutral { border-left-color: var(--muted); }
@@ -42,7 +59,7 @@
 
   /* 히어로 */
   .hero { background: var(--panel); border: 1px solid var(--border-2); border-left-width: 3px; border-radius: 12px; padding: 20px 22px; margin-bottom: 26px; }
-  .hero.tone-flat { border-left-color: var(--accent); }
+  .hero.tone-flat { border-left-color: var(--accent-ink); }
   .hero.tone-steep { border-left-color: var(--amber); }
   .hero.tone-warn { border-left-color: var(--red); }
   .hero.tone-neutral { border-left-color: var(--muted); }
@@ -58,7 +75,7 @@
   /* Q 섹션 */
   .q-sec { margin: 30px 0 0; }
   .q-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
-  .q-num { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 5px; background: var(--accent); color: #08111f; }
+  .q-num { font-size: 11px; font-weight: 700; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 5px; background: var(--accent); color: var(--accent-contrast); }
   .q-head h2 { font-size: 17px; margin: 0; letter-spacing: -0.01em; }
   .q-blurb { font-size: 13.5px; color: var(--text); line-height: 1.65; margin: 8px 0 14px; }
   .q-note { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 2px 0 14px; padding-left: 10px; border-left: 2px solid var(--border-2); }
@@ -111,7 +128,7 @@
   .seg button { background: transparent; border: none; color: var(--muted); font-family: var(--mono);
     font-size: 12px; padding: 6px 14px; cursor: pointer; border-right: 1px solid var(--border); }
   .seg button:last-child { border-right: none; }
-  .seg button.active { background: var(--accent); color: #08111f; font-weight: 600; }
+  .seg button.active { background: var(--accent); color: var(--accent-contrast); font-weight: 600; }
   .seg button:hover:not(.active) { background: var(--panel-2); color: var(--text); }
 
   .chart-card { background: var(--panel); border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px 6px; margin-bottom: 14px; }
@@ -167,6 +184,7 @@
   <div class="eyebrow">
     <span class="step">MONITOR</span>
     <span class="ctx">측정 레이어 · 커브 국면 · 지금이 역사적으로 플랫/스팁이 나온 국면인가</span>
+    <button class="theme-toggle" id="cp-theme-toggle" type="button" title="라이트/다크 모드 전환 (보고서·캡처용)">🌙 다크</button>
   </div>
   <h1>Curve Phase</h1>
   <p class="tagline">지금이 역사적으로 커브가 눌리던(플랫)·서던(스팁) 국면인지 세 가지 질문으로 측정 · 한국 중심, 미국은 참고 · 측정만 하고 포지션은 제안하지 않습니다</p>

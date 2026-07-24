@@ -4,13 +4,14 @@
 
 import { loadCurveData, loadCycles } from './cp-data.js';
 import { spreadSeries, colSpreadBp, fwd5y5y, seriesDiff, decompKR, decompUS, decompCycles, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
-import { C, LOOKBACKS, renderSpreadChart, renderDecompChart, renderOverlayChart, renderGauge } from './cp-charts.js';
+import { C, applyPalette, LOOKBACKS, renderSpreadChart, renderDecompChart, renderOverlayChart, renderGauge } from './cp-charts.js';
 import { judgeKR, judgeUS, realizedKR } from './cp-judge.js';
 import { buildOverlay } from './cp-overlay.js';
 import * as TXT from './cp-text.js';
 
 const LS_KEY = 'curve-phase';
 const HIST_KEY = 'cp-judge-history';
+const LS_THEME = 'cp-theme';
 const state = { lookback: '3y' };
 let DATA = null;    // { krYields, krBase, usYields, usTp }
 let SERIES = null;  // KR { s3, s1 } (bp)
@@ -20,7 +21,14 @@ let DECOMP = null;  // { kr:[...], us:[...] }
 let OVERLAY = null; // { kr:[...], us:[...] } 또는 null
 let SNAP = null;    // 스냅샷(요약+판정+실현+Q입력)
 
-const CYCLE_COLORS = ['#f0883e', '#3fb950', '#a371f7', '#f85149', '#8b949e'];
+// 사이클 오버레이 색(현재 세대 제외). 테마별 — 렌더 시점에 getCycleColors() 로 읽는다.
+const CYCLE_PALETTES = {
+  dark: ['#f0883e', '#3fb950', '#a371f7', '#f85149', '#8b949e'],
+  light: ['#d98e04', '#2f8f4e', '#7c5cbf', '#c9453a', '#a39b8c'],
+};
+const getCycleColors = () =>
+  CYCLE_PALETTES[document.documentElement.dataset.cpTheme === 'light' ? 'light' : 'dark'];
+
 const Q3_FULL_WINDOW = 250; // = cp-overlay eventAligned post 기본값(창 T+250). 새 창 관례 아님 — 진행 표기 분모.
 
 const fmt = (x, d = 1) => (x == null || Number.isNaN(x) ? '—' : x.toFixed(d));
@@ -138,9 +146,10 @@ function renderHistory() {
 }
 
 // ── 상세(원 카드/차트) ──
+// colorKey = 팔레트 키(값이 아님). 모듈 로드 시점에 C.accent 를 복사하면 테마 전환이 반영되지 않는다.
 const SPREADS = [
-  { key: 's3', label: '3Y − 기준금리', tenor: 'y3', color: C.accent },
-  { key: 's1', label: '1Y − 기준금리', tenor: 'y1', color: C.up },
+  { key: 's3', label: '3Y − 기준금리', tenor: 'y3', colorKey: 'accent' },
+  { key: 's1', label: '1Y − 기준금리', tenor: 'y1', colorKey: 'up' },
 ];
 const BANDS = [
   { key: 'resid', head: `≥${BAND_HI}p · 잔량많음`, desc: '인상 경로의 소화가 단기 구간에서 진행 중 — 역사적 플랫 국면' },
@@ -199,7 +208,7 @@ function renderUSCards() {
 
 // ── 차트(룩백 의존) ──
 function renderKRChart() {
-  renderSpreadChart('chart-kr-gap', SPREADS.map((s) => ({ name: s.label, color: s.color, data: SERIES[s.key] })), state.lookback, 'bp');
+  renderSpreadChart('chart-kr-gap', SPREADS.map((s) => ({ name: s.label, color: C[s.colorKey], data: SERIES[s.key] })), state.lookback, 'bp');
 }
 function renderKRBackCharts() {
   renderSpreadChart('chart-kr-5y5y', [{ name: 'KR 5y5y', color: C.purple, data: KRB.fy }], state.lookback, '%');
@@ -227,9 +236,11 @@ function renderDecompCharts() {
 }
 
 // ── 사이클 오버레이 ──
-function assignColors(overlays) {
+// 색은 저장하지 않고 렌더 시점에 입힌다(테마 전환 반영). 순서는 입력 배열 순 — 다크/라이트 동일 배정.
+function withColors(overlays) {
+  const cyc = getCycleColors();
   let i = 0;
-  return overlays.map((o) => ({ ...o, color: o.current ? C.accent : CYCLE_COLORS[i++ % CYCLE_COLORS.length] }));
+  return overlays.map((o) => ({ ...o, color: o.current ? C.accent : cyc[i++ % cyc.length] }));
 }
 function renderCaptions(id, overlays) {
   const el = document.getElementById(id);
@@ -244,10 +255,11 @@ function renderCaptions(id, overlays) {
 }
 function renderOverlays() {
   if (!OVERLAY) return;
-  renderOverlayChart('chart-kr-overlay', OVERLAY.kr);
-  renderOverlayChart('chart-us-overlay', OVERLAY.us);
-  renderCaptions('kr-caps', OVERLAY.kr);
-  renderCaptions('us-caps', OVERLAY.us);
+  const kr = withColors(OVERLAY.kr), us = withColors(OVERLAY.us);
+  renderOverlayChart('chart-kr-overlay', kr);
+  renderOverlayChart('chart-us-overlay', us);
+  renderCaptions('kr-caps', kr);
+  renderCaptions('us-caps', us);
 }
 
 // ── Q3b: 인상 사이클 플랫의 성분 분해 테이블(측정만) ──
@@ -300,6 +312,40 @@ function renderAll() {
   renderControls(); renderHistory(); renderFootnote();
 }
 
+// ── 라이트/다크 토글 (자료·캡처용 · localStorage 'cp-theme' · 기본 dark) ──
+// CSS 는 html[data-cp-theme] 로 전환. 차트 팔레트는 applyPalette 로 갈아끼운 뒤 색이 들어간 것만 다시 그린다.
+// GC 섹션(gc-ui.js)은 같은 이벤트를 독립적으로 듣는다 — 여기서 GC 를 호출하지 않는다.
+function applyTheme(theme) {
+  const t = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.dataset.cpTheme = t;
+  applyPalette(t);
+  const btn = document.getElementById('cp-theme-toggle');
+  if (btn) btn.textContent = t === 'light' ? '☀️ 라이트' : '🌙 다크';
+  return t;
+}
+
+// 색이 들어간 요소만 현재 상태 그대로 다시 그린다(계산·판정 재실행 없음).
+function redrawForTheme() {
+  if (!SNAP) return;
+  renderGauges();                              // 게이지: 바늘·음영 rect
+  renderCards(); renderUSCards();              // zColor 가 들어간 카드
+  renderDecompCharts(); renderOverlays(); renderLookbackCharts();
+}
+
+function initTheme() {
+  let saved = 'dark';
+  try { saved = localStorage.getItem(LS_THEME) === 'light' ? 'light' : 'dark'; } catch { /* noop */ }
+  applyTheme(saved);
+  const btn = document.getElementById('cp-theme-toggle');
+  if (btn) btn.addEventListener('click', () => {
+    const next = document.documentElement.dataset.cpTheme === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    try { localStorage.setItem(LS_THEME, next); } catch { /* noop */ }
+    window.dispatchEvent(new CustomEvent('cp-theme-change', { detail: { theme: next } }));
+  });
+  window.addEventListener('cp-theme-change', redrawForTheme);
+}
+
 function save() { try { localStorage.setItem(LS_KEY, JSON.stringify({ kind: LS_KEY, version: 1, lookback: state.lookback })); } catch { /* noop */ } }
 function loadPrefs() {
   let s = null;
@@ -323,6 +369,7 @@ function wire() {
 }
 
 export async function initCurvePhase() {
+  initTheme(); // 데이터 로드 실패해도 토글은 동작해야 하므로 가드보다 먼저
   loadPrefs();
   const loaded = await loadCurveData();
   if (!loaded) {
@@ -340,9 +387,9 @@ export async function initCurvePhase() {
   US = { gap: colSpreadBp(usRows, 'dgs2', 'effr'), fy, tp, exp: seriesDiff(fy, tp) };
   DECOMP = { kr: decompKR(krRows, baseArr), us: decompUS(usRows, DATA.usTp.data) };
   const cycles = await loadCycles();
-  if (cycles) OVERLAY = {
-    kr: assignColors(buildOverlay(krRows, 'y10', 'y3', cycles.kr || [])),
-    us: assignColors(buildOverlay(usRows, 'dgs10', 'dgs2', cycles.us || [])),
+  if (cycles) OVERLAY = { // 색 없이 보관 — renderOverlays 가 테마에 맞춰 입힌다
+    kr: buildOverlay(krRows, 'y10', 'y3', cycles.kr || []),
+    us: buildOverlay(usRows, 'dgs10', 'dgs2', cycles.us || []),
   };
   SNAP = computeSnapshot();
   upsertHistory({ vintage: DATA.krYields.meta.updated_at, krKey: SNAP.kr.key, krLabel: SNAP.kr.label, usLabel: SNAP.us.label, net: SNAP.real ? SNAP.real.netBp : null });
