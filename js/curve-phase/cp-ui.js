@@ -346,6 +346,28 @@ function initTheme() {
   window.addEventListener('cp-theme-change', redrawForTheme);
 }
 
+// ── 와이드/세로 비율 토글 (자료 캡처용 · localStorage 'cp-ratio' · 기본 wide) ──
+// CSS 는 html[data-cp-ratio] 로 카드 레이아웃을 바꾸고, 차트는 새 컨테이너 크기로 다시 그린다(테마 재렌더 경로 재사용).
+// GC 섹션은 같은 이벤트를 독립 수신 — 여기서 GC 를 호출하지 않는다.
+function syncRatioSeg() {
+  const cur = document.documentElement.dataset.cpRatio === 'narrow' ? 'narrow' : 'wide';
+  document.querySelectorAll('#cp-ratio-seg button').forEach((b) => b.classList.toggle('active', b.dataset.ratio === cur));
+}
+function initRatio() {
+  syncRatioSeg();
+  const seg = document.getElementById('cp-ratio-seg');
+  if (seg) seg.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-ratio]'); if (!btn) return;
+    const r = btn.dataset.ratio === 'narrow' ? 'narrow' : 'wide';
+    if (document.documentElement.dataset.cpRatio === r) return;
+    document.documentElement.dataset.cpRatio = r;
+    try { localStorage.setItem('cp-ratio', r); } catch { /* noop */ }
+    syncRatioSeg();
+    window.dispatchEvent(new CustomEvent('cp-ratio-change', { detail: { ratio: r } }));
+  });
+  window.addEventListener('cp-ratio-change', redrawForTheme);
+}
+
 function save() { try { localStorage.setItem(LS_KEY, JSON.stringify({ kind: LS_KEY, version: 1, lookback: state.lookback })); } catch { /* noop */ } }
 function loadPrefs() {
   let s = null;
@@ -370,6 +392,7 @@ function wire() {
 
 export async function initCurvePhase() {
   initTheme(); // 데이터 로드 실패해도 토글은 동작해야 하므로 가드보다 먼저
+  initRatio();
   loadPrefs();
   const loaded = await loadCurveData();
   if (!loaded) {

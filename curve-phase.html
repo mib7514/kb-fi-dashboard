@@ -4,8 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Curve Phase — 플랫/스팁 국면 | FI Dashboard</title>
-<!-- 테마 선적용(FOUC 방지) — body 렌더 전에 html[data-cp-theme] 세팅. 기본 dark. -->
-<script>try{document.documentElement.dataset.cpTheme=localStorage.getItem('cp-theme')==='light'?'light':'dark';}catch(e){document.documentElement.dataset.cpTheme='dark';}</script>
+<!-- 테마·비율 선적용(FOUC 방지) — body 렌더 전에 html[data-cp-theme|data-cp-ratio] 세팅. 기본 dark·wide. -->
+<script>try{var d=document.documentElement.dataset;d.cpTheme=localStorage.getItem('cp-theme')==='light'?'light':'dark';d.cpRatio=localStorage.getItem('cp-ratio')==='narrow'?'narrow':'wide';}catch(e){var dd=document.documentElement.dataset;dd.cpTheme='dark';dd.cpRatio='wide';}</script>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --panel-2: #1c2128;
@@ -35,7 +35,9 @@
   .eyebrow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .step { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 3px 8px; border-radius: 4px; background: var(--accent); color: var(--accent-contrast); }
   .eyebrow .ctx { font-size: 12px; color: var(--muted); }
-  .eyebrow .theme-toggle { margin-left: auto; font-size: 12px; line-height: 1.5; color: var(--muted); background: transparent; border: 1px solid var(--border-2); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-family: var(--sans); }
+  .eyebrow .seg { margin-left: auto; } /* 비율 seg 를 오른쪽 그룹 선두로 */
+  .eyebrow .seg button { padding: 4px 10px; } /* 테마 토글 높이에 맞춰 컴팩트 */
+  .eyebrow .theme-toggle { font-size: 12px; line-height: 1.5; color: var(--muted); background: transparent; border: 1px solid var(--border-2); border-radius: 6px; padding: 4px 9px; cursor: pointer; font-family: var(--sans); }
   .eyebrow .theme-toggle:hover { color: var(--text); border-color: var(--accent-ink); }
   h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 3px; }
   .tagline { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
@@ -177,6 +179,22 @@
   .gc-help-body ul { margin: 8px 0 0; padding-left: 18px; }
   .gc-help-body li { margin-bottom: 4px; }
   .gc-help-body li:last-child { margin-bottom: 0; }
+
+  /* ── 세로(자료 캡처) 비율 — 플롯 카드만 380px 타일로 flex-wrap. 게이지·히어로·stats·표 카드는 제외 ── */
+  /* 와이드(기본)는 이 스코프 밖 → 무변경. 차트 카드를 담는 컨테이너를 flex-wrap 으로, 비-차트 자식은 100%. */
+  [data-cp-ratio='narrow'] .q-sec,
+  [data-cp-ratio='narrow'] .adv-body,
+  [data-cp-ratio='narrow'] #gc-body {
+    display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start;
+  }
+  [data-cp-ratio='narrow'] .q-sec > :not(.chart-card),
+  [data-cp-ratio='narrow'] .adv-body > :not(.chart-card),
+  [data-cp-ratio='narrow'] #gc-body > :not(.chart-card) { flex: 0 0 100%; }
+  /* 플롯(.chart-box 보유)만 세로 타일. 표만 든 chart-card(q3 분해·gc 요약)는 가독성 위해 전폭 유지 */
+  [data-cp-ratio='narrow'] .chart-card:has(.chart-box) { flex: 0 0 380px; margin-bottom: 0; }
+  [data-cp-ratio='narrow'] .chart-card:not(:has(.chart-box)) { flex: 1 1 100%; margin-bottom: 0; }
+  [data-cp-ratio='narrow'] .chart-box { height: 460px; }
+  [data-cp-ratio='narrow'] .chart-head { flex-direction: column; align-items: flex-start; gap: 2px; }
 </style>
 </head>
 <body>
@@ -184,6 +202,10 @@
   <div class="eyebrow">
     <span class="step">MONITOR</span>
     <span class="ctx">측정 레이어 · 커브 국면 · 지금이 역사적으로 플랫/스팁이 나온 국면인가</span>
+    <div class="seg" id="cp-ratio-seg" title="차트 비율 — 와이드(화면)/세로(자료 캡처)">
+      <button data-ratio="wide" class="active">와이드</button>
+      <button data-ratio="narrow">세로</button>
+    </div>
     <button class="theme-toggle" id="cp-theme-toggle" type="button" title="라이트/다크 모드 전환 (보고서·캡처용)">🌙 다크</button>
   </div>
   <h1>Curve Phase</h1>

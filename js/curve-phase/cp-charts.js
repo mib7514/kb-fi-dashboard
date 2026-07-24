@@ -27,6 +27,9 @@ export const C = { ...PALETTES.dark };
 export function applyPalette(theme) { Object.assign(C, PALETTES[theme === 'light' ? 'light' : 'dark']); }
 export { PALETTES };
 
+// 세로(자료 캡처) 비율 여부 — 렌더 시점에 읽는다(모듈 로드 시 캡처 금지). 게이지는 이 분기를 쓰지 않는다.
+export const isNarrow = () => document.documentElement.dataset.cpRatio === 'narrow';
+
 const FONT = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 // 룩백 → 세션수(영업일). all 은 전체.
@@ -36,17 +39,24 @@ const SESSIONS = { '1y': 252, '3y': 756, '10y': 2520 };
 export const sliceLookback = (data, lookback) =>
   (lookback === 'all' ? data : data.slice(-(SESSIONS[lookback] || data.length)));
 
-const baseLayout = (extra = {}) => ({
-  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
-  font: { color: C.muted, family: FONT, size: 11 },
-  margin: { l: 48, r: 54, t: 10, b: 32 }, // r 여유 = 끝점 라벨 공간
-  legend: { orientation: 'h', x: 0, y: 1.1, font: { size: 11 } },
-  hovermode: 'x unified',
-  xaxis: { type: 'date', gridcolor: C.grid, linecolor: C.axis, zeroline: false, tickfont: { size: 10 } },
-  yaxis: { gridcolor: C.grid, linecolor: C.axis, zeroline: true, zerolinecolor: C.axis, tickfont: { size: 10 },
-    title: { text: 'bp', font: { size: 11 } } },
-  ...extra,
-});
+const baseLayout = (extra = {}) => {
+  const narrow = isNarrow();
+  const lay = {
+    paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+    font: { color: C.muted, family: FONT, size: 11 },
+    // narrow: 좌우 축소. 단 r 은 끝점 값 라벨(DESIGN.md 필수) 공간이라 완전 제거하지 않고 48 유지.
+    margin: narrow ? { l: 44, r: 48, t: 10, b: 32 } : { l: 48, r: 54, t: 10, b: 32 },
+    legend: { orientation: 'h', x: 0, y: 1.1, font: { size: narrow ? 9 : 11 } },
+    hovermode: 'x unified',
+    xaxis: { type: 'date', gridcolor: C.grid, linecolor: C.axis, zeroline: false, tickfont: { size: 10 } },
+    yaxis: { gridcolor: C.grid, linecolor: C.axis, zeroline: true, zerolinecolor: C.axis, tickfont: { size: 10 },
+      title: { text: 'bp', font: { size: 11 } } },
+    ...extra,
+  };
+  // narrow 눈금 솎기 — 병합된 xaxis(기본·extra 무관)에 nticks 적용해 좁은 폭 날짜 겹침 방지.
+  if (narrow) lay.xaxis = { ...lay.xaxis, nticks: 4 };
+  return lay;
+};
 
 // 끝점 값 라벨(DESIGN.md 필수). 여러 라벨이 겹치면 세로로 최소 간격 벌림.
 function endpointAnnotations(traces, dp) {

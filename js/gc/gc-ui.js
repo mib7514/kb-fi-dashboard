@@ -72,13 +72,14 @@ function cutoffISO() {
 }
 
 function layout(yTitle) {
+  const narrow = document.documentElement.dataset.cpRatio === 'narrow';
   return {
     paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
     font: { color: C.muted, family: FONT, size: 11 },
-    margin: { l: 48, r: 14, t: 8, b: 32 },
-    legend: { orientation: 'h', x: 0, y: 1.12, font: { size: 11 } },
+    margin: narrow ? { l: 44, r: 10, t: 8, b: 32 } : { l: 48, r: 14, t: 8, b: 32 },
+    legend: { orientation: 'h', x: 0, y: 1.12, font: { size: narrow ? 9 : 11 } },
     hovermode: 'x unified',
-    xaxis: { type: 'date', gridcolor: C.grid, linecolor: C.axis, zeroline: false, tickfont: { size: 10 } },
+    xaxis: { type: 'date', gridcolor: C.grid, linecolor: C.axis, zeroline: false, tickfont: { size: 10 }, ...(narrow ? { nticks: 4 } : {}) },
     yaxis: { gridcolor: C.grid, linecolor: C.axis, zeroline: true, zerolinecolor: C.axis, tickfont: { size: 10 }, title: { text: yTitle, font: { size: 11 } } },
   };
 }
@@ -158,6 +159,9 @@ export async function initGC3() {
   window.addEventListener('cp-theme-change', (e) => {
     applyPalette((e.detail && e.detail.theme) || document.documentElement.dataset.cpTheme);
     // 표·각주는 CSS 변수로 따라오므로 차트만 다시 그린다. 로드 실패 시 차트 div 자체가 없으므로 건너뛴다.
+    if (GC && Object.keys(GC).length) renderCharts();
+  });
+  window.addEventListener('cp-ratio-change', () => { // 비율 전환도 차트만 다시 그린다(새 컨테이너 크기 반영)
     if (GC && Object.keys(GC).length) renderCharts();
   });
   const entries = await Promise.all(COUNTRIES.map(loadCountry));
