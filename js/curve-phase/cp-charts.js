@@ -163,3 +163,87 @@ export function renderOverlayChart(divId, overlays) {
   });
   Plotly.newPlot(divId, traces, layout, { displayModeBar: false, responsive: true });
 }
+
+// ── 발표용 PNG 내보내기 프리셋 (DESIGN.md "발표용 내보내기 프리셋" 참조) ──
+//   슬라이드 2.7인치 칸 기준 400dpi 를 넘기려 캡처 대신 내보내기 해상도를 직접 지정.
+//   1200×1450(세로 380:460 비율) × Plotly scale 2 = 2400×2900. 화면 테마·비율과 무관하게 항상 light 고정.
+const EXPORT = {
+  W: 1200, H: 1450, SCALE: 2,
+  M: 1200 / 380,              // ≈ 3.16 배율 상수
+  bg: '#ffffff',             // 불투명 흰 배경(슬라이드 삽입용, 투명 금지)
+  grid: '#f0ede6',           // light 팔레트(#ebe7de)보다 한 단계 옅게
+  zero: '#e2ddd2',           // zeroline 동일 계열
+  axis: '#c6bfb1', ink: '#837b6d',
+  margin: { l: 155, r: 230, t: 130, b: 150 }, // 확대 글자·끝점 라벨 수용(고정 → 조합 무관 동일)
+};
+// 다크 트레이스/주석/도형 색 → light 강제. 화면이 이미 light 면 키에 없으므로 그대로 통과(항등).
+// 주의: #8b949e 는 '사이클[4] 트레이스'로만 데이터에 등장 → #a39b8c. muted 폰트색 등 layout 크롬은 아래에서 명시 오버라이드.
+const DARK_TO_LIGHT = {
+  '#58a6ff': '#60584c', '#3fb950': '#2f8f4e', '#f0883e': '#d98e04',
+  '#f85149': '#c9453a', '#a371f7': '#7c5cbf', '#c9d1d9': '#3c382f',
+  '#8b949e': '#a39b8c', '#484f58': '#c6bfb1',
+};
+const toLight = (c) => (c && DARK_TO_LIGHT[c]) || c;
+const mapColor = (c) => (Array.isArray(c) ? c.map(toLight) : toLight(c));
+
+// 화면 gd 를 건드리지 않고(딥카피만), 프리셋 배율·light 팔레트를 적용한 {data, layout} 을 만든다.
+export function buildExportSpec(elId) {
+  const gd = document.getElementById(elId);
+  if (!gd || !gd.data || !gd.layout) return null;
+  const fS = EXPORT.M * 1.5, lS = EXPORT.M * 2, mS = EXPORT.M * 1.5; // 폰트×M×1.5 · 선×M×2 · 마커×M×1.5
+  const px = (v, base) => Math.round((v == null ? base : v) * fS);
+  const data = JSON.parse(JSON.stringify(gd.data));
+  const layout = JSON.parse(JSON.stringify(gd.layout));
+
+  for (const t of data) {
+    if (t.line) {
+      if (t.line.color) t.line.color = mapColor(t.line.color);
+      if (t.line.width != null) t.line.width *= lS;
+    }
+    if (t.marker) {
+      if (t.marker.color) t.marker.color = mapColor(t.marker.color);
+      if (t.marker.size != null) t.marker.size = Array.isArray(t.marker.size) ? t.marker.size.map((s) => s * mS) : t.marker.size * mS;
+      if (t.marker.line) {
+        if (t.marker.line.color) t.marker.line.color = mapColor(t.marker.line.color);
+        if (t.marker.line.width != null) t.marker.line.width *= lS;
+      }
+    }
+  }
+
+  // 크기·배경·마진·폰트는 화면 비율과 무관하게 고정값으로 강제(→ 조합 무관 동일 출력).
+  layout.width = EXPORT.W; layout.height = EXPORT.H; layout.autosize = false;
+  layout.paper_bgcolor = EXPORT.bg; layout.plot_bgcolor = EXPORT.bg;
+  layout.margin = { ...EXPORT.margin };
+  layout.font = { ...(layout.font || {}), color: EXPORT.ink, size: px(11) };
+  layout.legend = { ...(layout.legend || {}), font: { ...((layout.legend || {}).font || {}), size: px(9) } }; // 세로 base 9
+  for (const ax of ['xaxis', 'yaxis']) {
+    const a = layout[ax] = { ...(layout[ax] || {}) };
+    a.gridcolor = EXPORT.grid; a.linecolor = EXPORT.axis; a.zerolinecolor = EXPORT.zero;
+    a.nticks = 4;
+    // Plotly 가 화면 크기에 맞춰 gd.layout 에 써넣은 계산 range 를 제거 → 내보내기 크기에서 재-autorange.
+    // (화면 비율 300px/460px 마다 range 가 미세하게 달라 4조합 동일성이 깨지는 것을 방지)
+    delete a.range; a.autorange = true;
+    a.tickfont = { ...(a.tickfont || {}), size: px((a.tickfont || {}).size, 10), color: EXPORT.ink };
+    if (a.title) a.title = { ...a.title, font: { ...((a.title || {}).font || {}), size: px(((a.title || {}).font || {}).size, 11) } };
+  }
+  for (const an of (layout.annotations || [])) {
+    if (an.font) an.font = { ...an.font, size: px(an.font.size, 10), color: mapColor(an.font.color) };
+  }
+  for (const sh of (layout.shapes || [])) {
+    if (sh.line) { if (sh.line.color) sh.line.color = mapColor(sh.line.color); if (sh.line.width != null) sh.line.width *= lS; }
+    if (sh.fillcolor) sh.fillcolor = mapColor(sh.fillcolor);
+  }
+  return { data, layout };
+}
+
+// 화면 밖 숨김 컨테이너에 렌더 → PNG 다운로드 → 정리. 화면 차트는 relayout 하지 않는다.
+export function exportChart(elId, filename) {
+  const spec = buildExportSpec(elId);
+  if (!spec) return Promise.resolve();
+  const holder = document.createElement('div');
+  holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:1200px;height:1450px;pointer-events:none;';
+  document.body.appendChild(holder);
+  return Plotly.newPlot(holder, spec.data, spec.layout, { staticPlot: true, displayModeBar: false, responsive: false })
+    .then(() => Plotly.downloadImage(holder, { format: 'png', width: EXPORT.W, height: EXPORT.H, scale: EXPORT.SCALE, filename }))
+    .finally(() => { try { Plotly.purge(holder); } catch { /* noop */ } holder.remove(); });
+}

@@ -5,6 +5,7 @@
 //   토글(lookback·차트 모드)만 localStorage 'gc-compare' 저장. 의존성: Plotly(vendor).
 
 import { computeGC } from './gc-calc.js';
+import { exportChart } from '../curve-phase/cp-charts.js';
 
 const FILES = { KR: 'data/gc/kr.json', US: 'data/gc/us.json', JP: 'data/gc/jp.json' };
 const COUNTRIES = ['KR', 'US', 'JP'];
@@ -106,6 +107,20 @@ function renderChart(key, elId) {
 
 function renderCharts() { for (const s of SPREADS) renderChart(s.key, s.el); }
 
+// 발표용 PNG 버튼 — GC 두 플롯 카드에. cp-charts.exportChart 공유(프리셋 동일). 한 번만 부착.
+function addExportButtons() {
+  for (const s of SPREADS) {
+    const box = document.getElementById(s.el);
+    const head = box && box.closest('.chart-card') && box.closest('.chart-card').querySelector('.chart-head');
+    if (!head || head.querySelector('.png-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'png-btn'; btn.type = 'button'; btn.textContent = 'PNG';
+    btn.title = '발표용 고해상도 PNG 내보내기 (1200px·라이트 고정)';
+    btn.addEventListener('click', () => exportChart(s.el, `cp-${s.el}_present`)); // Plotly 가 .png 부착
+    head.appendChild(btn);
+  }
+}
+
 // 요약 테이블: 국가 × 스프레드 (기준일 / level bp / z250 / Δ1w / Δ1m).
 function renderTable() {
   const head = `<thead><tr><th>국가</th><th>스프레드</th><th>기준일</th>
@@ -174,5 +189,5 @@ export async function initGC3() {
     return;
   }
   LATEST = present.map((c) => GC[c].gc.s310.latest.date).filter(Boolean).sort().pop();
-  wire(); syncSegs(); renderCharts(); renderTable(); renderFootnote();
+  wire(); syncSegs(); renderCharts(); renderTable(); renderFootnote(); addExportButtons();
 }

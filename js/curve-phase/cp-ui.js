@@ -4,7 +4,7 @@
 
 import { loadCurveData, loadCycles } from './cp-data.js';
 import { spreadSeries, colSpreadBp, fwd5y5y, seriesDiff, decompKR, decompUS, decompCycles, summarize, band, BAND_HI, BAND_LO } from './cp-calc.js';
-import { C, applyPalette, LOOKBACKS, renderSpreadChart, renderDecompChart, renderOverlayChart, renderGauge } from './cp-charts.js';
+import { C, applyPalette, LOOKBACKS, renderSpreadChart, renderDecompChart, renderOverlayChart, renderGauge, exportChart } from './cp-charts.js';
 import { judgeKR, judgeUS, realizedKR } from './cp-judge.js';
 import { buildOverlay } from './cp-overlay.js';
 import * as TXT from './cp-text.js';
@@ -293,6 +293,22 @@ function renderQ3Decomp() {
 function renderControls() {
   document.querySelectorAll('#lookback-seg button').forEach((b) => b.classList.toggle('active', b.dataset.lb === state.lookback));
 }
+
+// 플롯 카드(.chart-box 보유)에만 발표용 PNG 버튼. 게이지·표 카드 제외. 한 번만 부착.
+const CP_EXPORT_CHARTS = ['chart-kr-gap', 'chart-us-gap', 'chart-us-decomp2', 'chart-kr-decomp',
+  'chart-us-decomp', 'chart-kr-5y5y', 'chart-kr-3010', 'chart-kr-overlay', 'chart-us-overlay'];
+function addExportButtons() {
+  CP_EXPORT_CHARTS.forEach((elId) => {
+    const box = document.getElementById(elId);
+    const head = box && box.closest('.chart-card') && box.closest('.chart-card').querySelector('.chart-head');
+    if (!head || head.querySelector('.png-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'png-btn'; btn.type = 'button'; btn.textContent = 'PNG';
+    btn.title = '발표용 고해상도 PNG 내보내기 (1200px·라이트 고정)';
+    btn.addEventListener('click', () => exportChart(elId, `cp-${elId}_present`)); // Plotly 가 .png 부착
+    head.appendChild(btn);
+  });
+}
 function renderFootnote() {
   const my = DATA.krYields.meta, mb = DATA.krBase.meta, uy = DATA.usYields.meta, ut = DATA.usTp.meta;
   document.getElementById('footnote').innerHTML =
@@ -418,4 +434,5 @@ export async function initCurvePhase() {
   upsertHistory({ vintage: DATA.krYields.meta.updated_at, krKey: SNAP.kr.key, krLabel: SNAP.kr.label, usLabel: SNAP.us.label, net: SNAP.real ? SNAP.real.netBp : null });
   wire();
   renderAll();
+  addExportButtons();
 }
